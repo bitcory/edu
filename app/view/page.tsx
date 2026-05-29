@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BookPlus, Home } from "lucide-react";
+import { BookPlus } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import BookViewer from "../components/BookViewer";
 import {
@@ -140,9 +140,7 @@ export default function ViewPage() {
           className="home-btn"
           aria-label="처음으로"
           title="처음으로"
-        >
-          <Home size={20} strokeWidth={2} />
-        </Link>
+        />
         <h1 className="upload-title">MAGIC BOOK</h1>
         <p className="upload-sub">
           PDF를 올리면 그림책처럼 한 장씩 넘겨 볼 수 있어요.

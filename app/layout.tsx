@@ -2,10 +2,10 @@ import type { Metadata, Viewport } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:4000";
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://tbbook.aitoolb.com";
 const title = "우리 책장";
 const description = "PDF를 업로드해서 책처럼 넘겨 볼 수 있는 어린이 그림책 뷰어";
-const socialImage = "/social-thumbnail.png";
+const socialImage = "/social-thumbnail-20260529.png";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   openGraph: {
     title,
     description,
-    url: "/",
+    url: siteUrl,
     siteName: title,
     locale: "ko_KR",
     type: "website",

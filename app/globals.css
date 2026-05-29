@@ -1681,7 +1681,9 @@ textarea.ed-input {
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background: linear-gradient(180deg, #fff8df, #ffd98f);
+  background:
+    url("/home-button-art.png") center / 112% no-repeat,
+    linear-gradient(180deg, #fff8df, #ffd98f);
   color: #3a2415;
   text-decoration: none;
   overflow: hidden;
@@ -1695,19 +1697,13 @@ textarea.ed-input {
 
 .home-btn:hover {
   transform: translateY(-1px);
-  background: linear-gradient(180deg, #fffbe9, #ffd68b);
+  background:
+    url("/home-button-art.png") center / 112% no-repeat,
+    linear-gradient(180deg, #fffbe9, #ffd68b);
 }
 
 .home-btn:active {
   transform: translateY(0);
-}
-
-.home-btn__art {
-  width: 100%;
-  height: 100%;
-  display: block;
-  object-fit: cover;
-  pointer-events: none;
 }
 
 /* Editor uses an icon-only home button inline in the top bar (the fixed

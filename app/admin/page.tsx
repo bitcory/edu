@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Check, Eye, Home, RotateCcw, X } from "lucide-react";
+import { Check, Eye, RotateCcw, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import BookViewer from "../components/BookViewer";
 import UserChip from "../components/auth/UserChip";
@@ -131,9 +131,7 @@ export default function AdminPage() {
     return (
       <main className="store-shell">
         <header className="store-header">
-          <Link href="/" className="home-btn" aria-label="처음으로" title="처음으로">
-            <Home size={26} strokeWidth={2} />
-          </Link>
+          <Link href="/" className="home-btn" aria-label="처음으로" title="처음으로" />
           <h1 className="store-title">관리자</h1>
           <div className="store-header__right">
             <UserChip />
@@ -162,9 +160,7 @@ export default function AdminPage() {
   return (
     <main className="store-shell">
       <header className="store-header">
-        <Link href="/" className="home-btn" aria-label="처음으로" title="처음으로">
-          <Home size={20} strokeWidth={2} />
-        </Link>
+        <Link href="/" className="home-btn" aria-label="처음으로" title="처음으로" />
         <h1 className="store-title">관리자</h1>
         <div className="store-header__right">
           <UserChip />

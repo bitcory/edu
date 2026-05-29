@@ -244,9 +244,7 @@ export default function LibraryPage() {
   return (
     <main className="store-shell">
       <header className="store-header">
-        <Link href="/" className="home-btn" aria-label="처음으로" title="처음으로">
-          <img className="home-btn__art" src="/home-button-art.png" alt="" />
-        </Link>
+        <Link href="/" className="home-btn" aria-label="처음으로" title="처음으로" />
         <h1 className="store-title">내 서재</h1>
         <div className="store-header__right">
           <Link href="/store" className="store-navlink">
