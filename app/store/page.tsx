@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { BookOpen, Home, Library, Search } from "lucide-react";
+import { BookOpen, Eye, Home, Library, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import BookViewer from "../components/BookViewer";
+import BookPreviewModal from "../components/BookPreviewModal";
 import UserChip from "../components/auth/UserChip";
 import { listStoreBooks, type StoreBook } from "../lib/store";
 import { openBookForReading } from "../lib/render-book";
@@ -17,6 +18,7 @@ export default function StorePage() {
   const [reader, setReader] = useState<Reader | null>(null);
   const [opening, setOpening] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [preview, setPreview] = useState<StoreBook | null>(null);
 
   useEffect(() => {
     listStoreBooks().then(setBooks);
@@ -109,29 +111,49 @@ export default function StorePage() {
       ) : (
         <div className="store-grid">
           {(filtered ?? []).map((b) => (
-            <button
-              key={b.id}
-              type="button"
-              className="store-card"
-              onClick={() => void open(b)}
-              disabled={opening !== null}
-            >
-              <div className="store-card__cover">
-                {b.coverThumb ? (
-                  <img src={b.coverThumb} alt={b.title} />
-                ) : (
-                  <span>표지</span>
-                )}
-                {opening === b.id && (
-                  <span className="store-card__loading">여는 중…</span>
-                )}
-              </div>
+            <div key={b.id} className="store-card">
+              <button
+                type="button"
+                className="store-card__coverbtn"
+                onClick={() => void open(b)}
+                disabled={opening !== null}
+              >
+                <div className="store-card__cover">
+                  {b.coverThumb ? (
+                    <img src={b.coverThumb} alt={b.title} />
+                  ) : (
+                    <span>표지</span>
+                  )}
+                  {opening === b.id && (
+                    <span className="store-card__loading">여는 중…</span>
+                  )}
+                </div>
+              </button>
               <div className="store-card__title">{b.title}</div>
               <div className="store-card__author">{b.author ?? b.ownerName}</div>
               <div className="store-card__price">{formatPrice(b.price)}</div>
-            </button>
+              <button
+                type="button"
+                className="store-card__preview"
+                onClick={() => setPreview(b)}
+              >
+                <Eye size={15} /> 미리보기
+              </button>
+            </div>
           ))}
         </div>
+      )}
+
+      {preview && (
+        <BookPreviewModal
+          book={preview}
+          onClose={() => setPreview(null)}
+          onRead={() => {
+            const b = preview;
+            setPreview(null);
+            void open(b);
+          }}
+        />
       )}
     </main>
   );

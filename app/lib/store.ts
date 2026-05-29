@@ -1,12 +1,20 @@
 "use client";
 
 import type {
+  BookComment,
   BookScope,
+  BookSocial,
   StoreBook,
   SubmitInput,
 } from "./book-types";
 
-export type { BookStatus, StoreBook, SubmitInput } from "./book-types";
+export type {
+  BookComment,
+  BookSocial,
+  BookStatus,
+  StoreBook,
+  SubmitInput,
+} from "./book-types";
 
 /**
  * Bookstore data access. These call the Next.js API routes (which persist to
@@ -202,6 +210,54 @@ export async function rejectBook(id: string, reason?: string): Promise<void> {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ reason }),
   });
+}
+
+// ---- Likes + comments (preview modal) ----
+
+export async function getBookSocial(id: string): Promise<BookSocial> {
+  const res = await fetch(`/api/books/${id}/social`, { cache: "no-store" });
+  if (!res.ok) return { likeCount: 0, liked: false, comments: [] };
+  return (await res.json()) as BookSocial;
+}
+
+export async function toggleBookLike(
+  id: string,
+): Promise<{ liked: boolean; likeCount: number }> {
+  const res = await fetch(`/api/books/${id}/like`, { method: "POST" });
+  if (!res.ok) {
+    throw new Error(await errorMessage(res, "좋아요에 실패했어요."));
+  }
+  return (await res.json()) as { liked: boolean; likeCount: number };
+}
+
+export async function addBookComment(
+  id: string,
+  body: string,
+): Promise<BookComment> {
+  const res = await fetch(`/api/books/${id}/comments`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ body }),
+  });
+  if (!res.ok) {
+    throw new Error(await errorMessage(res, "댓글 작성에 실패했어요."));
+  }
+  const data = (await res.json()) as { comment: BookComment };
+  return data.comment;
+}
+
+export async function deleteBookComment(
+  id: string,
+  commentId: string,
+): Promise<void> {
+  const res = await fetch(`/api/books/${id}/comments`, {
+    method: "DELETE",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ commentId }),
+  });
+  if (!res.ok) {
+    throw new Error(await errorMessage(res, "댓글 삭제에 실패했어요."));
+  }
 }
 
 async function errorMessage(res: Response, fallback: string): Promise<string> {

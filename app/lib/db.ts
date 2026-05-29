@@ -122,6 +122,33 @@ export function ensureSchema(): Promise<void> {
       ]) {
         await db.execute(`ALTER TABLE authors ${ddl}`);
       }
+
+      // Likes — one row per (book, user). Count = rows for a book.
+      await db.execute(
+        `CREATE TABLE IF NOT EXISTS likes (
+          book_id    TEXT NOT NULL,
+          user_id    TEXT NOT NULL,
+          created_at BIGINT NOT NULL,
+          PRIMARY KEY (book_id, user_id)
+        )`,
+      );
+      // Comments on a book.
+      await db.execute(
+        `CREATE TABLE IF NOT EXISTS comments (
+          id         TEXT PRIMARY KEY,
+          book_id    TEXT NOT NULL,
+          user_id    TEXT NOT NULL,
+          user_name  TEXT NOT NULL,
+          body       TEXT NOT NULL,
+          created_at BIGINT NOT NULL
+        )`,
+      );
+      await db.execute(
+        `CREATE INDEX IF NOT EXISTS idx_comments_book ON comments (book_id)`,
+      );
+      await db.execute(
+        `CREATE INDEX IF NOT EXISTS idx_likes_book ON likes (book_id)`,
+      );
     })();
   }
   return schemaReady;

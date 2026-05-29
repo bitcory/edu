@@ -42,3 +42,18 @@ export type SubmitInput = {
 };
 
 export type BookScope = "store" | "mine" | "pending" | "rejected";
+
+export type BookComment = {
+  id: string;
+  bookId: string;
+  userId: string;
+  userName: string;
+  body: string;
+  createdAt: number;
+};
+
+export type BookSocial = {
+  likeCount: number;
+  liked: boolean; // whether the current user liked it
+  comments: BookComment[];
+};
