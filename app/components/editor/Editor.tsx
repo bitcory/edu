@@ -63,6 +63,39 @@ import {
   preloadAllFonts,
 } from "../../lib/fonts";
 
+/** "#rrggbb" → [r,g,b]. */
+function hexToRgb(hex: string): [number, number, number] {
+  const m = hex.replace("#", "");
+  const n = m.length === 3 ? m.split("").map((c) => c + c).join("") : m;
+  const int = parseInt(n || "000000", 16);
+  return [(int >> 16) & 255, (int >> 8) & 255, int & 255];
+}
+
+/** Build an rgba() string from a hex color + opacity percent. */
+function rgbaStr(hex: string, opacityPct: number): string {
+  const [r, g, b] = hexToRgb(hex);
+  return `rgba(${r}, ${g}, ${b}, ${(opacityPct / 100).toFixed(3)})`;
+}
+
+/** Parse a CSS color (hex or rgba) into a hex + alpha for the UI controls. */
+function parseColorToHexAlpha(color?: string): { hex: string; alpha: number } {
+  if (!color) return { hex: "#000000", alpha: 0.45 };
+  const m = color.match(/rgba?\(([^)]+)\)/);
+  if (m) {
+    const p = m[1].split(",").map((s) => s.trim());
+    const toHex = (v: string) =>
+      Math.max(0, Math.min(255, Math.round(Number(v))))
+        .toString(16)
+        .padStart(2, "0");
+    const alpha = p[3] !== undefined ? Number(p[3]) : 1;
+    return { hex: `#${toHex(p[0])}${toHex(p[1])}${toHex(p[2])}`, alpha };
+  }
+  if (color.startsWith("#")) {
+    return { hex: color.slice(0, 7), alpha: 1 };
+  }
+  return { hex: "#000000", alpha: 0.45 };
+}
+
 /**
  * If a data URL's image is larger than maxDim on its longest side, re-encode
  * it as JPEG at the capped size. Returns the original URL if no downscale is
@@ -905,18 +938,31 @@ export default function Editor({
   );
 
   // Drop shadow on the selected object (fabric.Shadow). Pass null to clear.
-  const applyShadow = useCallback(
-    async (color: string | null) => {
+  const applyShadowParams = useCallback(
+    async (p: {
+      on: boolean;
+      hex: string;
+      opacity: number;
+      angle: number;
+      distance: number;
+      blur: number;
+    }) => {
       const api = apiRef.current;
       if (!api?.canvas || !selected) return;
-      if (color) {
+      if (!p.on) {
+        selected.set("shadow", null);
+      } else {
         const fabric = await import("fabric");
+        const rad = (p.angle * Math.PI) / 180;
         selected.set(
           "shadow",
-          new fabric.Shadow({ color, blur: 6, offsetX: 3, offsetY: 3 }),
+          new fabric.Shadow({
+            color: rgbaStr(p.hex, p.opacity),
+            blur: p.blur,
+            offsetX: Math.round(Math.cos(rad) * p.distance),
+            offsetY: Math.round(Math.sin(rad) * p.distance),
+          }),
         );
-      } else {
-        selected.set("shadow", null);
       }
       api.canvas.requestRenderAll();
       setChangeTick((x) => x + 1);
@@ -1120,16 +1166,37 @@ export default function Editor({
   const isImage = useMemo(() => selected?.type === "image", [selected]);
   const canFit = isImage || isShape;
 
-  // Shadow state for the text props UI (referenced via _changeTick re-renders).
-  const _shadow = (selected as unknown as { shadow?: { color?: string } } | null)
-    ?.shadow;
-  const shadowOn = !!_shadow;
-  const shadowColorInput =
-    _shadow?.color && _shadow.color.startsWith("#") ? _shadow.color : "#000000";
+  // Outline + shadow state for the text props UI (re-derived each render).
   const strokeColor =
     (selected as unknown as { stroke?: string } | null)?.stroke || "#ffffff";
   const strokeWidth =
     (selected as unknown as { strokeWidth?: number } | null)?.strokeWidth ?? 0;
+  const outlineOn = strokeWidth > 0;
+
+  const _shadow = (
+    selected as unknown as {
+      shadow?: { color?: string; blur?: number; offsetX?: number; offsetY?: number };
+    } | null
+  )?.shadow;
+  const shadowOn = !!_shadow;
+  const _shCol = parseColorToHexAlpha(_shadow?.color);
+  const shadow = {
+    on: shadowOn,
+    hex: _shCol.hex,
+    opacity: Math.round(_shCol.alpha * 100),
+    blur: Math.round(_shadow?.blur ?? 6),
+    distance: Math.round(
+      Math.hypot(_shadow?.offsetX ?? 3, _shadow?.offsetY ?? 3),
+    ),
+    angle:
+      (((Math.round(
+        (Math.atan2(_shadow?.offsetY ?? 3, _shadow?.offsetX ?? 3) * 180) /
+          Math.PI,
+      ) %
+        360) +
+        360) %
+        360),
+  };
 
   return (
     <div className="ed-shell">
@@ -1752,62 +1819,136 @@ export default function Editor({
               </div>
             </div>
             <div className="ed-props__group">
-              <label className="ed-props__label">외곽선</label>
-              <div className="ed-props__row">
-                <input
-                  type="color"
-                  className="ed-input"
-                  value={strokeColor}
-                  onChange={(e) =>
-                    updateSelected({
-                      stroke: e.target.value,
-                      strokeWidth: strokeWidth || 3,
-                      paintFirst: "stroke",
-                    })
+              <div className="ed-section-head">
+                <span className="ed-props__label">외곽선</span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={outlineOn}
+                  className={`ed-switch${outlineOn ? " is-on" : ""}`}
+                  onClick={() =>
+                    updateSelected(
+                      outlineOn
+                        ? { strokeWidth: 0 }
+                        : {
+                            strokeWidth: 4,
+                            stroke: strokeColor,
+                            paintFirst: "stroke",
+                          },
+                    )
                   }
-                />
-                <NumberStepper
-                  value={strokeWidth}
-                  min={0}
-                  max={30}
-                  step={1}
-                  onChange={(n) =>
-                    updateSelected({
-                      strokeWidth: n,
-                      stroke: strokeColor,
-                      paintFirst: "stroke",
-                    })
-                  }
-                />
+                >
+                  <span className="ed-switch__knob" />
+                </button>
               </div>
+              {outlineOn && (
+                <>
+                  <div className="ed-row-field">
+                    <span className="ed-props__label">색상</span>
+                    <input
+                      type="color"
+                      className="ed-swatch"
+                      value={strokeColor}
+                      onChange={(e) =>
+                        updateSelected({
+                          stroke: e.target.value,
+                          paintFirst: "stroke",
+                        })
+                      }
+                    />
+                  </div>
+                  <LabeledSlider
+                    label="두께"
+                    value={strokeWidth}
+                    min={1}
+                    max={30}
+                    step={1}
+                    onChange={(n) =>
+                      updateSelected({
+                        strokeWidth: n,
+                        stroke: strokeColor,
+                        paintFirst: "stroke",
+                      })
+                    }
+                  />
+                </>
+              )}
             </div>
             <div className="ed-props__group">
-              <label className="ed-props__label">그림자</label>
-              <div className="ed-props__row">
+              <div className="ed-section-head">
+                <span className="ed-props__label">그림자</span>
                 <button
                   type="button"
-                  className={`ed-mini${!shadowOn ? " is-active" : ""}`}
-                  onClick={() => void applyShadow(null)}
-                  title="그림자 없음"
+                  role="switch"
+                  aria-checked={shadow.on}
+                  className={`ed-switch${shadow.on ? " is-on" : ""}`}
+                  onClick={() =>
+                    void applyShadowParams({ ...shadow, on: !shadow.on })
+                  }
                 >
-                  없음
+                  <span className="ed-switch__knob" />
                 </button>
-                <button
-                  type="button"
-                  className={`ed-mini${shadowOn ? " is-active" : ""}`}
-                  onClick={() => void applyShadow("rgba(0,0,0,0.45)")}
-                  title="그림자 켜기"
-                >
-                  켜기
-                </button>
-                <input
-                  type="color"
-                  className="ed-input"
-                  value={shadowColorInput}
-                  onChange={(e) => void applyShadow(e.target.value)}
-                  title="그림자 색"
-                />
               </div>
+              {shadow.on && (
+                <>
+                  <div className="ed-row-field">
+                    <span className="ed-props__label">색상</span>
+                    <input
+                      type="color"
+                      className="ed-swatch"
+                      value={shadow.hex}
+                      onChange={(e) =>
+                        void applyShadowParams({
+                          ...shadow,
+                          hex: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                  <LabeledSlider
+                    label="방향"
+                    suffix="°"
+                    value={shadow.angle}
+                    min={0}
+                    max={360}
+                    step={1}
+                    onChange={(n) =>
+                      void applyShadowParams({ ...shadow, angle: n })
+                    }
+                  />
+                  <LabeledSlider
+                    label="불투명도"
+                    suffix="%"
+                    value={shadow.opacity}
+                    min={0}
+                    max={100}
+                    step={1}
+                    onChange={(n) =>
+                      void applyShadowParams({ ...shadow, opacity: n })
+                    }
+                  />
+                  <LabeledSlider
+                    label="거리"
+                    value={shadow.distance}
+                    min={0}
+                    max={60}
+                    step={1}
+                    onChange={(n) =>
+                      void applyShadowParams({ ...shadow, distance: n })
+                    }
+                  />
+                  <LabeledSlider
+                    label="흐림"
+                    value={shadow.blur}
+                    min={0}
+                    max={50}
+                    step={1}
+                    onChange={(n) =>
+                      void applyShadowParams({ ...shadow, blur: n })
+                    }
+                  />
+                </>
+              )}
             </div>
           </>
         )}
@@ -1947,6 +2088,56 @@ function roundTo(n: number, decimals: number): number {
 }
 function fmtNum(n: number, decimals: number): string {
   return decimals > 0 ? n.toFixed(decimals) : String(Math.round(n));
+}
+
+/** Label + editable number + range slider (used for outline/shadow controls). */
+function LabeledSlider({
+  label,
+  value,
+  min,
+  max,
+  step,
+  suffix,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  suffix?: string;
+  onChange: (n: number) => void;
+}) {
+  const clamp = (n: number) => Math.min(max, Math.max(min, n));
+  return (
+    <div className="ed-slider-field">
+      <div className="ed-slider-field__head">
+        <span className="ed-props__label">{label}</span>
+        <span className="ed-slider-field__num">
+          <input
+            type="number"
+            min={min}
+            max={max}
+            value={value}
+            onChange={(e) => {
+              const n = Number(e.target.value);
+              if (Number.isFinite(n)) onChange(clamp(n));
+            }}
+          />
+          {suffix ? <em>{suffix}</em> : null}
+        </span>
+      </div>
+      <input
+        type="range"
+        className="ed-range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+      />
+    </div>
+  );
 }
 
 /**

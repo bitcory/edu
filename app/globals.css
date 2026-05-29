@@ -1147,6 +1147,108 @@ body {
   grid-column: span 1;
 }
 
+/* Section header with a toggle switch (외곽선 / 그림자). */
+.ed-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ed-switch {
+  position: relative;
+  width: 42px;
+  height: 24px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s ease;
+}
+
+.ed-switch.is-on {
+  background: #2bd4c4;
+}
+
+.ed-switch__knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s ease;
+}
+
+.ed-switch.is-on .ed-switch__knob {
+  transform: translateX(18px);
+}
+
+.ed-row-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.ed-swatch {
+  width: 36px;
+  height: 26px;
+  border: 1px solid rgba(255, 220, 160, 0.3);
+  border-radius: 8px;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.ed-slider-field {
+  margin-top: 12px;
+}
+
+.ed-slider-field__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.ed-slider-field__num {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 8px;
+  border: 1px solid rgba(255, 220, 160, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.ed-slider-field__num input {
+  width: 44px;
+  border: 0;
+  background: transparent;
+  color: #fff5d7;
+  font-size: 13px;
+  text-align: right;
+  outline: none;
+}
+
+.ed-slider-field__num em {
+  font-style: normal;
+  color: #d9c3a3;
+  opacity: 0.7;
+  font-size: 12px;
+}
+
+.ed-range {
+  width: 100%;
+  accent-color: #2bd4c4;
+  cursor: pointer;
+}
+
 .ed-props__group:last-child {
   border-bottom: 0;
 }
