@@ -88,11 +88,24 @@ async function downscaleImageDataUrl(
   const ctx = canvas.getContext("2d");
   if (!ctx) return dataUrl;
   ctx.drawImage(img, 0, 0, w, h);
-  // Keep PNG while it's small (preserves transparency for stickers/cutouts);
-  // once it's large (photos, screenshots) re-encode to JPEG — 4-6× smaller —
-  // so the snapshot doesn't blow past the storage/upload limits.
+  // JPEG has no alpha — converting a transparent image to JPEG fills the
+  // see-through areas with black. So keep PNG whenever the image has any
+  // transparent pixel (stickers/cutouts); only re-encode fully-opaque images
+  // (photos/screenshots) to JPEG when large (4-6× smaller).
+  let hasAlpha = false;
+  try {
+    const { data } = ctx.getImageData(0, 0, w, h);
+    for (let i = 3; i < data.length; i += 4) {
+      if (data[i] < 255) {
+        hasAlpha = true;
+        break;
+      }
+    }
+  } catch {
+    hasAlpha = true; // can't inspect → assume transparency, keep PNG
+  }
   const png = canvas.toDataURL("image/png");
-  if (png.length <= 700_000) return png;
+  if (hasAlpha || png.length <= 700_000) return png;
   return canvas.toDataURL("image/jpeg", 0.85);
 }
 
