@@ -1084,6 +1084,9 @@ body {
     0 30px 60px -20px rgba(0, 0, 0, 0.6),
     inset 0 0 0 1px rgba(0, 0, 0, 0.06);
   border-radius: 4px;
+  /* Clip content to the page bounds — matches the partner preview + the final
+     rendered book, so the active page doesn't look bigger than its neighbour. */
+  overflow: hidden;
 }
 
 .ed-props {
