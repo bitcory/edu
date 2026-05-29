@@ -177,6 +177,9 @@ export default function Editor({
   }, [spreadMode, activeIndex, pages.length]);
 
   const apiRef = useRef<FabricApi | null>(null);
+  // The active page's thumbnail — scrolled into view when it changes (e.g. on
+  // "추가" the new empty page appends to the end and we scroll it into sight).
+  const activeThumbRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const imgInputRef = useRef<HTMLInputElement | null>(null);
   // Refs so the debounced snapshot callback can read the latest active page
@@ -185,6 +188,15 @@ export default function Editor({
   useEffect(() => {
     activeIndexRef.current = activeIndex;
   }, [activeIndex]);
+
+  // Keep the active page's thumbnail in view — so adding a page (which appends
+  // and activates a new empty page) scrolls the list to reveal it.
+  useEffect(() => {
+    activeThumbRef.current?.scrollIntoView({
+      block: "nearest",
+      inline: "nearest",
+    });
+  }, [activeIndex, pages.length]);
   const snapshotTimerRef = useRef<number | null>(null);
 
   // Per-page undo/redo history. Keyed by page id so switching pages preserves
@@ -1266,6 +1278,7 @@ export default function Editor({
           {pages.map((p, i) => (
             <div
               key={p.id}
+              ref={i === activeIndex ? activeThumbRef : null}
               className={`ed-page-thumb${
                 i === activeIndex ? " is-active" : ""
               }${dragSrc === i ? " is-dragging" : ""}${
