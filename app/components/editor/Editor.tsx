@@ -746,11 +746,13 @@ export default function Editor({
 
   /**
    * Duplicate a page. The source page is NEVER mutated — the two pages
-   * operate completely independently. If the source has a wide image
-   * (scaledW > PAGE_W), the copy auto-shifts that image left by PAGE_W so
-   * the previously-off-canvas right portion becomes visible — useful for
-   * building continuous spreads. For perfect spread continuity, align the
-   * source's image to the left edge first (drag, or click the 왼쪽 button).
+   * operate completely independently. For a wide image (scaledW > PAGE_W)
+   * aligned to one edge, the copy reveals the adjacent half so the pages form
+   * a continuous spread:
+   *   • 왼쪽 정렬(left half)  → copy = right half, inserted AFTER
+   *   • 오른쪽 정렬(right half) → copy = left half, inserted BEFORE
+   * Align the source's image with the 왼쪽/오른쪽 button (or drag to an edge)
+   * first. Images not edge-aligned just copy in place.
    */
   const duplicatePage = useCallback(
     async (idx: number) => {
@@ -774,19 +776,36 @@ export default function Editor({
           })
         : null;
 
-      // 3) Spread auto-shift (opt-in): only kick in for wide images that the
-      //    user has explicitly left-aligned (left === 0) — that's the signal
-      //    "this is the left half of a spread". Otherwise the copy keeps the
-      //    same position as the source so the image stays visible in place.
+      // 3) Spread auto-shift (opt-in): for a wide image the user has aligned to
+      //    one edge, the copy reveals the *adjacent* half so the two pages form
+      //    a continuous spread:
+      //      • left-aligned (left half)  → copy = right half, placed AFTER
+      //      • right-aligned (right half) → copy = left half, placed BEFORE
+      //    Otherwise the copy keeps the same position (image stays in place).
+      let insertBefore = false;
+      let directionDecided = false;
       if (clonedData?.objects) {
         for (const obj of clonedData.objects) {
           const type = obj.type as string | undefined;
-          if (type === "image" || type === "Image") {
-            const baseW = Number(obj.width ?? 0);
-            const scaleX = Number(obj.scaleX ?? 1);
-            const left = Number(obj.left ?? 0);
-            if (baseW * scaleX > PAGE_W + 1 && left === 0) {
-              obj.left = -PAGE_W;
+          if (type !== "image" && type !== "Image") continue;
+          const baseW = Number(obj.width ?? 0);
+          const scaleX = Number(obj.scaleX ?? 1);
+          const left = Number(obj.left ?? 0);
+          const scaledW = baseW * scaleX;
+          if (scaledW <= PAGE_W + 1) continue;
+          if (Math.abs(left) < 1) {
+            // left half → reveal the right half on the copy (after)
+            obj.left = -PAGE_W;
+            if (!directionDecided) {
+              insertBefore = false;
+              directionDecided = true;
+            }
+          } else if (Math.abs(left + scaledW - PAGE_W) < 1) {
+            // right half → reveal the left half on the copy (before)
+            obj.left = left + PAGE_W;
+            if (!directionDecided) {
+              insertBefore = true;
+              directionDecided = true;
             }
           }
         }
@@ -799,7 +818,9 @@ export default function Editor({
         kind: "content",
         data: clonedData,
       };
-      const insertAt = idx + 1;
+      // Right-aligned source → the left-half copy goes BEFORE the source so the
+      // spread reads [left half][right half]; otherwise after.
+      const insertAt = insertBefore ? idx : idx + 1;
       setPages((prev) => {
         const next =
           idx === activeIndex
