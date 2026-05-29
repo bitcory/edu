@@ -206,9 +206,9 @@ export default function Editor({
   // both are always-visible in the grid and these are ignored.
   const [pagelistOpen, setPagelistOpen] = useState(false);
   const [propsOpen, setPropsOpen] = useState(false);
-  // Collapsible 외곽선/그림자 sections.
-  const [outlineOpen, setOutlineOpen] = useState(true);
-  const [shadowOpen, setShadowOpen] = useState(true);
+  // Collapsible 외곽선/그림자 sections (collapsed by default).
+  const [outlineOpen, setOutlineOpen] = useState(false);
+  const [shadowOpen, setShadowOpen] = useState(false);
   const [bgColor, setBgColor] = useState("#ffffff");
   const [_changeTick, setChangeTick] = useState(0);
   const [guides, setGuides] = useState<Guide[]>([]);
@@ -1171,11 +1171,14 @@ export default function Editor({
   const canFit = isImage || isShape;
 
   // Outline + shadow state for the text props UI (re-derived each render).
-  const strokeColor =
-    (selected as unknown as { stroke?: string } | null)?.stroke || "#ffffff";
+  // NOTE: Fabric defaults strokeWidth to 1 even with no stroke colour, so the
+  // outline counts as "on" only when an actual stroke colour is set.
+  const rawStroke = (selected as unknown as { stroke?: string | null } | null)
+    ?.stroke;
+  const strokeColor = rawStroke || "#ffffff";
   const strokeWidth =
     (selected as unknown as { strokeWidth?: number } | null)?.strokeWidth ?? 0;
-  const outlineOn = strokeWidth > 0;
+  const outlineOn = !!rawStroke && strokeWidth > 0;
 
   const _shadow = (
     selected as unknown as {
@@ -1821,17 +1824,18 @@ export default function Editor({
                   role="switch"
                   aria-checked={outlineOn}
                   className={`ed-switch${outlineOn ? " is-on" : ""}`}
-                  onClick={() =>
-                    updateSelected(
-                      outlineOn
-                        ? { strokeWidth: 0 }
-                        : {
-                            strokeWidth: 4,
-                            stroke: strokeColor,
-                            paintFirst: "stroke",
-                          },
-                    )
-                  }
+                  onClick={() => {
+                    if (outlineOn) {
+                      updateSelected({ strokeWidth: 0, stroke: null });
+                    } else {
+                      updateSelected({
+                        strokeWidth: 4,
+                        stroke: strokeColor,
+                        paintFirst: "stroke",
+                      });
+                      setOutlineOpen(true);
+                    }
+                  }}
                 >
                   <span className="ed-switch__knob" />
                 </button>
@@ -1884,9 +1888,11 @@ export default function Editor({
                   role="switch"
                   aria-checked={shadow.on}
                   className={`ed-switch${shadow.on ? " is-on" : ""}`}
-                  onClick={() =>
-                    void applyShadowParams({ ...shadow, on: !shadow.on })
-                  }
+                  onClick={() => {
+                    const next = !shadow.on;
+                    void applyShadowParams({ ...shadow, on: next });
+                    if (next) setShadowOpen(true);
+                  }}
                 >
                   <span className="ed-switch__knob" />
                 </button>
