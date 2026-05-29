@@ -1983,6 +1983,41 @@ textarea.ed-input {
   margin: 0 auto 24px;
 }
 
+.store-search {
+  position: relative;
+  max-width: 1100px;
+  margin: 0 auto 22px;
+}
+
+.store-search__icon {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #9a7c5d;
+  pointer-events: none;
+}
+
+.store-search__input {
+  width: 100%;
+  padding: 12px 16px 12px 44px;
+  border: 1px solid rgba(120, 90, 60, 0.2);
+  border-radius: 999px;
+  background: var(--paper);
+  color: #3a2a1d;
+  font-size: 15px;
+  outline: none;
+}
+
+.store-search__input::placeholder {
+  color: #b09a83;
+}
+
+.store-search__input:focus {
+  border-color: #ff9b6f;
+  box-shadow: 0 0 0 3px rgba(255, 155, 111, 0.18);
+}
+
 .store-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));

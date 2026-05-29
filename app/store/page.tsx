@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { BookOpen, Home, Library } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { BookOpen, Home, Library, Search } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import BookViewer from "../components/BookViewer";
 import UserChip from "../components/auth/UserChip";
 import { listStoreBooks, type StoreBook } from "../lib/store";
@@ -16,10 +16,23 @@ export default function StorePage() {
   const [books, setBooks] = useState<StoreBook[] | null>(null);
   const [reader, setReader] = useState<Reader | null>(null);
   const [opening, setOpening] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     listStoreBooks().then(setBooks);
   }, []);
+
+  // Filter by title or author (지은이 falls back to the uploader's name).
+  const filtered = useMemo(() => {
+    if (!books) return null;
+    const q = query.trim().toLowerCase();
+    if (!q) return books;
+    return books.filter(
+      (b) =>
+        b.title.toLowerCase().includes(q) ||
+        (b.author ?? b.ownerName).toLowerCase().includes(q),
+    );
+  }, [books, query]);
 
   useEffect(() => {
     return () => {
@@ -64,6 +77,20 @@ export default function StorePage() {
         </div>
       </header>
 
+      {books && books.length > 0 && (
+        <div className="store-search">
+          <Search size={18} className="store-search__icon" aria-hidden />
+          <input
+            type="search"
+            className="store-search__input"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="제목이나 지은이로 검색"
+            aria-label="제목이나 지은이로 검색"
+          />
+        </div>
+      )}
+
       {books === null ? (
         <p className="store-empty">불러오는 중…</p>
       ) : books.length === 0 ? (
@@ -74,9 +101,14 @@ export default function StorePage() {
             책 만들러 가기
           </Link>
         </div>
+      ) : filtered && filtered.length === 0 ? (
+        <div className="store-empty">
+          <Search size={40} strokeWidth={1.6} />
+          <p>&ldquo;{query.trim()}&rdquo;에 맞는 책이 없어요.</p>
+        </div>
       ) : (
         <div className="store-grid">
-          {books.map((b) => (
+          {(filtered ?? []).map((b) => (
             <button
               key={b.id}
               type="button"
