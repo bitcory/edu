@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { Check, Eye, RotateCcw, X } from "lucide-react";
+import { Check, Eye, Pencil, RotateCcw, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import BookViewer from "../components/BookViewer";
+import BookInfoModal, { type InfoValues } from "../components/BookInfoModal";
 import UserChip from "../components/auth/UserChip";
 import { useIsAdmin } from "../components/auth/useIsAdmin";
 import {
@@ -12,6 +13,7 @@ import {
   listRejectedBooks,
   listStoreBooks,
   rejectBook,
+  updateBookInfo,
   type StoreBook,
 } from "../lib/store";
 import { approveAuthor, fetchAuthors, rejectAuthor } from "../lib/author-store";
@@ -51,6 +53,7 @@ export default function AdminPage() {
   const [authors, setAuthors] = useState<Author[] | null>(null);
   const [reader, setReader] = useState<Reader | null>(null);
   const [busy, setBusy] = useState(false);
+  const [editInfo, setEditInfo] = useState<StoreBook | null>(null);
 
   const refresh = useCallback(() => {
     if (section === "books") {
@@ -125,6 +128,23 @@ export default function AdminPage() {
       setBusy(false);
     },
     [refresh],
+  );
+
+  const saveInfo = useCallback(
+    async (values: InfoValues) => {
+      if (!editInfo) return;
+      setBusy(true);
+      try {
+        await updateBookInfo(editInfo.id, values);
+        refresh();
+      } catch (err) {
+        alert((err as Error).message);
+      } finally {
+        setBusy(false);
+        setEditInfo(null);
+      }
+    },
+    [editInfo, refresh],
   );
 
   if (!isAdmin) {
@@ -202,6 +222,21 @@ export default function AdminPage() {
           onPreview={(b) => void preview(b)}
           onApprove={(id) => void approve(id)}
           onReject={(id) => void reject(id)}
+          onEdit={(b) => setEditInfo(b)}
+        />
+      )}
+
+      {editInfo && (
+        <BookInfoModal
+          initial={{
+            title: editInfo.title,
+            author: editInfo.author ?? "",
+            price: editInfo.price,
+            description: editInfo.description ?? "",
+          }}
+          submitting={busy}
+          onCancel={() => setEditInfo(null)}
+          onConfirm={(values) => void saveInfo(values)}
         />
       )}
     </main>
@@ -216,6 +251,7 @@ function BooksView({
   onPreview,
   onApprove,
   onReject,
+  onEdit,
 }: {
   tab: Tab;
   setTab: (t: Tab) => void;
@@ -224,6 +260,7 @@ function BooksView({
   onPreview: (b: StoreBook) => void;
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
+  onEdit: (b: StoreBook) => void;
 }) {
   return (
     <>
@@ -278,6 +315,15 @@ function BooksView({
                   disabled={busy}
                 >
                   <Eye size={16} /> 미리보기
+                </button>
+                <button
+                  type="button"
+                  className="admin-btn admin-btn--preview"
+                  onClick={() => onEdit(b)}
+                  disabled={busy}
+                  title="제목·지은이·가격·설명 수정"
+                >
+                  <Pencil size={16} /> 정보 수정
                 </button>
 
                 {tab === "pending" && (
