@@ -1349,11 +1349,13 @@ export default function Editor({
               title="작업을 내 서재에 임시저장 (공개 안 됨)"
             >
               <Save size={16} />
-              {draftState === "saving"
-                ? "저장 중…"
-                : draftState === "saved"
-                  ? "저장됨 ✓"
-                  : "임시저장"}
+              <span className="ed-draft__label">
+                {draftState === "saving"
+                  ? "저장 중…"
+                  : draftState === "saved"
+                    ? "저장됨 ✓"
+                    : "임시저장"}
+              </span>
             </button>
           )}
           <button

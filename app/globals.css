@@ -1659,7 +1659,7 @@ textarea.ed-input {
     z-index: 25;
     margin: 0;
     /* extra left padding reserves room for the fixed undo/redo block */
-    padding: 8px 10px 8px 104px;
+    padding: 8px 10px 8px 128px;
     border-left: 0;
     border-top: 1px solid rgba(255, 220, 160, 0.12);
     background: linear-gradient(180deg, #3b271a, #2a1c11);
@@ -1699,10 +1699,17 @@ textarea.ed-input {
     padding: 7px 11px;
     font-size: 12px;
   }
-  .ed-finish,
-  .ed-draft {
+  .ed-finish {
     padding: 8px 16px;
     font-size: 13px;
+  }
+  /* 임시저장 collapses to an icon-only button on mobile to save top-bar room. */
+  .ed-draft {
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+  .ed-draft__label {
+    display: none;
   }
   /* Push the save group (임시저장 + 완성) to the right edge, together. */
   .ed-save-group {
