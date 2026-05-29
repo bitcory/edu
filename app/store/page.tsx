@@ -25,14 +25,16 @@ export default function StorePage() {
   }, []);
 
   // Filter by title or author (지은이 falls back to the uploader's name).
+  // Normalize to NFC so 분해형(NFD) 한글 입력도 조합형 제목과 매칭된다.
   const filtered = useMemo(() => {
     if (!books) return null;
-    const q = query.trim().toLowerCase();
+    const norm = (s: string) => s.toLowerCase().normalize("NFC");
+    const q = norm(query.trim());
     if (!q) return books;
     return books.filter(
       (b) =>
-        b.title.toLowerCase().includes(q) ||
-        (b.author ?? b.ownerName).toLowerCase().includes(q),
+        norm(b.title).includes(q) ||
+        norm(b.author ?? b.ownerName).includes(q),
     );
   }, [books, query]);
 
