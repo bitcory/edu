@@ -57,6 +57,43 @@ export async function renderSnapshotToImages(
   return { rendered, pdfBytes, pdfUrl };
 }
 
+/**
+ * Render a Fabric snapshot straight to flip-book images for the reader —
+ * Fabric → image per page, skipping the PDF + pdf.js round-trip that
+ * renderSnapshotToImages does (that's only needed when we also want a
+ * downloadable PDF, e.g. the editor preview). Much faster to open.
+ */
+export async function renderSnapshotToPages(
+  pages: EditorPage[],
+  pageW: number = PAGE_W,
+): Promise<RenderedPage[]> {
+  const fabric = await import("fabric");
+  const offEl = document.createElement("canvas");
+  offEl.width = pageW;
+  offEl.height = PAGE_H;
+  const off = new fabric.StaticCanvas(offEl, {
+    width: pageW,
+    height: PAGE_H,
+    backgroundColor: "#ffffff",
+  });
+  const out: RenderedPage[] = [];
+  for (const page of pages) {
+    if (page.data) {
+      await off.loadFromJSON(page.data);
+      off.renderAll();
+    } else {
+      off.clear();
+      off.backgroundColor = "#ffffff";
+      off.renderAll();
+    }
+    // 1.5× for crisp text/lines; pages have a white bg so JPEG is fine.
+    const url = off.toDataURL({ format: "jpeg", quality: 0.92, multiplier: 1.5 });
+    out.push({ url, width: pageW, height: PAGE_H });
+  }
+  off.dispose();
+  return out;
+}
+
 export type OpenedBook = { rendered: RenderedPage[]; revoke: () => void };
 
 /**
@@ -76,16 +113,7 @@ export async function openBookForReading(book: StoreBook): Promise<OpenedBook> {
     const rendered = await renderPdfToImages(file);
     return { rendered, revoke: () => revokePages(rendered) };
   }
-  const { rendered, pdfUrl } = await renderSnapshotToImages(
-    book.pages,
-    `${book.title}.pdf`,
-    book.pageW || PAGE_W,
-  );
-  return {
-    rendered,
-    revoke: () => {
-      revokePages(rendered);
-      URL.revokeObjectURL(pdfUrl);
-    },
-  };
+  // Editor book: render the snapshot straight to images (no PDF round-trip).
+  const rendered = await renderSnapshotToPages(book.pages, book.pageW || PAGE_W);
+  return { rendered, revoke: () => revokePages(rendered) };
 }
