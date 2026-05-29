@@ -1212,12 +1212,6 @@ export default function Editor({
         360),
   };
 
-  // Pixel-snapped frame size. The active canvas is scaled to EXACTLY this size
-  // (scaleX/scaleY) so it fully covers the frame (no white edge) and matches
-  // the partner preview exactly (no size jump when switching left/right page).
-  const frameW = Math.round(PAGE_W * displayScale);
-  const frameH = Math.round(PAGE_H * displayScale);
-
   return (
     <div className="ed-shell">
       <div className="ed-topbar">
@@ -1543,8 +1537,8 @@ export default function Editor({
               key="partner-before"
               className="ed-canvas-frame ed-canvas-frame--partner"
               style={{
-                width: frameW,
-                height: frameH,
+                width: PAGE_W * displayScale,
+                height: PAGE_H * displayScale,
               }}
               onClick={() => void switchTo(partnerIndex)}
               title={`${partnerIndex === 0 ? "표지" : `${partnerIndex}쪽`}으로 이동`}
@@ -1572,15 +1566,15 @@ export default function Editor({
           style={{
             // floor so the (continuous) scaled canvas always fully covers the
             // frame — otherwise sub-pixel rounding shows the white frame edge.
-            width: frameW,
-            height: frameH,
+            width: PAGE_W * displayScale,
+            height: PAGE_H * displayScale,
           }}
         >
           <div
             style={{
               width: PAGE_W,
               height: PAGE_H,
-              transform: `scale(${frameW / PAGE_W}, ${frameH / PAGE_H})`,
+              transform: `scale(${displayScale})`,
               transformOrigin: "top left",
             }}
           >
@@ -1615,8 +1609,8 @@ export default function Editor({
               key="partner-after"
               className="ed-canvas-frame ed-canvas-frame--partner"
               style={{
-                width: frameW,
-                height: frameH,
+                width: PAGE_W * displayScale,
+                height: PAGE_H * displayScale,
               }}
               onClick={() => void switchTo(partnerIndex)}
               title={`${partnerIndex === 0 ? "표지" : `${partnerIndex}쪽`}으로 이동`}
