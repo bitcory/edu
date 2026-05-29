@@ -129,7 +129,10 @@ export default forwardRef<FabricApi | null, Props>(function FabricCanvas(
             }
           }
         }
-        if (bestDxAbs <= SNAP_THRESHOLD) {
+        // Skip x-snapping for objects as wide as / wider than the page (full-
+        // bleed images): their left/center/right edges all sit near the page
+        // guides at once, so the snap target flips frame-to-frame → jitter.
+        if (r.width < pageW - 0.5 && bestDxAbs <= SNAP_THRESHOLD) {
           target.set("left", target.left + dx);
           if (snappedXPos !== null) guides.push({ axis: "x", pos: snappedXPos });
         }
@@ -154,7 +157,7 @@ export default forwardRef<FabricApi | null, Props>(function FabricCanvas(
             }
           }
         }
-        if (bestDyAbs <= SNAP_THRESHOLD) {
+        if (r.height < PAGE_H - 0.5 && bestDyAbs <= SNAP_THRESHOLD) {
           target.set("top", target.top + dy);
           if (snappedYPos !== null) guides.push({ axis: "y", pos: snappedYPos });
         }
