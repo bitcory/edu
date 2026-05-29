@@ -680,15 +680,16 @@ export default function Editor({
       crossOrigin: "anonymous",
     });
     // Default: 전체(fill page height) + 왼쪽 정렬 (left edge at 0) — ready for
-    // a continuous spread (duplicate → right half).
+    // a continuous spread (duplicate → right half). Bleed ~1px past the top/
+    // bottom so rounding doesn't leave a hairline of the white page showing.
     const ih = img.height ?? PAGE_H;
-    const scale = PAGE_H / ih;
+    const scale = (PAGE_H + 2) / ih;
     img.set({
       scaleX: scale,
       scaleY: scale,
       angle: 0,
       left: 0,
-      top: 0,
+      top: -1,
     });
     api.canvas.add(img);
     api.canvas.setActiveObject(img);
@@ -1011,7 +1012,8 @@ export default function Editor({
 
       if (p.rescale) {
         const baseH = (selected as unknown as { height?: number }).height ?? 1;
-        const scale = PAGE_H / baseH;
+        // +2px bleed so a full-height image doesn't leave a white hairline.
+        const scale = (PAGE_H + 2) / baseH;
         selected.set({ scaleX: scale, scaleY: scale, angle: 0 });
       }
       selected.setCoords();
