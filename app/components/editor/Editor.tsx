@@ -1634,7 +1634,7 @@ export default function Editor({
                 ))}
               </select>
             </div>
-            <div className="ed-props__group">
+            <div className="ed-props__group ed-props__group--half">
               <label className="ed-props__label">글자 크기</label>
               <NumberStepper
                 value={
@@ -1646,7 +1646,7 @@ export default function Editor({
                 onChange={(n) => updateSelected({ fontSize: n })}
               />
             </div>
-            <div className="ed-props__group">
+            <div className="ed-props__group ed-props__group--half">
               <label className="ed-props__label">줄 간격</label>
               <NumberStepper
                 value={
@@ -1660,7 +1660,7 @@ export default function Editor({
                 onChange={(n) => updateSelected({ lineHeight: n })}
               />
             </div>
-            <div className="ed-props__group">
+            <div className="ed-props__group ed-props__group--half">
               <label className="ed-props__label">자간</label>
               <NumberStepper
                 value={
@@ -1693,7 +1693,7 @@ export default function Editor({
                 />
               </div>
             </div>
-            <div className="ed-props__group">
+            <div className="ed-props__group ed-props__group--half">
               <label className="ed-props__label">두께</label>
               <div className="ed-btn-row">
                 <button
@@ -1752,7 +1752,7 @@ export default function Editor({
               </div>
             </div>
             <div className="ed-props__group">
-              <label className="ed-props__label">외곽선 (굵기 0 = 없음)</label>
+              <label className="ed-props__label">외곽선</label>
               <div className="ed-props__row">
                 <input
                   type="color"
