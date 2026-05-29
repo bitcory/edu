@@ -44,6 +44,7 @@ import FabricCanvas, {
   type FabricApi,
   type Guide,
 } from "./FabricCanvas";
+import ColorField from "./ColorField";
 import {
   type EditorPage,
   PAGE_H,
@@ -1273,23 +1274,14 @@ export default function Editor({
           >
             <CircleIcon size={16} /> 동그라미
           </button>
-          <label className="ed-tool" style={{ paddingRight: 10 }}>
+          <span className="ed-tool ed-tool--bg">
             <Palette size={16} /> 배경
-            <input
-              type="color"
+            <ColorField
               value={bgColor}
-              onChange={(e) => setBg(e.target.value)}
-              style={{
-                marginLeft: 6,
-                width: 24,
-                height: 22,
-                border: 0,
-                background: "transparent",
-                padding: 0,
-                cursor: "pointer",
-              }}
+              onChange={setBg}
+              className="ed-bg-swatch"
             />
-          </label>
+          </span>
           <select
             className="ed-tool-select"
             value={pageW}
@@ -1746,13 +1738,12 @@ export default function Editor({
             <div className="ed-props__group">
               <label className="ed-props__label">글자 색</label>
               <div className="ed-props__row">
-                <input
-                  type="color"
-                  className="ed-input"
+                <ColorField
                   value={
                     (selected as unknown as { fill: string }).fill || "#000000"
                   }
-                  onChange={(e) => updateSelected({ fill: e.target.value })}
+                  onChange={(c) => updateSelected({ fill: c })}
+                  className="ed-input"
                 />
                 <input
                   className="ed-input"
@@ -1859,15 +1850,11 @@ export default function Editor({
                 <>
                   <div className="ed-row-field">
                     <span className="ed-props__label">색상</span>
-                    <input
-                      type="color"
+                    <ColorField
                       className="ed-swatch"
                       value={strokeColor}
-                      onChange={(e) =>
-                        updateSelected({
-                          stroke: e.target.value,
-                          paintFirst: "stroke",
-                        })
+                      onChange={(c) =>
+                        updateSelected({ stroke: c, paintFirst: "stroke" })
                       }
                     />
                   </div>
@@ -1918,15 +1905,11 @@ export default function Editor({
                 <>
                   <div className="ed-row-field">
                     <span className="ed-props__label">색상</span>
-                    <input
-                      type="color"
+                    <ColorField
                       className="ed-swatch"
                       value={shadow.hex}
-                      onChange={(e) =>
-                        void applyShadowParams({
-                          ...shadow,
-                          hex: e.target.value,
-                        })
+                      onChange={(c) =>
+                        void applyShadowParams({ ...shadow, hex: c })
                       }
                     />
                   </div>
@@ -1983,13 +1966,12 @@ export default function Editor({
             <div className="ed-props__group">
               <label className="ed-props__label">색</label>
               <div className="ed-props__row">
-                <input
-                  type="color"
-                  className="ed-input"
+                <ColorField
                   value={
                     (selected as unknown as { fill: string }).fill || "#ffd05f"
                   }
-                  onChange={(e) => updateSelected({ fill: e.target.value })}
+                  onChange={(c) => updateSelected({ fill: c })}
+                  className="ed-input"
                 />
                 <input
                   className="ed-input"
