@@ -702,7 +702,7 @@ export default function Editor({
               top: 120,
               width: 240,
               height: 160,
-              fill: "#ffd05f",
+              fill: "#ffffff",
               rx: 14,
               ry: 14,
             })
@@ -1662,6 +1662,7 @@ export default function Editor({
             </div>
             <div className="ed-props__group">
               <label className="ed-props__label">글꼴</label>
+              <div className="ed-props__row">
               <select
                 className="ed-select"
                 value={
@@ -1695,6 +1696,14 @@ export default function Editor({
                   </optgroup>
                 ))}
               </select>
+                <ColorField
+                  className="ed-swatch ed-swatch--square"
+                  value={
+                    (selected as unknown as { fill: string }).fill || "#000000"
+                  }
+                  onChange={(c) => updateSelected({ fill: c })}
+                />
+              </div>
             </div>
             <div className="ed-props__group ed-props__group--half">
               <label className="ed-props__label">글자 크기</label>
@@ -1707,52 +1716,6 @@ export default function Editor({
                 step={2}
                 onChange={(n) => updateSelected({ fontSize: n })}
               />
-            </div>
-            <div className="ed-props__group ed-props__group--half">
-              <label className="ed-props__label">줄 간격</label>
-              <NumberStepper
-                value={
-                  (selected as unknown as { lineHeight?: number }).lineHeight ??
-                  1.16
-                }
-                min={0.6}
-                max={3}
-                step={0.1}
-                decimals={1}
-                onChange={(n) => updateSelected({ lineHeight: n })}
-              />
-            </div>
-            <div className="ed-props__group ed-props__group--half">
-              <label className="ed-props__label">자간</label>
-              <NumberStepper
-                value={
-                  (selected as unknown as { charSpacing?: number })
-                    .charSpacing ?? 0
-                }
-                min={-200}
-                max={1000}
-                step={25}
-                onChange={(n) => updateSelected({ charSpacing: n })}
-              />
-            </div>
-            <div className="ed-props__group">
-              <label className="ed-props__label">글자 색</label>
-              <div className="ed-props__row">
-                <ColorField
-                  value={
-                    (selected as unknown as { fill: string }).fill || "#000000"
-                  }
-                  onChange={(c) => updateSelected({ fill: c })}
-                  className="ed-input"
-                />
-                <input
-                  className="ed-input"
-                  value={
-                    (selected as unknown as { fill: string }).fill || "#000000"
-                  }
-                  onChange={(e) => updateSelected({ fill: e.target.value })}
-                />
-              </div>
             </div>
             <div className="ed-props__group ed-props__group--half">
               <label className="ed-props__label">두께</label>
@@ -1784,6 +1747,33 @@ export default function Editor({
                   <Bold size={14} />
                 </button>
               </div>
+            </div>
+            <div className="ed-props__group ed-props__group--half">
+              <label className="ed-props__label">줄 간격</label>
+              <NumberStepper
+                value={
+                  (selected as unknown as { lineHeight?: number }).lineHeight ??
+                  1.16
+                }
+                min={0.6}
+                max={3}
+                step={0.1}
+                decimals={1}
+                onChange={(n) => updateSelected({ lineHeight: n })}
+              />
+            </div>
+            <div className="ed-props__group ed-props__group--half">
+              <label className="ed-props__label">자간</label>
+              <NumberStepper
+                value={
+                  (selected as unknown as { charSpacing?: number })
+                    .charSpacing ?? 0
+                }
+                min={-200}
+                max={1000}
+                step={25}
+                onChange={(n) => updateSelected({ charSpacing: n })}
+              />
             </div>
             <div className="ed-props__group">
               <label className="ed-props__label">정렬</label>
