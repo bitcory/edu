@@ -789,6 +789,31 @@ body {
   cursor: not-allowed;
 }
 
+/* 임시저장 — secondary action next to "완성 → 책으로". */
+.ed-draft {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 8px;
+  padding: 9px 18px;
+  border: 1px solid rgba(120, 90, 60, 0.28);
+  border-radius: 999px;
+  background: #fffdf5;
+  color: #6b4a30;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.ed-draft:hover:not(:disabled) {
+  background: #fff5e0;
+}
+
+.ed-draft:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .ed-pagelist {
   grid-area: pages;
   background: rgba(20, 14, 9, 0.72);

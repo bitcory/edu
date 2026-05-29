@@ -12,7 +12,7 @@ import { renderSnapshotToImages } from "../lib/render-book";
 import { revokePages, type RenderedPage } from "../lib/pdf-to-images";
 import type { EditorPage } from "../lib/editor-types";
 import { loadEditorState } from "../lib/editor-storage";
-import { getBook, submitBook, updateBook } from "../lib/store";
+import { getBook, saveDraft, submitBook, updateBook } from "../lib/store";
 import type { BookLayout } from "../lib/book-types";
 import { DEFAULT_TEMPLATE } from "../lib/templates";
 import { fetchMyAuthor } from "../lib/author-store";
@@ -48,6 +48,10 @@ function EditPageInner() {
   const [pageW, setPageW] = useState<number>(DEFAULT_TEMPLATE.width);
   const [prevPageW, setPrevPageW] = useState<number>(DEFAULT_TEMPLATE.width);
   const [layout, setLayout] = useState<BookLayout>(DEFAULT_TEMPLATE.layout);
+  // Server draft id for a brand-new book once it's been 임시저장'd, so further
+  // saves update the same draft. (Kept in state, not the URL, to avoid
+  // remounting the editor mid-edit.)
+  const [draftId, setDraftId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchMyAuthor().then(setAuthor);
@@ -110,6 +114,21 @@ function EditPageInner() {
       }
     };
   }, [mode]);
+
+  const handleSaveDraft = useCallback(
+    async (pages: EditorPage[], pw: number, lyt: BookLayout) => {
+      const targetId = bookId ?? draftId ?? undefined;
+      const book = await saveDraft({
+        id: targetId,
+        pages,
+        pageW: pw,
+        layout: lyt,
+      });
+      // Adopt the new draft's id so the next save updates the same row.
+      if (!targetId) setDraftId(book.id);
+    },
+    [bookId, draftId],
+  );
 
   const handleFinish = useCallback(
     async (pages: EditorPage[], pw: number, lyt: BookLayout) => {
@@ -177,6 +196,7 @@ function EditPageInner() {
         <Editor
           key={`${bookId ?? "new"}-${pageW}`}
           onFinish={handleFinish}
+          onSaveDraft={handleSaveDraft}
           exporting={mode.kind === "exporting"}
           initialPages={initialPages ?? undefined}
           pageW={pageW}

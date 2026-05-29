@@ -31,6 +31,7 @@ import {
   Home,
   Plus,
   Redo2,
+  Save,
   Undo2,
   Square as SquareIcon,
   Trash2,
@@ -96,6 +97,14 @@ type Props = {
     pageW: number,
     layout: BookLayout,
   ) => Promise<void> | void;
+  // 임시저장: persist the current pages as a private draft (cloud). May throw
+  // on failure (the editor shows the message). Optional so the editor still
+  // works without a draft host.
+  onSaveDraft?: (
+    pages: EditorPage[],
+    pageW: number,
+    layout: BookLayout,
+  ) => Promise<void> | void;
   exporting?: boolean;
   // When editing an existing bookstore book (/edit?book=<id>), seed from its
   // snapshot instead of the localStorage working draft. The parent remounts
@@ -113,6 +122,7 @@ type Props = {
 
 export default function Editor({
   onFinish,
+  onSaveDraft,
   exporting = false,
   initialPages,
   pageW,
@@ -985,6 +995,32 @@ export default function Editor({
     await onFinish(finalPages, pageW, layout);
   }, [pages, activeIndex, onFinish, pageW, layout]);
 
+  // 임시저장: snapshot the current page, then hand all pages to the parent to
+  // persist as a cloud draft. Shows a transient "저장됨 ✓" on success.
+  const [draftState, setDraftState] = useState<"idle" | "saving" | "saved">(
+    "idle",
+  );
+  const handleSaveDraft = useCallback(async () => {
+    if (!onSaveDraft) return;
+    const api = apiRef.current;
+    if (!api) return;
+    const data = api.serialize();
+    const thumb = api.toPng(0.2);
+    const finalPages = pages.map((p, i) =>
+      i === activeIndex ? { ...p, data, thumb } : p,
+    );
+    setPages(finalPages);
+    setDraftState("saving");
+    try {
+      await onSaveDraft(finalPages, pageW, layout);
+      setDraftState("saved");
+      window.setTimeout(() => setDraftState("idle"), 2000);
+    } catch (err) {
+      setDraftState("idle");
+      alert((err as Error).message);
+    }
+  }, [pages, activeIndex, onSaveDraft, pageW, layout]);
+
   const isText = useMemo(
     () => selected?.type === "i-text" || selected?.type === "text",
     [selected],
@@ -1116,6 +1152,22 @@ export default function Editor({
           </button>
         </div>
         <div className="ed-spacer" />
+        {onSaveDraft && (
+          <button
+            type="button"
+            className="ed-draft"
+            onClick={() => void handleSaveDraft()}
+            disabled={exporting || draftState === "saving"}
+            title="작업을 내 서재에 임시저장 (공개 안 됨)"
+          >
+            <Save size={16} />
+            {draftState === "saving"
+              ? "저장 중…"
+              : draftState === "saved"
+                ? "저장됨 ✓"
+                : "임시저장"}
+          </button>
+        )}
         <button
           type="button"
           className="ed-finish"

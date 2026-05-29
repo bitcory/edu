@@ -97,6 +97,7 @@ function normalizePrice(price: unknown): number {
 export async function insertBook(
   input: SubmitInput,
   owner: { id: string; name: string },
+  status: BookStatus = initialEditorStatus(),
 ): Promise<StoreBook> {
   await ensureSchema();
   const book: StoreBook = {
@@ -112,7 +113,7 @@ export async function insertBook(
     ownerName: owner.name,
     pages: input.pages,
     coverThumb: input.pages[0]?.thumb,
-    status: initialEditorStatus(),
+    status,
     submittedAt: Date.now(),
   };
   await db.execute({
@@ -181,7 +182,9 @@ export async function insertPdfBook(
   return book;
 }
 
-/** Re-edit: overwrite snapshot, reset to pending for re-review. */
+/** Re-edit: overwrite snapshot. `status` controls the resulting state —
+ * defaults to the publish status (initialEditorStatus), or pass 'draft' to
+ * keep it a private 임시저장. */
 export async function updateBookSnapshot(
   id: string,
   patch: {
@@ -192,6 +195,7 @@ export async function updateBookSnapshot(
     pageW?: number;
     layout?: StoreBook["layout"];
   },
+  status: BookStatus = initialEditorStatus(),
 ): Promise<StoreBook | null> {
   await ensureSchema();
   const existing = await getBookById(id);
@@ -220,7 +224,7 @@ export async function updateBookSnapshot(
       price,
       pageW,
       layout,
-      initialEditorStatus(),
+      status,
       submittedAt,
       id,
     ],

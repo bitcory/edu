@@ -111,6 +111,31 @@ export async function registerPdfBook(
   return book;
 }
 
+/** 임시저장: save the editor book as a private draft (no publish). With an
+ * `id` it updates that draft; without, it creates a new one and returns it
+ * (the caller should adopt the returned id so further saves update the same
+ * draft). */
+export async function saveDraft(input: {
+  id?: string;
+  pages: SubmitInput["pages"];
+  title?: string;
+  description?: string;
+  price?: number;
+  pageW?: number;
+  layout?: SubmitInput["layout"];
+}): Promise<StoreBook> {
+  const res = await fetch("/api/books/draft", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    throw new Error(await errorMessage(res, "임시저장에 실패했어요."));
+  }
+  const data = (await res.json()) as { book: StoreBook };
+  return data.book;
+}
+
 /** Edit only title/price/description (no content change, status unchanged). */
 export async function updateBookInfo(
   id: string,
