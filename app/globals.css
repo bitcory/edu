@@ -380,24 +380,28 @@ body {
 
 .bv-close {
   position: absolute;
-  top: 14px;
-  left: 14px;
+  top: 16px;
+  right: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
   background:
     linear-gradient(180deg, rgba(255, 253, 235, 0.98), rgba(255, 210, 128, 0.95));
   border: 1px solid rgba(255, 180, 117, 0.46);
-  border-radius: 8px;
-  padding: 10px 14px;
-  font-weight: 700;
+  border-radius: 50%;
   color: #634431;
   cursor: pointer;
-  font-size: 15px;
   z-index: 6;
   box-shadow: 0 10px 22px rgba(92, 62, 35, 0.24);
+  transition: transform 0.12s ease, background 0.12s ease;
 }
 
 .bv-close:hover {
   background:
     linear-gradient(180deg, #fffbe9, #ffd68b);
+  transform: scale(1.06);
 }
 
 .bv-stage {
@@ -517,8 +521,10 @@ body {
   }
 
   .bv-close {
-    top: 10px;
-    left: 10px;
+    top: 12px;
+    right: 12px;
+    width: 50px;
+    height: 50px;
   }
 }
 
