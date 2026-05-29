@@ -9,7 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Music, VolumeX } from "lucide-react";
 import type { RenderedPage } from "../lib/pdf-to-images";
 
 type FlipBookInstance = {
@@ -86,15 +86,51 @@ type Props = {
   onClose?: () => void;
   /** 단면: always show one page at a time (no 2-up spread). */
   singlePage?: boolean;
+  /** Background music to play softly while reading. */
+  audioUrl?: string;
 };
 
-export default function BookViewer({ pages, onClose, singlePage }: Props) {
+export default function BookViewer({
+  pages,
+  onClose,
+  singlePage,
+  audioUrl,
+}: Props) {
   const first = pages[0];
   const aspect = first ? first.width / first.height : 0.7;
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const bookRef = useRef<FlipBookInstance | null>(null);
   const [dims, setDims] = useState<{ w: number; h: number } | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [musicOn, setMusicOn] = useState(false);
+
+  // Try to start the background music softly on open. Browsers may block
+  // autoplay-with-sound until a gesture — if so, the 🎵 button starts it.
+  useEffect(() => {
+    const el = audioRef.current;
+    if (!el || !audioUrl) return;
+    el.volume = 0.3;
+    el.play().then(
+      () => setMusicOn(true),
+      () => setMusicOn(false),
+    );
+  }, [audioUrl]);
+
+  const toggleMusic = () => {
+    const el = audioRef.current;
+    if (!el) return;
+    if (el.paused) {
+      el.volume = 0.3;
+      void el.play().then(
+        () => setMusicOn(true),
+        () => setMusicOn(false),
+      );
+    } else {
+      el.pause();
+      setMusicOn(false);
+    }
+  };
 
   // Keyboard paging: → / Space = next, ← = previous.
   useEffect(() => {
@@ -178,9 +214,29 @@ export default function BookViewer({ pages, onClose, singlePage }: Props) {
           aria-label="새 책 보기"
           title="새 책 보기"
         >
+          <img
+            className="bv-close__art"
+            src="/view-close-book.png"
+            alt=""
+            aria-hidden="true"
+          />
           <ArrowLeft size={30} />
           <span>새 책 보기</span>
         </button>
+      )}
+      {audioUrl && (
+        <>
+          <audio ref={audioRef} src={audioUrl} loop preload="auto" />
+          <button
+            type="button"
+            className={`bv-music${musicOn ? " is-on" : ""}`}
+            onClick={toggleMusic}
+            aria-label={musicOn ? "음악 끄기" : "음악 켜기"}
+            title={musicOn ? "음악 끄기" : "음악 켜기"}
+          >
+            {musicOn ? <Music size={22} /> : <VolumeX size={22} />}
+          </button>
+        </>
       )}
       <div ref={containerRef} className="bv-stage">
         <div className="bv-book-shadow" aria-hidden />

@@ -35,7 +35,20 @@ function rowToBook(row: Row): StoreBook {
     rejectReason:
       row.reject_reason == null ? undefined : String(row.reject_reason),
     likeCount: row.like_count == null ? undefined : Number(row.like_count),
+    audioKey: row.audio_key == null ? undefined : String(row.audio_key),
   };
+}
+
+/** Set or clear (null) a book's background-music R2 key. */
+export async function setBookAudio(
+  id: string,
+  audioKey: string | null,
+): Promise<void> {
+  await ensureSchema();
+  await db.execute({
+    sql: `UPDATE books SET audio_key = ? WHERE id = ?`,
+    args: [audioKey, id],
+  });
 }
 
 export async function listBooks(

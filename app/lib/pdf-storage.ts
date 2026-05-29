@@ -161,6 +161,46 @@ export async function readPdf(id: string): Promise<Uint8Array | null> {
   }
 }
 
+// ---- Background music (MP3) per book, at audio/<id>.mp3 ----
+function audioKeyFor(id: string): string {
+  return `audio/${id}.mp3`;
+}
+
+/** Presigned PUT so the browser uploads the MP3 straight to R2. */
+export async function presignAudioUpload(
+  id: string,
+): Promise<{ key: string; url: string }> {
+  const { client, bucket } = r2();
+  const key = audioKeyFor(id);
+  const url = await getSignedUrl(
+    client,
+    new PutObjectCommand({ Bucket: bucket, Key: key }),
+    { expiresIn: 300 },
+  );
+  return { key, url };
+}
+
+/** Presigned GET so an <audio> element can stream it (no CORS needed). */
+export async function presignAudioDownload(key: string): Promise<string> {
+  const { client, bucket } = r2();
+  return getSignedUrl(
+    client,
+    new GetObjectCommand({ Bucket: bucket, Key: key }),
+    { expiresIn: 3600 },
+  );
+}
+
+export async function deleteAudio(id: string): Promise<void> {
+  try {
+    const { client, bucket } = r2();
+    await client.send(
+      new DeleteObjectCommand({ Bucket: bucket, Key: audioKeyFor(id) }),
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
 export async function deletePdf(id: string): Promise<void> {
   try {
     const { client, bucket } = r2();

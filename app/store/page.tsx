@@ -1,17 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { BookOpen, Eye, Heart, Home, Library, Search } from "lucide-react";
+import { BookOpen, Eye, Heart, Library, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import BookViewer from "../components/BookViewer";
 import BookPreviewModal from "../components/BookPreviewModal";
 import UserChip from "../components/auth/UserChip";
-import { listStoreBooks, type StoreBook } from "../lib/store";
+import {
+  getBookAudioUrl,
+  listStoreBooks,
+  type StoreBook,
+} from "../lib/store";
 import { openBookForReading } from "../lib/render-book";
 import { type RenderedPage } from "../lib/pdf-to-images";
 import { formatPrice } from "../lib/format-price";
 
-type Reader = { pages: RenderedPage[]; revoke: () => void; single: boolean };
+type Reader = {
+  pages: RenderedPage[];
+  revoke: () => void;
+  single: boolean;
+  audioUrl?: string;
+};
 
 export default function StorePage() {
   const [books, setBooks] = useState<StoreBook[] | null>(null);
@@ -48,7 +57,15 @@ export default function StorePage() {
     setOpening(book.id);
     try {
       const { rendered, revoke } = await openBookForReading(book);
-      setReader({ pages: rendered, revoke, single: book.layout === "single" });
+      const audioUrl = book.audioKey
+        ? ((await getBookAudioUrl(book.id)) ?? undefined)
+        : undefined;
+      setReader({
+        pages: rendered,
+        revoke,
+        single: book.layout === "single",
+        audioUrl,
+      });
     } catch (err) {
       alert("책을 여는 중 문제가 생겼어요: " + (err as Error).message);
     } finally {
@@ -61,6 +78,7 @@ export default function StorePage() {
       <BookViewer
         pages={reader.pages}
         singlePage={reader.single}
+        audioUrl={reader.audioUrl}
         onClose={() => setReader(null)}
       />
     );
@@ -70,7 +88,7 @@ export default function StorePage() {
     <main className="store-shell">
       <header className="store-header">
         <Link href="/" className="home-btn" aria-label="처음으로" title="처음으로">
-          <Home size={26} strokeWidth={2} />
+          <img className="home-btn__art" src="/home-button-art.png" alt="" />
         </Link>
         <h1 className="store-title">북스토어</h1>
         <div className="store-header__right">

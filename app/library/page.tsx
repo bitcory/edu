@@ -1,8 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { BookOpen, Home, Lock, Pencil, Store, Trash2, Upload } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import {
+  BookOpen,
+  Lock,
+  Music,
+  Pencil,
+  Store,
+  Trash2,
+  Upload,
+} from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import BookViewer from "../components/BookViewer";
 import UserChip from "../components/auth/UserChip";
 import SubmitBookModal, {
@@ -11,8 +19,11 @@ import SubmitBookModal, {
 import AuthorRegisterModal from "../components/AuthorRegisterModal";
 import BookInfoModal, { type InfoValues } from "../components/BookInfoModal";
 import {
+  attachBookAudio,
   deleteBook,
+  getBookAudioUrl,
   listMyBooks,
+  removeBookAudio,
   submitBook,
   updateBookInfo,
   type BookStatus,
@@ -33,7 +44,12 @@ const STATUS_LABEL: Record<BookStatus, string> = {
   rejected: "거절됨",
 };
 
-type Reader = { pages: RenderedPage[]; revoke: () => void; single: boolean };
+type Reader = {
+  pages: RenderedPage[];
+  revoke: () => void;
+  single: boolean;
+  audioUrl?: string;
+};
 
 export default function LibraryPage() {
   const [books, setBooks] = useState<StoreBook[] | null>(null);
@@ -43,6 +59,8 @@ export default function LibraryPage() {
   const [author, setAuthor] = useState<Author | null | undefined>(undefined);
   const [authorOpen, setAuthorOpen] = useState(false);
   const [editInfo, setEditInfo] = useState<StoreBook | null>(null);
+  const audioInputRef = useRef<HTMLInputElement | null>(null);
+  const [audioTarget, setAudioTarget] = useState<StoreBook | null>(null);
 
   const isApproved = author?.status === "approved";
 
@@ -53,6 +71,45 @@ export default function LibraryPage() {
     refresh();
     fetchMyAuthor().then(setAuthor);
   }, [refresh]);
+
+  // Background music: a book already with music asks remove-or-replace; an
+  // empty one goes straight to the file picker.
+  const onMusicClick = useCallback((b: StoreBook) => {
+    if (b.audioKey) {
+      const remove = window.confirm(
+        "배경음악을 제거할까요?\n(취소를 누르면 다른 곡으로 교체할 수 있어요.)",
+      );
+      if (remove) {
+        setBusy(true);
+        removeBookAudio(b.id)
+          .then(() => listMyBooks().then(setBooks))
+          .catch((e) => alert((e as Error).message))
+          .finally(() => setBusy(false));
+        return;
+      }
+    }
+    setAudioTarget(b);
+    audioInputRef.current?.click();
+  }, []);
+
+  const onAudioPicked = useCallback(
+    async (file: File) => {
+      const target = audioTarget;
+      if (!target) return;
+      setBusy(true);
+      try {
+        await attachBookAudio(target.id, file);
+        await listMyBooks().then(setBooks);
+        alert("배경음악을 등록했어요! 책을 열면 잔잔하게 흘러나와요.");
+      } catch (e) {
+        alert((e as Error).message);
+      } finally {
+        setBusy(false);
+        setAudioTarget(null);
+      }
+    },
+    [audioTarget],
+  );
 
   useEffect(() => {
     return () => {
@@ -103,7 +160,15 @@ export default function LibraryPage() {
     setBusy(true);
     try {
       const { rendered, revoke } = await openBookForReading(book);
-      setReader({ pages: rendered, revoke, single: book.layout === "single" });
+      const audioUrl = book.audioKey
+        ? ((await getBookAudioUrl(book.id)) ?? undefined)
+        : undefined;
+      setReader({
+        pages: rendered,
+        revoke,
+        single: book.layout === "single",
+        audioUrl,
+      });
     } catch (err) {
       alert("책을 여는 중 문제가 생겼어요: " + (err as Error).message);
     } finally {
@@ -170,6 +235,7 @@ export default function LibraryPage() {
       <BookViewer
         pages={reader.pages}
         singlePage={reader.single}
+        audioUrl={reader.audioUrl}
         onClose={() => setReader(null)}
       />
     );
@@ -179,7 +245,7 @@ export default function LibraryPage() {
     <main className="store-shell">
       <header className="store-header">
         <Link href="/" className="home-btn" aria-label="처음으로" title="처음으로">
-          <Home size={26} strokeWidth={2} />
+          <img className="home-btn__art" src="/home-button-art.png" alt="" />
         </Link>
         <h1 className="store-title">내 서재</h1>
         <div className="store-header__right">
@@ -189,6 +255,18 @@ export default function LibraryPage() {
           <UserChip />
         </div>
       </header>
+
+      <input
+        ref={audioInputRef}
+        type="file"
+        accept="audio/*,.mp3"
+        style={{ display: "none" }}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) void onAudioPicked(f);
+          e.target.value = "";
+        }}
+      />
 
       <AuthorBanner author={author} onRegister={() => setAuthorOpen(true)} />
 
@@ -291,6 +369,22 @@ export default function LibraryPage() {
                       </Link>
                     )
                   )}
+                  <button
+                    type="button"
+                    className={`icon-btn icon-btn--music${
+                      b.audioKey ? " is-on" : ""
+                    }`}
+                    onClick={() => onMusicClick(b)}
+                    disabled={busy}
+                    title={
+                      b.audioKey
+                        ? "배경음악 등록됨 (눌러서 교체/제거)"
+                        : "배경음악 추가"
+                    }
+                    aria-label="배경음악"
+                  >
+                    <Music size={16} />
+                  </button>
                   <button
                     type="button"
                     className="icon-btn icon-btn--delete"

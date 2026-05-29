@@ -74,7 +74,8 @@ export function ensureSchema(): Promise<void> {
           status        TEXT NOT NULL,
           submitted_at  BIGINT NOT NULL,
           reviewed_at   BIGINT,
-          reject_reason TEXT
+          reject_reason TEXT,
+          audio_key     TEXT
         )`,
       );
       // Idempotent column adds (Postgres supports IF NOT EXISTS) — defensive in
@@ -85,6 +86,7 @@ export function ensureSchema(): Promise<void> {
         `ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'editor'`,
         `ADD COLUMN IF NOT EXISTS page_w INTEGER NOT NULL DEFAULT 800`,
         `ADD COLUMN IF NOT EXISTS layout TEXT NOT NULL DEFAULT 'spread'`,
+        `ADD COLUMN IF NOT EXISTS audio_key TEXT`,
       ]) {
         await db.execute(`ALTER TABLE books ${ddl}`);
       }

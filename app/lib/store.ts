@@ -212,6 +212,43 @@ export async function rejectBook(id: string, reason?: string): Promise<void> {
   });
 }
 
+// ---- Background music (MP3) ----
+
+/** Upload an MP3 as a book's background music (owner/admin). */
+export async function attachBookAudio(id: string, file: File): Promise<void> {
+  if (file.size > 30 * 1024 * 1024) {
+    throw new Error("음악 파일이 너무 커요 (최대 30MB).");
+  }
+  const res = await fetch(`/api/books/${id}/audio`, { method: "POST" });
+  if (!res.ok) {
+    throw new Error(await errorMessage(res, "배경음악 등록에 실패했어요."));
+  }
+  const { uploadUrl } = (await res.json()) as { uploadUrl: string };
+  const put = await fetch(uploadUrl, {
+    method: "PUT",
+    body: file,
+    headers: { "content-type": "audio/mpeg" },
+  });
+  if (!put.ok) {
+    throw new Error("음악 업로드에 실패했어요. 잠시 후 다시 시도해 주세요.");
+  }
+}
+
+export async function removeBookAudio(id: string): Promise<void> {
+  const res = await fetch(`/api/books/${id}/audio`, { method: "DELETE" });
+  if (!res.ok) {
+    throw new Error(await errorMessage(res, "배경음악 제거에 실패했어요."));
+  }
+}
+
+/** Presigned URL to play a book's background music; null if none/forbidden. */
+export async function getBookAudioUrl(id: string): Promise<string | null> {
+  const res = await fetch(`/api/books/${id}/audio-url`, { cache: "no-store" });
+  if (!res.ok) return null;
+  const { url } = (await res.json()) as { url: string };
+  return url ?? null;
+}
+
 // ---- Likes + comments (preview modal) ----
 
 export async function getBookSocial(id: string): Promise<BookSocial> {

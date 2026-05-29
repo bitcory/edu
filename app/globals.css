@@ -378,6 +378,34 @@ body {
   mix-blend-mode: overlay;
 }
 
+.bv-music {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 180, 117, 0.5);
+  background:
+    linear-gradient(180deg, rgba(255, 253, 235, 0.96), rgba(255, 210, 128, 0.92));
+  color: #9a7c5d;
+  cursor: pointer;
+  z-index: 7;
+  box-shadow: 0 8px 18px rgba(92, 62, 35, 0.24);
+  transition: transform 0.12s ease, color 0.12s ease;
+}
+
+.bv-music:hover {
+  transform: scale(1.06);
+}
+
+.bv-music.is-on {
+  color: #e0743a;
+}
+
 .bv-close {
   position: absolute;
   top: 50%;
@@ -409,12 +437,7 @@ body {
 }
 
 .bv-close::before {
-  content: "";
-  position: absolute;
-  inset: 2px;
-  border-radius: 50%;
-  background: url("/view-close-book.png") center 60% / 118% no-repeat;
-  opacity: 0.9;
+  content: none;
 }
 
 .bv-close::after {
@@ -427,10 +450,22 @@ body {
     linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 214, 139, 0.18));
 }
 
+.bv-close__art {
+  position: absolute;
+  inset: 2px;
+  z-index: 1;
+  width: calc(100% - 4px);
+  height: calc(100% - 4px);
+  border-radius: 50%;
+  object-fit: cover;
+  opacity: 0.88;
+  pointer-events: none;
+}
+
 .bv-close svg,
 .bv-close span {
   position: relative;
-  z-index: 2;
+  z-index: 3;
   filter:
     drop-shadow(0 1px 0 rgba(255, 255, 255, 0.9))
     drop-shadow(0 2px 4px rgba(92, 62, 35, 0.18));
@@ -1646,12 +1681,13 @@ textarea.ed-input {
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.92);
+  background: linear-gradient(180deg, #fff8df, #ffd98f);
   color: #3a2415;
   text-decoration: none;
+  overflow: hidden;
   box-shadow:
     0 8px 20px -10px rgba(0, 0, 0, 0.35),
-    inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+    inset 0 0 0 1px rgba(255, 180, 117, 0.32);
   transition:
     transform 0.15s ease,
     background 0.15s ease;
@@ -1659,11 +1695,19 @@ textarea.ed-input {
 
 .home-btn:hover {
   transform: translateY(-1px);
-  background: #fff;
+  background: linear-gradient(180deg, #fffbe9, #ffd68b);
 }
 
 .home-btn:active {
   transform: translateY(0);
+}
+
+.home-btn__art {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  pointer-events: none;
 }
 
 /* Editor uses an icon-only home button inline in the top bar (the fixed
@@ -2466,6 +2510,19 @@ textarea.ed-input {
 .lib-continue:hover {
   transform: translateY(-1px);
   filter: brightness(1.05);
+}
+
+.icon-btn--music {
+  background: rgba(123, 116, 217, 0.16);
+  color: #6a5acd;
+}
+
+.icon-btn--music:hover:not(:disabled) {
+  background: rgba(123, 116, 217, 0.26);
+}
+
+.icon-btn--music.is-on {
+  background: rgba(123, 116, 217, 0.34);
 }
 
 .icon-btn--edit {
