@@ -205,6 +205,9 @@ export default function Editor({
   // both are always-visible in the grid and these are ignored.
   const [pagelistOpen, setPagelistOpen] = useState(false);
   const [propsOpen, setPropsOpen] = useState(false);
+  // Collapsible 외곽선/그림자 sections.
+  const [outlineOpen, setOutlineOpen] = useState(true);
+  const [shadowOpen, setShadowOpen] = useState(true);
   const [bgColor, setBgColor] = useState("#ffffff");
   const [_changeTick, setChangeTick] = useState(0);
   const [guides, setGuides] = useState<Guide[]>([]);
@@ -1820,7 +1823,18 @@ export default function Editor({
             </div>
             <div className="ed-props__group">
               <div className="ed-section-head">
-                <span className="ed-props__label">외곽선</span>
+                <button
+                  type="button"
+                  className="ed-section-toggle"
+                  onClick={() => setOutlineOpen((v) => !v)}
+                  aria-expanded={outlineOpen}
+                >
+                  <ChevronDown
+                    size={16}
+                    className={`ed-chevron${outlineOpen ? "" : " is-collapsed"}`}
+                  />
+                  <span className="ed-props__label">외곽선</span>
+                </button>
                 <button
                   type="button"
                   role="switch"
@@ -1841,7 +1855,7 @@ export default function Editor({
                   <span className="ed-switch__knob" />
                 </button>
               </div>
-              {outlineOn && (
+              {outlineOn && outlineOpen && (
                 <>
                   <div className="ed-row-field">
                     <span className="ed-props__label">색상</span>
@@ -1876,7 +1890,18 @@ export default function Editor({
             </div>
             <div className="ed-props__group">
               <div className="ed-section-head">
-                <span className="ed-props__label">그림자</span>
+                <button
+                  type="button"
+                  className="ed-section-toggle"
+                  onClick={() => setShadowOpen((v) => !v)}
+                  aria-expanded={shadowOpen}
+                >
+                  <ChevronDown
+                    size={16}
+                    className={`ed-chevron${shadowOpen ? "" : " is-collapsed"}`}
+                  />
+                  <span className="ed-props__label">그림자</span>
+                </button>
                 <button
                   type="button"
                   role="switch"
@@ -1889,7 +1914,7 @@ export default function Editor({
                   <span className="ed-switch__knob" />
                 </button>
               </div>
-              {shadow.on && (
+              {shadow.on && shadowOpen && (
                 <>
                   <div className="ed-row-field">
                     <span className="ed-props__label">색상</span>

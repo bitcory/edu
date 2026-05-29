@@ -1155,6 +1155,26 @@ body {
   gap: 8px;
 }
 
+.ed-section-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.ed-chevron {
+  color: #d9c3a3;
+  transition: transform 0.15s ease;
+}
+
+.ed-chevron.is-collapsed {
+  transform: rotate(-90deg);
+}
+
 .ed-switch {
   position: relative;
   width: 42px;
