@@ -1025,18 +1025,11 @@ export default function Editor({
         /\.(png|jpe?g|gif|webp|bmp|avif|svg|heic|heif|tiff?|jfif)$/i.test(
           f.name,
         );
-      const all = Array.from(fileList);
-      console.log(
-        "[전체추가] 선택된 파일",
-        all.length,
-        all.map((f) => `${f.name} (${f.type || "no-type"})`),
-      );
-      const images = all
+      const images = Array.from(fileList)
         .filter(isImage)
         .sort((a, b) =>
           a.name.localeCompare(b.name, undefined, { numeric: true }),
         );
-      console.log("[전체추가] 이미지로 인식", images.length);
       if (images.length === 0) {
         window.alert("선택한 폴더에서 이미지를 찾지 못했어요.");
         return;
@@ -1804,7 +1797,6 @@ export default function Editor({
             style={{ display: "none" }}
             onChange={(e) => {
               const fs = e.target.files;
-              console.log("[전체추가] onChange, files=", fs?.length ?? 0);
               // Snapshot into an array NOW — `fs` is a live FileList tied to
               // the input, so resetting value below would empty it before the
               // async handler reads it.

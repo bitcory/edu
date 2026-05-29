@@ -2070,6 +2070,8 @@ textarea.ed-input {
   justify-content: center;
   width: 56px;
   height: 56px;
+  box-sizing: border-box;
+  border: 2px solid rgba(123, 76, 30, 0.52);
   border-radius: 50%;
   background:
     url("/home-button-art.png") center / 112% no-repeat,
@@ -2078,22 +2080,35 @@ textarea.ed-input {
   text-decoration: none;
   overflow: hidden;
   box-shadow:
-    0 8px 20px -10px rgba(0, 0, 0, 0.35),
-    inset 0 0 0 1px rgba(255, 180, 117, 0.32);
+    0 10px 24px -10px rgba(79, 45, 16, 0.48),
+    0 0 0 3px rgba(255, 246, 209, 0.58),
+    inset 0 0 0 1px rgba(255, 244, 204, 0.72);
   transition:
     transform 0.15s ease,
-    background 0.15s ease;
+    background 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .home-btn:hover {
   transform: translateY(-1px);
+  border-color: rgba(103, 62, 23, 0.66);
   background:
     url("/home-button-art.png") center / 112% no-repeat,
     linear-gradient(180deg, #fffbe9, #ffd68b);
+  box-shadow:
+    0 12px 28px -10px rgba(79, 45, 16, 0.56),
+    0 0 0 4px rgba(255, 246, 209, 0.72),
+    inset 0 0 0 1px rgba(255, 244, 204, 0.82);
 }
 
 .home-btn:active {
   transform: translateY(0);
+}
+
+.home-btn:focus-visible {
+  outline: 3px solid rgba(61, 126, 111, 0.72);
+  outline-offset: 4px;
 }
 
 /* Editor uses an icon-only home button inline in the top bar (the fixed
