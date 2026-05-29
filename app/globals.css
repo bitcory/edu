@@ -2133,8 +2133,9 @@ textarea.ed-input {
 
 .preview-cover {
   flex-shrink: 0;
-  width: 120px;
-  aspect-ratio: 4 / 5;
+  width: 130px;
+  min-height: 150px;
+  align-self: flex-start;
   border-radius: 12px;
   overflow: hidden;
   background: #f0e6cf;
@@ -2145,10 +2146,11 @@ textarea.ed-input {
   font-size: 12px;
 }
 
+/* Show the whole cover at its natural shape (no cropping). */
 .preview-cover img {
   width: 100%;
-  height: 100%;
-  object-fit: cover;
+  height: auto;
+  display: block;
 }
 
 .preview-info {
