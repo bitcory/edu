@@ -346,10 +346,10 @@ export default function LibraryPage() {
                     <Link
                       href={`/edit?book=${b.id}`}
                       className="lib-continue"
-                      title="이어서 만들기 (책 만들기에서 열기)"
-                      aria-label="이어서 만들기"
+                      title="수정하기 (책 만들기에서 열기)"
+                      aria-label="수정하기"
                     >
-                      <Pencil size={14} /> 이어서 만들기
+                      <Pencil size={14} /> 수정하기
                     </Link>
                   ) : (
                     b.status !== "pending" && (
