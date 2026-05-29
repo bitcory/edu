@@ -1465,6 +1465,13 @@ export default function Editor({
           )}
       </div>
 
+      {propsOpen && (
+        <div
+          className="ed-props-backdrop"
+          onClick={() => setPropsOpen(false)}
+          aria-hidden
+        />
+      )}
       <aside className={`ed-props${propsOpen ? " ed-props--open" : ""}`}>
         <div className="ed-props__bar">
           <h3 className="ed-props__title">속성</h3>

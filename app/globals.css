@@ -898,7 +898,8 @@ body {
   cursor: pointer;
 }
 
-.ed-pagelist-backdrop {
+.ed-pagelist-backdrop,
+.ed-props-backdrop {
   display: none;
 }
 
@@ -1358,6 +1359,14 @@ textarea.ed-input {
   }
   .ed-props__close {
     display: inline-flex;
+  }
+  /* Tap outside the panel to close it. */
+  .ed-props-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 29;
+    background: rgba(0, 0, 0, 0.4);
   }
 }
 
