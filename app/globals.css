@@ -1163,6 +1163,13 @@ body {
   font-size: 13px;
 }
 
+/* The dropdown list renders on an OS-white popup; without an explicit color
+   the options inherit the select's light text → unreadable yellow-on-white. */
+.ed-select option {
+  color: #1a130b;
+  background: #fff;
+}
+
 .ed-input[type="color"] {
   padding: 2px;
   width: 38px;
