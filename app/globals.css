@@ -2133,7 +2133,7 @@ textarea.ed-input {
 
 .preview-cover {
   flex-shrink: 0;
-  width: 130px;
+  width: clamp(150px, 40%, 220px);
   min-height: 150px;
   align-self: flex-start;
   border-radius: 12px;
