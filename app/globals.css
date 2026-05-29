@@ -1254,11 +1254,30 @@ textarea.ed-input {
   .ed-spacer {
     display: none;
   }
+  /* Creative tools move to a fixed bottom bar (thumb-reachable) so the top bar
+     stops wrapping into 4 cramped rows. Scrolls horizontally if needed. */
   .ed-tools {
-    flex-wrap: wrap;
-    margin-left: 0;
-    padding-left: 0;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 25;
+    margin: 0;
+    padding: 8px 10px;
     border-left: 0;
+    border-top: 1px solid rgba(255, 220, 160, 0.12);
+    background: linear-gradient(180deg, #3b271a, #2a1c11);
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 8px;
+  }
+  .ed-tools .ed-tool,
+  .ed-tools .ed-tool-select {
+    flex-shrink: 0;
+  }
+  /* Keep the canvas clear of the fixed bottom tool bar. */
+  .ed-canvas-wrap {
+    padding-bottom: 62px;
   }
   .ed-tool,
   .ed-tool-select,
