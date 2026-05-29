@@ -1544,9 +1544,27 @@ export default function Editor({
             whiteSpace: "pre",
           }}
         >
-          {`scale ${displayScale.toFixed(4)}  active ${activeIndex}  partner ${String(
-            partnerIndex,
-          )}  pageW ${PAGE_W}`}
+          {(() => {
+            const c = apiRef.current?.canvas;
+            const ai = c
+              ?.getObjects()
+              .find((o) => o.type === "image" || o.type === "Image") as
+              | { width?: number; scaleX?: number; left?: number }
+              | undefined;
+            const activeStr = ai
+              ? `active-img w${Math.round((ai.width ?? 0) * (ai.scaleX ?? 1))} sx${(ai.scaleX ?? 1).toFixed(3)} left${Math.round(ai.left ?? 0)}`
+              : "active-img none";
+            const pObjs =
+              (partnerData as { objects?: Array<Record<string, unknown>> } | null)
+                ?.objects ?? [];
+            const pi = pObjs.find(
+              (o) => o.type === "image" || o.type === "Image",
+            );
+            const piStr = pi
+              ? `partner-img w${Math.round(Number(pi.width ?? 0) * Number(pi.scaleX ?? 1))} sx${Number(pi.scaleX ?? 1).toFixed(3)} left${Math.round(Number(pi.left ?? 0))}`
+              : "partner-img none";
+            return `scale ${displayScale.toFixed(4)}  active ${activeIndex}  partner ${String(partnerIndex)}  pageW ${PAGE_W}\n${activeStr}\n${piStr}`;
+          })()}
         </div>
         {spreadMode &&
           partnerIndex !== null &&
