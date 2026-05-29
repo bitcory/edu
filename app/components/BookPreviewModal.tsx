@@ -36,6 +36,15 @@ export default function BookPreviewModal({
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // Close on Esc.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   useEffect(() => {
     let cancelled = false;
     getBookSocial(book.id).then((s) => {
