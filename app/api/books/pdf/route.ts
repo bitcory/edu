@@ -19,14 +19,16 @@ export async function POST(req: NextRequest) {
 
   const body = (await req.json().catch(() => null)) as {
     title?: unknown;
+    author?: unknown;
     coverThumb?: unknown;
   } | null;
   const title = typeof body?.title === "string" ? body.title : "";
+  const author = typeof body?.author === "string" ? body.author : undefined;
   const coverThumb =
     typeof body?.coverThumb === "string" ? body.coverThumb : undefined;
 
   const book = await insertPdfBook(
-    { title, coverThumb },
+    { title, author, coverThumb },
     { id: user.id, name: user.name },
   );
   const uploadUrl = await presignPdfUpload(book.id);

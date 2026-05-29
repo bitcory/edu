@@ -53,6 +53,7 @@ export async function PATCH(
   if (!Array.isArray(pages)) {
     const book = await updateBookMeta(id, {
       title: body?.title,
+      author: body?.author,
       price: body?.price,
       description: body?.description,
     });

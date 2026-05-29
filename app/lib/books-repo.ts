@@ -160,7 +160,7 @@ export async function insertBook(
  * The PDF bytes are stored separately (see pdf-storage); this only writes the
  * row. Returns the book so the caller can save the file under its id. */
 export async function insertPdfBook(
-  input: { title: string; coverThumb?: string },
+  input: { title: string; author?: string; coverThumb?: string },
   owner: { id: string; name: string },
 ): Promise<StoreBook> {
   await ensureSchema();
@@ -168,7 +168,7 @@ export async function insertPdfBook(
     id: newId(),
     title: input.title.trim() || "내 PDF 책",
     kind: "pdf",
-    author: owner.name,
+    author: input.author?.trim() || owner.name,
     price: 0,
     pageW: 800, // unused for PDF rendering (aspect comes from the PDF itself)
     layout: "spread",
@@ -259,12 +259,16 @@ export async function updateBookSnapshot(
  * used for PDF books (no snapshot to re-render) and quick info edits. */
 export async function updateBookMeta(
   id: string,
-  patch: { title?: string; price?: number; description?: string },
+  patch: { title?: string; author?: string; price?: number; description?: string },
 ): Promise<StoreBook | null> {
   await ensureSchema();
   const existing = await getBookById(id);
   if (!existing) return null;
   const title = patch.title?.trim() || existing.title;
+  const author =
+    patch.author !== undefined
+      ? patch.author.trim() || existing.author || null
+      : (existing.author ?? null);
   const price =
     patch.price !== undefined ? normalizePrice(patch.price) : existing.price;
   const description =
@@ -272,8 +276,8 @@ export async function updateBookMeta(
       ? patch.description.trim() || null
       : (existing.description ?? null);
   await db.execute({
-    sql: `UPDATE books SET title = ?, price = ?, description = ? WHERE id = ?`,
-    args: [title, price, description, id],
+    sql: `UPDATE books SET title = ?, author = ?, price = ?, description = ? WHERE id = ?`,
+    args: [title, author, price, description, id],
   });
   return getBookById(id);
 }

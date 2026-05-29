@@ -3,7 +3,12 @@
 import { useState } from "react";
 import { formatPrice } from "../lib/format-price";
 
-export type InfoValues = { title: string; price: number; description: string };
+export type InfoValues = {
+  title: string;
+  author: string;
+  price: number;
+  description: string;
+};
 
 type Props = {
   initial: InfoValues;
@@ -19,6 +24,7 @@ export default function BookInfoModal({
   onCancel,
 }: Props) {
   const [title, setTitle] = useState(initial.title);
+  const [author, setAuthor] = useState(initial.author ?? "");
   const [description, setDescription] = useState(initial.description);
   const [price, setPrice] = useState<string>(String(initial.price ?? 0));
 
@@ -29,7 +35,12 @@ export default function BookInfoModal({
       alert("제목을 적어 주세요.");
       return;
     }
-    onConfirm({ title: title.trim(), price: priceNum, description: description.trim() });
+    onConfirm({
+      title: title.trim(),
+      author: author.trim(),
+      price: priceNum,
+      description: description.trim(),
+    });
   };
 
   return (
@@ -44,6 +55,17 @@ export default function BookInfoModal({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             maxLength={60}
+          />
+        </label>
+
+        <label className="modal-field">
+          <span className="modal-label">지은이</span>
+          <input
+            className="modal-input"
+            value={author}
+            onChange={(e) => setAuthor(e.target.value)}
+            placeholder="비워두면 내 이름으로 표시돼요"
+            maxLength={40}
           />
         </label>
 

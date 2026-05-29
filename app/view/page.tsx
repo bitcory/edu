@@ -89,12 +89,14 @@ export default function ViewPage() {
       defaultTitle,
     );
     if (title === null) return;
+    const author =
+      window.prompt("지은이 (비워두면 내 이름으로 올라가요)", "") ?? "";
     setRegistering(true);
     try {
       const cover = state.pages[0]
         ? await makeThumb(state.pages[0].url)
         : undefined;
-      await registerPdfBook(state.file, title, cover);
+      await registerPdfBook(state.file, title, cover, author);
       setRegistered(true);
       alert(
         OPEN_PUBLISH

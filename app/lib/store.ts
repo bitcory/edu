@@ -99,6 +99,7 @@ export async function registerPdfBook(
   file: File,
   title: string,
   coverThumb?: string,
+  author?: string,
 ): Promise<StoreBook> {
   if (file.size > 50 * 1024 * 1024) {
     throw new Error("파일이 너무 커요 (최대 50MB).");
@@ -107,7 +108,7 @@ export async function registerPdfBook(
   const res = await fetch("/api/books/pdf", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ title, coverThumb }),
+    body: JSON.stringify({ title, author, coverThumb }),
   });
   if (!res.ok) {
     throw new Error(await errorMessage(res, "내 서재 등록에 실패했어요."));
@@ -180,7 +181,7 @@ export async function saveDraft(input: {
 /** Edit only title/price/description (no content change, status unchanged). */
 export async function updateBookInfo(
   id: string,
-  patch: { title?: string; price?: number; description?: string },
+  patch: { title?: string; author?: string; price?: number; description?: string },
 ): Promise<StoreBook> {
   const res = await fetch(`/api/books/${id}`, {
     method: "PATCH",

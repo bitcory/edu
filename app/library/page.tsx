@@ -414,6 +414,7 @@ export default function LibraryPage() {
         <BookInfoModal
           initial={{
             title: editInfo.title,
+            author: editInfo.author ?? "",
             price: editInfo.price,
             description: editInfo.description ?? "",
           }}
