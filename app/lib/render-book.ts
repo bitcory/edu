@@ -8,6 +8,25 @@ import {
   type RenderedPage,
 } from "./pdf-to-images";
 import type { StoreBook } from "./book-types";
+import { ensureFont } from "./fonts";
+
+/** Load every font used across the pages (both normal + bold) before drawing,
+ * so the offscreen canvas doesn't render text in a fallback font. */
+async function ensurePageFonts(pages: EditorPage[]): Promise<void> {
+  const families = new Set<string>();
+  for (const p of pages) {
+    const objects = (
+      p.data as { objects?: Array<Record<string, unknown>> } | undefined
+    )?.objects;
+    if (!objects) continue;
+    for (const o of objects) {
+      if (typeof o.fontFamily === "string") families.add(o.fontFamily);
+    }
+  }
+  await Promise.all(
+    [...families].flatMap((f) => [ensureFont(f, 400), ensureFont(f, 700)]),
+  );
+}
 
 export type RenderedBook = {
   rendered: RenderedPage[];
@@ -27,6 +46,7 @@ export async function renderSnapshotToImages(
   pageW: number = PAGE_W,
 ): Promise<RenderedBook> {
   const fabric = await import("fabric");
+  await ensurePageFonts(pages);
   const offEl = document.createElement("canvas");
   offEl.width = pageW;
   offEl.height = PAGE_H;
@@ -68,6 +88,7 @@ export async function renderSnapshotToPages(
   pageW: number = PAGE_W,
 ): Promise<RenderedPage[]> {
   const fabric = await import("fabric");
+  await ensurePageFonts(pages);
   const offEl = document.createElement("canvas");
   offEl.width = pageW;
   offEl.height = PAGE_H;
