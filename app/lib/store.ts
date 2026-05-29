@@ -87,16 +87,28 @@ export async function registerPdfBook(
   title: string,
   coverThumb?: string,
 ): Promise<StoreBook> {
-  const form = new FormData();
-  form.append("file", file);
-  form.append("title", title);
-  if (coverThumb) form.append("coverThumb", coverThumb);
-  const res = await fetch("/api/books/pdf", { method: "POST", body: form });
+  if (file.size > 50 * 1024 * 1024) {
+    throw new Error("파일이 너무 커요 (최대 50MB).");
+  }
+  // 1) Create the draft row + get a presigned R2 upload URL.
+  const res = await fetch("/api/books/pdf", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ title, coverThumb }),
+  });
   if (!res.ok) {
     throw new Error(await errorMessage(res, "내 서재 등록에 실패했어요."));
   }
-  const data = (await res.json()) as { book: StoreBook };
-  return data.book;
+  const { book, uploadUrl } = (await res.json()) as {
+    book: StoreBook;
+    uploadUrl: string;
+  };
+  // 2) Upload the bytes straight to R2 (skips the serverless body limit).
+  const put = await fetch(uploadUrl, { method: "PUT", body: file });
+  if (!put.ok) {
+    throw new Error("PDF 업로드에 실패했어요. 잠시 후 다시 시도해 주세요.");
+  }
+  return book;
 }
 
 /** Edit only title/price/description (no content change, status unchanged). */

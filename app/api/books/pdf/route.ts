@@ -1,6 +1,6 @@
 import { type NextRequest } from "next/server";
 import { insertPdfBook } from "../../../lib/books-repo";
-import { savePdf } from "../../../lib/pdf-storage";
+import { presignPdfUpload } from "../../../lib/pdf-storage";
 import { getServerUser } from "../../../lib/server-auth";
 
 export const runtime = "nodejs";
@@ -8,28 +8,28 @@ export const dynamic = "force-dynamic";
 
 // Register an uploaded PDF as a private (draft) book in the user's library.
 // Any logged-in member can do this (it's personal, not a store publish).
+//
+// The PDF bytes do NOT pass through this function (Vercel caps request bodies
+// at ~4.5MB). Instead we create the draft row and hand back a presigned PUT URL
+// so the browser uploads straight to R2. If the client's upload then fails, the
+// draft row is left behind with no PDF — the owner can just delete and retry.
 export async function POST(req: NextRequest) {
   const user = await getServerUser();
   if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
 
-  const form = await req.formData();
-  const file = form.get("file");
-  const title = String(form.get("title") ?? "");
-  const coverThumb = form.get("coverThumb");
-
-  if (!(file instanceof File)) {
-    return Response.json({ error: "file required" }, { status: 400 });
-  }
-  if (file.size > 50 * 1024 * 1024) {
-    return Response.json({ error: "파일이 너무 커요 (최대 50MB)." }, { status: 413 });
-  }
+  const body = (await req.json().catch(() => null)) as {
+    title?: unknown;
+    coverThumb?: unknown;
+  } | null;
+  const title = typeof body?.title === "string" ? body.title : "";
+  const coverThumb =
+    typeof body?.coverThumb === "string" ? body.coverThumb : undefined;
 
   const book = await insertPdfBook(
-    { title, coverThumb: typeof coverThumb === "string" ? coverThumb : undefined },
+    { title, coverThumb },
     { id: user.id, name: user.name },
   );
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  await savePdf(book.id, bytes);
+  const uploadUrl = await presignPdfUpload(book.id);
 
-  return Response.json({ book }, { status: 201 });
+  return Response.json({ book, uploadUrl }, { status: 201 });
 }

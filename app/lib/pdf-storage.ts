@@ -4,6 +4,7 @@ import {
   GetObjectCommand,
   DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 /**
  * PDF blob storage on Cloudflare R2 via the S3-compatible API. The DB only
@@ -42,6 +43,25 @@ function r2(): { client: S3Client; bucket: string } {
 function keyFor(id: string): string {
   // id is a generated slug (no path separators), safe to use directly.
   return `pdfs/${id}.pdf`;
+}
+
+/**
+ * Presigned PUT URL so the browser can upload the PDF *directly* to R2,
+ * bypassing the serverless function body limit (Vercel caps request bodies at
+ * ~4.5MB). The URL is short-lived and scoped to this one object key. No
+ * ContentType is signed, so the client may PUT the bytes with no special
+ * headers. Requires bucket CORS to allow PUT from the app origin.
+ */
+export async function presignPdfUpload(
+  id: string,
+  expiresInSeconds = 300,
+): Promise<string> {
+  const { client, bucket } = r2();
+  return getSignedUrl(
+    client,
+    new PutObjectCommand({ Bucket: bucket, Key: keyFor(id) }),
+    { expiresIn: expiresInSeconds },
+  );
 }
 
 export async function savePdf(id: string, bytes: Uint8Array): Promise<void> {
