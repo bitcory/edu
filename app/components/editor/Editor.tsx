@@ -611,6 +611,7 @@ export default function Editor({
       fontFamily: DEFAULT_FONT.family,
       fill: "#2c1d10",
       editable: true,
+      lineHeight: 1.5,
       textAlign: isRightPage ? "right" : "left",
       ...(isRightPage
         ? { originX: "right" as const, left: PAGE_W - 80 }
