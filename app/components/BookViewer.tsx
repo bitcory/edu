@@ -130,7 +130,9 @@ export default function BookViewer({ pages, onClose, singlePage }: Props) {
       const availW = el.clientWidth;
       const availH = el.clientHeight;
       if (availW <= 0 || availH <= 0) return;
-      const isPortrait = availW < 768;
+      // Matches the CSS breakpoint (720px) so the 1-up/full-width layout and
+      // the bottom-pill back button switch over at the same width.
+      const isPortrait = availW < 720;
       // Spread = 2 pages wide on landscape, 1 page wide on portrait. 단면
       // books (singlePage) are always 1-up.
       const pagesAcross = singlePage || isPortrait ? 1 : 2;

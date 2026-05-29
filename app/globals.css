@@ -522,15 +522,30 @@ body {
   }
 
   .bv-shell {
-    padding: 54px 10px 18px;
+    /* extra bottom room so the book doesn't sit under the back button */
+    padding: 16px 10px 84px;
   }
 
+  /* On phones the right-center circle overlapped the full-width book and its
+     label wrapped to two lines. Use a horizontal pill pinned to the bottom
+     center instead — clear of the book, label on one line. */
   .bv-close {
-    top: 50%;
-    right: 10px;
-    width: 88px;
-    height: 88px;
-    font-size: 14px;
+    top: auto;
+    bottom: 16px;
+    right: 50%;
+    transform: translateX(50%);
+    flex-direction: row;
+    gap: 8px;
+    width: auto;
+    height: auto;
+    padding: 12px 24px;
+    border-radius: 999px;
+    font-size: 15px;
+    white-space: nowrap;
+  }
+
+  .bv-close:hover {
+    transform: translateX(50%) scale(1.04);
   }
 }
 
