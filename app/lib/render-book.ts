@@ -104,9 +104,28 @@ export type OpenedBook = { rendered: RenderedPage[]; revoke: () => void };
  */
 export async function openBookForReading(book: StoreBook): Promise<OpenedBook> {
   if (book.kind === "pdf") {
-    const res = await fetch(`/api/books/${book.id}/pdf`, { cache: "no-store" });
-    if (!res.ok) throw new Error("PDF를 불러오지 못했어요.");
-    const blob = await res.blob();
+    let blob: Blob | null = null;
+    // Fast path: download straight from R2 via a presigned URL (free egress).
+    // Needs bucket CORS to allow GET — if that fails, fall back to the proxy.
+    try {
+      const u = await fetch(`/api/books/${book.id}/pdf-url`, {
+        cache: "no-store",
+      });
+      if (u.ok) {
+        const { url } = (await u.json()) as { url: string };
+        const direct = await fetch(url);
+        if (direct.ok) blob = await direct.blob();
+      }
+    } catch {
+      /* fall back to the proxy below */
+    }
+    if (!blob) {
+      const res = await fetch(`/api/books/${book.id}/pdf`, {
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error("PDF를 불러오지 못했어요.");
+      blob = await res.blob();
+    }
     const file = new File([blob], `${book.title}.pdf`, {
       type: "application/pdf",
     });

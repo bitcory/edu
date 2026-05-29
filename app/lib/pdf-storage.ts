@@ -130,6 +130,20 @@ export async function savePdf(id: string, bytes: Uint8Array): Promise<void> {
   );
 }
 
+/** Presigned GET URL so the browser can download the PDF straight from R2
+ * (free egress, no Vercel proxy). Requires bucket CORS to allow GET. */
+export async function presignPdfDownload(
+  id: string,
+  expiresInSeconds = 300,
+): Promise<string> {
+  const { client, bucket } = r2();
+  return getSignedUrl(
+    client,
+    new GetObjectCommand({ Bucket: bucket, Key: keyFor(id) }),
+    { expiresIn: expiresInSeconds },
+  );
+}
+
 export async function readPdf(id: string): Promise<Uint8Array | null> {
   const { client, bucket } = r2();
   try {
