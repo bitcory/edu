@@ -2008,22 +2008,6 @@ export default function Editor({
         {selected && (
           <>
             <div className="ed-props__group">
-              <label className="ed-props__label">투명도</label>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={Math.round(
-                  ((selected as unknown as { opacity?: number }).opacity ??
-                    1) * 100,
-                )}
-                onChange={(e) =>
-                  updateSelected({ opacity: Number(e.target.value) / 100 })
-                }
-                style={{ width: "100%" }}
-              />
-            </div>
-            <div className="ed-props__group">
               <label className="ed-props__label">레이어 순서</label>
               <div className="ed-btn-row">
                 <button
