@@ -849,6 +849,13 @@ body {
   flex: 1;
 }
 
+/* Keeps 임시저장 + 완성 together (so 완성 never wraps to its own row). */
+.ed-save-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .ed-finish {
   padding: 9px 22px;
   border: 0;
@@ -871,7 +878,6 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-right: 8px;
   padding: 9px 18px;
   border: 1px solid rgba(120, 90, 60, 0.28);
   border-radius: 999px;
@@ -1652,8 +1658,8 @@ textarea.ed-input {
     bottom: 0;
     z-index: 25;
     margin: 0;
-    /* extra left padding reserves room for the fixed undo/redo cluster */
-    padding: 8px 10px 8px 96px;
+    /* extra left padding reserves room for the fixed undo/redo block */
+    padding: 8px 10px 8px 104px;
     border-left: 0;
     border-top: 1px solid rgba(255, 220, 160, 0.12);
     background: linear-gradient(180deg, #3b271a, #2a1c11);
@@ -1661,14 +1667,19 @@ textarea.ed-input {
     overflow-x: auto;
     gap: 8px;
   }
-  /* Undo/redo sit at the bottom-left corner, above the tool bar. */
+  /* Undo/redo: a solid block pinned to the bottom-left corner so the scrolling
+     tool bar never shows through / overlaps it. */
   .ed-undo-group {
     position: fixed;
-    left: 8px;
-    bottom: 8px;
+    left: 0;
+    bottom: 0;
     z-index: 27;
     display: flex;
+    align-items: center;
     gap: 6px;
+    padding: 8px 10px;
+    background: linear-gradient(180deg, #3b271a, #2a1c11);
+    border-top: 1px solid rgba(255, 220, 160, 0.12);
   }
   /* "완성 → 책으로" shortens to "완성" so the save group fits the top row. */
   .ed-finish__suffix {
@@ -1693,8 +1704,8 @@ textarea.ed-input {
     padding: 8px 16px;
     font-size: 13px;
   }
-  /* Push the save group (임시저장 + 완성) to the right edge. */
-  .ed-draft {
+  /* Push the save group (임시저장 + 완성) to the right edge, together. */
+  .ed-save-group {
     margin-left: auto;
   }
 

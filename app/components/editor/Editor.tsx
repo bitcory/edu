@@ -1339,37 +1339,39 @@ export default function Editor({
           </button>
         </div>
         <div className="ed-spacer" />
-        {onSaveDraft && (
+        <div className="ed-save-group">
+          {onSaveDraft && (
+            <button
+              type="button"
+              className="ed-draft"
+              onClick={() => void handleSaveDraft()}
+              disabled={exporting || draftState === "saving"}
+              title="작업을 내 서재에 임시저장 (공개 안 됨)"
+            >
+              <Save size={16} />
+              {draftState === "saving"
+                ? "저장 중…"
+                : draftState === "saved"
+                  ? "저장됨 ✓"
+                  : "임시저장"}
+            </button>
+          )}
           <button
             type="button"
-            className="ed-draft"
-            onClick={() => void handleSaveDraft()}
-            disabled={exporting || draftState === "saving"}
-            title="작업을 내 서재에 임시저장 (공개 안 됨)"
+            className="ed-finish"
+            onClick={handleFinish}
+            disabled={exporting}
           >
-            <Save size={16} />
-            {draftState === "saving"
-              ? "저장 중…"
-              : draftState === "saved"
-                ? "저장됨 ✓"
-                : "임시저장"}
+            <BookOpen size={16} />
+            {exporting ? (
+              "책으로 만드는 중…"
+            ) : (
+              <>
+                완성<span className="ed-finish__suffix"> → 책으로</span>
+              </>
+            )}
           </button>
-        )}
-        <button
-          type="button"
-          className="ed-finish"
-          onClick={handleFinish}
-          disabled={exporting}
-        >
-          <BookOpen size={16} />
-          {exporting ? (
-            "책으로 만드는 중…"
-          ) : (
-            <>
-              완성<span className="ed-finish__suffix"> → 책으로</span>
-            </>
-          )}
-        </button>
+        </div>
       </div>
 
       {pagelistOpen && (
