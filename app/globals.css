@@ -847,10 +847,11 @@ body {
   color: #ffd9a3;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 8px;
 }
 
 .ed-pagelist__add {
+  margin-left: auto;
   padding: 5px 10px;
   border: 0;
   border-radius: 999px;
@@ -859,6 +860,39 @@ body {
   font-weight: 700;
   font-size: 12px;
   cursor: pointer;
+}
+
+/* Mobile-only: open the page-list drawer (topbar) and close it (drawer head)
+   + the dimmed backdrop behind the drawer. Hidden on desktop. */
+.ed-pagelist-toggle {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffeec3;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.ed-pagelist__close {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffe6c0;
+  cursor: pointer;
+}
+
+.ed-pagelist-backdrop {
+  display: none;
 }
 
 .ed-pagelist__items {
@@ -1194,11 +1228,11 @@ textarea.ed-input {
 @media (max-width: 900px) {
   .ed-shell {
     grid-template-columns: 1fr;
-    /* top row auto so the wrapped toolbar can grow to multiple rows */
-    grid-template-rows: auto 96px 1fr 0;
+    /* top row auto so the wrapped toolbar can grow to multiple rows. The page
+       list is now an off-canvas drawer, so it's dropped from the grid flow. */
+    grid-template-rows: auto 1fr 0;
     grid-template-areas:
       "top"
-      "pages"
       "canvas"
       "props";
   }
@@ -1231,18 +1265,43 @@ textarea.ed-input {
     font-size: 13px;
   }
 
+  .ed-pagelist-toggle {
+    display: inline-flex;
+  }
+
+  /* Left slide-out drawer, opened from the topbar "페이지" button. */
   .ed-pagelist {
-    border-right: 0;
-    border-bottom: 1px solid rgba(255, 220, 160, 0.08);
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: min(78vw, 280px);
+    z-index: 40;
+    border-right: 1px solid rgba(255, 220, 160, 0.12);
+    box-shadow: 6px 0 28px rgba(0, 0, 0, 0.5);
+    transform: translateX(-100%);
+    transition: transform 0.22s ease;
+  }
+  .ed-pagelist--open {
+    transform: translateX(0);
+  }
+  .ed-pagelist__close {
+    display: inline-flex;
   }
   .ed-pagelist__items {
-    flex-direction: row;
-    overflow-x: auto;
-    overflow-y: hidden;
+    flex-direction: column;
+    overflow-x: hidden;
+    overflow-y: auto;
   }
   .ed-page-thumb {
-    width: 70px;
-    flex-shrink: 0;
+    width: 100%;
+  }
+  .ed-pagelist-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 35;
+    background: rgba(0, 0, 0, 0.45);
   }
 
   /* Properties move from a hidden side panel to a slide-up bottom sheet that
@@ -2077,6 +2136,33 @@ textarea.ed-input {
   color: #8a7561;
   font-size: 12px;
   font-weight: 700;
+}
+
+/* ---------- Store / library: mobile ---------- */
+@media (max-width: 720px) {
+  .store-shell {
+    padding: 64px 14px 40px;
+  }
+  .store-header {
+    flex-wrap: wrap;
+    row-gap: 10px;
+    margin-bottom: 18px;
+  }
+  /* Keep chrome text on a single line; let whole items wrap instead of the
+     text breaking mid-label into two lines. */
+  .store-title,
+  .store-navlink,
+  .store-cta {
+    white-space: nowrap;
+  }
+  .store-header__right {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .store-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 14px;
+  }
 }
 
 /* Register-to-library button on the PDF viewer */

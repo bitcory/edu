@@ -28,6 +28,7 @@ import {
   PanelTop,
   Palette,
   Columns2,
+  Files,
   Home,
   Plus,
   Redo2,
@@ -149,6 +150,9 @@ export default function Editor({
       : 0;
   });
   const [selected, setSelected] = useState<FabricObject | null>(null);
+  // Mobile: the page list is a left slide-out drawer (toggled by a topbar
+  // button); on desktop it's always-visible in the grid and this is ignored.
+  const [pagelistOpen, setPagelistOpen] = useState(false);
   const [bgColor, setBgColor] = useState("#ffffff");
   const [_changeTick, setChangeTick] = useState(0);
   const [guides, setGuides] = useState<Guide[]>([]);
@@ -1062,6 +1066,15 @@ export default function Editor({
         >
           <Trash2 size={14} /> 새 책
         </button>
+        <button
+          type="button"
+          className="ed-pagelist-toggle"
+          onClick={() => setPagelistOpen(true)}
+          title="페이지 목록 열기"
+          aria-label="페이지 목록 열기"
+        >
+          <Files size={14} /> 페이지
+        </button>
         <div className="ed-tools">
           <button type="button" className="ed-tool" onClick={addText}>
             <TypeIcon size={16} /> 글자
@@ -1190,7 +1203,14 @@ export default function Editor({
         </button>
       </div>
 
-      <aside className="ed-pagelist">
+      {pagelistOpen && (
+        <div
+          className="ed-pagelist-backdrop"
+          onClick={() => setPagelistOpen(false)}
+          aria-hidden
+        />
+      )}
+      <aside className={`ed-pagelist${pagelistOpen ? " ed-pagelist--open" : ""}`}>
         <div className="ed-pagelist__head">
           <span>페이지</span>
           <button
@@ -1199,6 +1219,15 @@ export default function Editor({
             onClick={() => void addPage()}
           >
             <Plus size={12} /> 추가
+          </button>
+          <button
+            type="button"
+            className="ed-pagelist__close"
+            onClick={() => setPagelistOpen(false)}
+            aria-label="페이지 목록 닫기"
+            title="닫기"
+          >
+            <X size={16} />
           </button>
         </div>
         <div className="ed-pagelist__items">
@@ -1212,7 +1241,10 @@ export default function Editor({
                   ? " is-drop-target"
                   : ""
               }`}
-              onClick={() => void switchTo(i)}
+              onClick={() => {
+                void switchTo(i);
+                setPagelistOpen(false);
+              }}
               style={{ aspectRatio: `${pageW} / ${PAGE_H}` }}
               draggable
               onDragStart={(e) => {
