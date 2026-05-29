@@ -10,17 +10,25 @@ import { neon } from "@neondatabase/serverless";
  * `?` → `$1, $2, …` for Postgres. Do NOT import this from client components.
  */
 
-const url = process.env.DATABASE_URL;
-if (!url) {
-  throw new Error(
-    "DATABASE_URL is not set. Add the Neon pooled connection string to .env.local.",
-  );
-}
-
-const sql = neon(url);
-
 export type Row = Record<string, unknown>;
 export type ExecuteResult = { rows: Row[] };
+
+// Lazy client: the env check + connection are deferred to the first query, so
+// importing this module during `next build` (page-data collection) never throws
+// even if DATABASE_URL is absent at build time. The error only surfaces at
+// runtime if a query actually runs without the var set.
+let _sql: ReturnType<typeof neon> | null = null;
+function getSql(): ReturnType<typeof neon> {
+  if (_sql) return _sql;
+  const url = process.env.DATABASE_URL;
+  if (!url) {
+    throw new Error(
+      "DATABASE_URL is not set. Add the Neon pooled connection string to .env.local (and to the host's env).",
+    );
+  }
+  _sql = neon(url);
+  return _sql;
+}
 
 /** Rewrite SQLite-style `?` placeholders to Postgres `$1, $2, …`. */
 function toPg(text: string): string {
@@ -32,6 +40,7 @@ export const db = {
   async execute(
     query: string | { sql: string; args?: unknown[] },
   ): Promise<ExecuteResult> {
+    const sql = getSql();
     if (typeof query === "string") {
       const rows = (await sql.query(query)) as Row[];
       return { rows };
