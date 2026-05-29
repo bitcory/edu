@@ -46,10 +46,12 @@ export async function getBook(id: string): Promise<StoreBook | null> {
 }
 
 export async function submitBook(input: SubmitInput): Promise<StoreBook> {
+  const { pages, ...meta } = input;
+  const snap = await snapshotBody(pages);
   const res = await fetch("/api/books", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(input),
+    body: JSON.stringify({ ...meta, ...snap }),
   });
   if (!res.ok) {
     throw new Error(await errorMessage(res, "책을 올리지 못했어요."));
@@ -69,10 +71,12 @@ export async function updateBook(
     layout?: StoreBook["layout"];
   },
 ): Promise<StoreBook> {
+  const { pages, ...meta } = patch;
+  const snap = await snapshotBody(pages);
   const res = await fetch(`/api/books/${id}`, {
     method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(patch),
+    body: JSON.stringify({ ...meta, ...snap }),
   });
   if (!res.ok) {
     throw new Error(await errorMessage(res, "책을 수정하지 못했어요."));
@@ -111,6 +115,32 @@ export async function registerPdfBook(
   return book;
 }
 
+// Editor snapshots can carry big embedded images. Anything over ~3MB would
+// blow Vercel's request-body limit, so upload it straight to R2 (presigned)
+// and reference it by key; smaller snapshots go inline.
+const SNAPSHOT_INLINE_LIMIT = 3_000_000;
+
+async function snapshotBody(
+  pages: SubmitInput["pages"],
+): Promise<{ pages: SubmitInput["pages"] } | { snapshotKey: string }> {
+  const json = JSON.stringify(pages);
+  if (json.length <= SNAPSHOT_INLINE_LIMIT) return { pages };
+  const res = await fetch("/api/books/snapshot-upload", { method: "POST" });
+  if (!res.ok) {
+    throw new Error(await errorMessage(res, "저장 준비에 실패했어요."));
+  }
+  const { key, url } = (await res.json()) as { key: string; url: string };
+  const put = await fetch(url, {
+    method: "PUT",
+    body: json,
+    headers: { "content-type": "application/json" },
+  });
+  if (!put.ok) {
+    throw new Error("그림이 많아 업로드에 실패했어요. 잠시 후 다시 시도해 주세요.");
+  }
+  return { snapshotKey: key };
+}
+
 /** 임시저장: save the editor book as a private draft (no publish). With an
  * `id` it updates that draft; without, it creates a new one and returns it
  * (the caller should adopt the returned id so further saves update the same
@@ -124,10 +154,12 @@ export async function saveDraft(input: {
   pageW?: number;
   layout?: SubmitInput["layout"];
 }): Promise<StoreBook> {
+  const { pages, ...meta } = input;
+  const snap = await snapshotBody(pages);
   const res = await fetch("/api/books/draft", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(input),
+    body: JSON.stringify({ ...meta, ...snap }),
   });
   if (!res.ok) {
     throw new Error(await errorMessage(res, "임시저장에 실패했어요."));

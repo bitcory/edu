@@ -3,6 +3,7 @@ import { insertBook, listBooks } from "../../lib/books-repo";
 import { isApprovedAuthor } from "../../lib/authors-repo";
 import { OPEN_PUBLISH } from "../../lib/publish-policy";
 import { getServerUser } from "../../lib/server-auth";
+import { resolvePagesFromBody } from "../../lib/snapshot-body";
 import type { BookScope } from "../../lib/book-types";
 
 export const runtime = "nodejs";
@@ -34,7 +35,8 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  if (!Array.isArray(body?.pages)) {
+  const pages = await resolvePagesFromBody(body);
+  if (!Array.isArray(pages)) {
     return Response.json({ error: "pages required" }, { status: 400 });
   }
 
@@ -46,7 +48,7 @@ export async function POST(req: NextRequest) {
       price: body.price,
       pageW: body.pageW,
       layout: body.layout,
-      pages: body.pages,
+      pages,
     },
     { id: user.id, name: user.name },
   );

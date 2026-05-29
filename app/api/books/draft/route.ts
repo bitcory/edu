@@ -5,6 +5,7 @@ import {
   updateBookSnapshot,
 } from "../../../lib/books-repo";
 import { getServerUser } from "../../../lib/server-auth";
+import { resolvePagesFromBody } from "../../../lib/snapshot-body";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,7 +19,8 @@ export async function POST(req: NextRequest) {
   if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  if (!Array.isArray(body?.pages)) {
+  const pages = await resolvePagesFromBody(body);
+  if (!Array.isArray(pages)) {
     return Response.json({ error: "pages required" }, { status: 400 });
   }
 
@@ -39,7 +41,7 @@ export async function POST(req: NextRequest) {
     const book = await updateBookSnapshot(
       id,
       {
-        pages: body.pages,
+        pages,
         title: body.title,
         description: body.description,
         price: body.price,
@@ -59,7 +61,7 @@ export async function POST(req: NextRequest) {
       price: body.price,
       pageW: body.pageW,
       layout: body.layout,
-      pages: body.pages,
+      pages,
     },
     { id: user.id, name: user.name },
     "draft",

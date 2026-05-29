@@ -8,6 +8,7 @@ import {
 import { isApprovedAuthor } from "../../../lib/authors-repo";
 import { OPEN_PUBLISH } from "../../../lib/publish-policy";
 import { deletePdf } from "../../../lib/pdf-storage";
+import { resolvePagesFromBody } from "../../../lib/snapshot-body";
 import { getServerUser } from "../../../lib/server-auth";
 
 export const runtime = "nodejs";
@@ -45,10 +46,11 @@ export async function PATCH(
   }
 
   const body = await req.json();
+  const pages = await resolvePagesFromBody(body);
 
   // Metadata-only edit (no pages): title/price/description. Owner-only, keeps
   // status & content — used for PDF books and quick info edits.
-  if (!Array.isArray(body?.pages)) {
+  if (!Array.isArray(pages)) {
     const book = await updateBookMeta(id, {
       title: body?.title,
       price: body?.price,
@@ -66,7 +68,7 @@ export async function PATCH(
     );
   }
   const book = await updateBookSnapshot(id, {
-    pages: body.pages,
+    pages,
     title: body.title,
     description: body.description,
     price: body.price,

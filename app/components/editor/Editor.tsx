@@ -79,8 +79,7 @@ async function downscaleImageDataUrl(
     el.src = dataUrl;
   });
   const longest = Math.max(img.naturalWidth, img.naturalHeight);
-  if (longest <= maxDim) return dataUrl;
-  const scale = maxDim / longest;
+  const scale = longest > maxDim ? maxDim / longest : 1;
   const w = Math.round(img.naturalWidth * scale);
   const h = Math.round(img.naturalHeight * scale);
   const canvas = document.createElement("canvas");
@@ -89,7 +88,11 @@ async function downscaleImageDataUrl(
   const ctx = canvas.getContext("2d");
   if (!ctx) return dataUrl;
   ctx.drawImage(img, 0, 0, w, h);
-  // JPEG quality 0.85 — about 4-6× smaller than PNG for photos.
+  // Keep PNG while it's small (preserves transparency for stickers/cutouts);
+  // once it's large (photos, screenshots) re-encode to JPEG — 4-6× smaller —
+  // so the snapshot doesn't blow past the storage/upload limits.
+  const png = canvas.toDataURL("image/png");
+  if (png.length <= 700_000) return png;
   return canvas.toDataURL("image/jpeg", 0.85);
 }
 

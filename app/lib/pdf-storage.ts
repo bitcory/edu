@@ -64,6 +64,60 @@ export async function presignPdfUpload(
   );
 }
 
+/**
+ * Editor snapshots (Fabric JSON with embedded images) can exceed Vercel's
+ * ~4.5MB request-body limit. So the client uploads big snapshots straight to
+ * R2 (presigned PUT under `snapshots/<uuid>.json`) and the write routes read
+ * them back server-side (no request-body limit there) before storing in the
+ * DB — read paths stay unchanged. The key is an unguessable UUID; reads are
+ * restricted to the `snapshots/` prefix so this can't be used to fetch PDFs.
+ */
+export async function presignSnapshotUpload(): Promise<{
+  key: string;
+  url: string;
+}> {
+  const { client, bucket } = r2();
+  const key = `snapshots/${globalThis.crypto.randomUUID()}.json`;
+  const url = await getSignedUrl(
+    client,
+    new PutObjectCommand({ Bucket: bucket, Key: key }),
+    { expiresIn: 300 },
+  );
+  return { key, url };
+}
+
+/** Read an uploaded snapshot JSON back (server-side). Returns null if absent. */
+export async function readSnapshotJson(key: string): Promise<string | null> {
+  if (!key.startsWith("snapshots/")) {
+    throw new Error("invalid snapshot key");
+  }
+  const { client, bucket } = r2();
+  try {
+    const res = await client.send(
+      new GetObjectCommand({ Bucket: bucket, Key: key }),
+    );
+    if (!res.Body) return null;
+    return await res.Body.transformToString();
+  } catch (err: unknown) {
+    const e = err as { name?: string; $metadata?: { httpStatusCode?: number } };
+    if (e?.name === "NoSuchKey" || e?.$metadata?.httpStatusCode === 404) {
+      return null;
+    }
+    throw err;
+  }
+}
+
+/** Best-effort cleanup of a temp snapshot object after it's stored in the DB. */
+export async function deleteSnapshot(key: string): Promise<void> {
+  if (!key.startsWith("snapshots/")) return;
+  try {
+    const { client, bucket } = r2();
+    await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+  } catch {
+    /* ignore */
+  }
+}
+
 export async function savePdf(id: string, bytes: Uint8Array): Promise<void> {
   const { client, bucket } = r2();
   await client.send(
