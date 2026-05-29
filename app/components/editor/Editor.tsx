@@ -904,6 +904,26 @@ export default function Editor({
     [selected],
   );
 
+  // Drop shadow on the selected object (fabric.Shadow). Pass null to clear.
+  const applyShadow = useCallback(
+    async (color: string | null) => {
+      const api = apiRef.current;
+      if (!api?.canvas || !selected) return;
+      if (color) {
+        const fabric = await import("fabric");
+        selected.set(
+          "shadow",
+          new fabric.Shadow({ color, blur: 6, offsetX: 3, offsetY: 3 }),
+        );
+      } else {
+        selected.set("shadow", null);
+      }
+      api.canvas.requestRenderAll();
+      setChangeTick((x) => x + 1);
+    },
+    [selected],
+  );
+
   const deleteSelected = useCallback(() => {
     const api = apiRef.current;
     if (!api?.canvas || !selected) return;
@@ -1099,6 +1119,17 @@ export default function Editor({
   );
   const isImage = useMemo(() => selected?.type === "image", [selected]);
   const canFit = isImage || isShape;
+
+  // Shadow state for the text props UI (referenced via _changeTick re-renders).
+  const _shadow = (selected as unknown as { shadow?: { color?: string } } | null)
+    ?.shadow;
+  const shadowOn = !!_shadow;
+  const shadowColorInput =
+    _shadow?.color && _shadow.color.startsWith("#") ? _shadow.color : "#000000";
+  const strokeColor =
+    (selected as unknown as { stroke?: string } | null)?.stroke || "#ffffff";
+  const strokeWidth =
+    (selected as unknown as { strokeWidth?: number } | null)?.strokeWidth ?? 0;
 
   return (
     <div className="ed-shell">
@@ -1718,6 +1749,64 @@ export default function Editor({
                     <Icon size={14} />
                   </button>
                 ))}
+              </div>
+            </div>
+            <div className="ed-props__group">
+              <label className="ed-props__label">외곽선 (굵기 0 = 없음)</label>
+              <div className="ed-props__row">
+                <input
+                  type="color"
+                  className="ed-input"
+                  value={strokeColor}
+                  onChange={(e) =>
+                    updateSelected({
+                      stroke: e.target.value,
+                      strokeWidth: strokeWidth || 3,
+                      paintFirst: "stroke",
+                    })
+                  }
+                />
+                <NumberStepper
+                  value={strokeWidth}
+                  min={0}
+                  max={30}
+                  step={1}
+                  onChange={(n) =>
+                    updateSelected({
+                      strokeWidth: n,
+                      stroke: strokeColor,
+                      paintFirst: "stroke",
+                    })
+                  }
+                />
+              </div>
+            </div>
+            <div className="ed-props__group">
+              <label className="ed-props__label">그림자</label>
+              <div className="ed-props__row">
+                <button
+                  type="button"
+                  className={`ed-mini${!shadowOn ? " is-active" : ""}`}
+                  onClick={() => void applyShadow(null)}
+                  title="그림자 없음"
+                >
+                  없음
+                </button>
+                <button
+                  type="button"
+                  className={`ed-mini${shadowOn ? " is-active" : ""}`}
+                  onClick={() => void applyShadow("rgba(0,0,0,0.45)")}
+                  title="그림자 켜기"
+                >
+                  켜기
+                </button>
+                <input
+                  type="color"
+                  className="ed-input"
+                  value={shadowColorInput}
+                  onChange={(e) => void applyShadow(e.target.value)}
+                  title="그림자 색"
+                />
               </div>
             </div>
           </>
