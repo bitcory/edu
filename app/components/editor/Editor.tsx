@@ -679,13 +679,16 @@ export default function Editor({
     const img = await fabric.FabricImage.fromURL(url, {
       crossOrigin: "anonymous",
     });
-    const iw = img.width ?? PAGE_W;
+    // Default: 전체(fill page height) + 왼쪽 정렬 (left edge at 0) — ready for
+    // a continuous spread (duplicate → right half).
     const ih = img.height ?? PAGE_H;
+    const scale = PAGE_H / ih;
     img.set({
-      scaleX: 1,
-      scaleY: 1,
-      left: (PAGE_W - iw) / 2,
-      top: (PAGE_H - ih) / 2,
+      scaleX: scale,
+      scaleY: scale,
+      angle: 0,
+      left: 0,
+      top: 0,
     });
     api.canvas.add(img);
     api.canvas.setActiveObject(img);
