@@ -1535,8 +1535,8 @@ export default function Editor({
               key="partner-before"
               className="ed-canvas-frame ed-canvas-frame--partner"
               style={{
-                width: PAGE_W * displayScale,
-                height: PAGE_H * displayScale,
+                width: Math.floor(PAGE_W * displayScale),
+                height: Math.floor(PAGE_H * displayScale),
               }}
               onClick={() => void switchTo(partnerIndex)}
               title={`${partnerIndex === 0 ? "표지" : `${partnerIndex}쪽`}으로 이동`}
@@ -1564,8 +1564,8 @@ export default function Editor({
           style={{
             // floor so the (continuous) scaled canvas always fully covers the
             // frame — otherwise sub-pixel rounding shows the white frame edge.
-            width: PAGE_W * displayScale,
-            height: PAGE_H * displayScale,
+            width: Math.floor(PAGE_W * displayScale),
+            height: Math.floor(PAGE_H * displayScale),
           }}
         >
           <div
@@ -1607,8 +1607,8 @@ export default function Editor({
               key="partner-after"
               className="ed-canvas-frame ed-canvas-frame--partner"
               style={{
-                width: PAGE_W * displayScale,
-                height: PAGE_H * displayScale,
+                width: Math.floor(PAGE_W * displayScale),
+                height: Math.floor(PAGE_H * displayScale),
               }}
               onClick={() => void switchTo(partnerIndex)}
               title={`${partnerIndex === 0 ? "표지" : `${partnerIndex}쪽`}으로 이동`}
