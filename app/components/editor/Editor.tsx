@@ -1528,6 +1528,26 @@ export default function Editor({
         }`}
         ref={stageRef}
       >
+        {/* TEMP DEBUG — 1쪽/2쪽 크기 원인 추적용 */}
+        <div
+          style={{
+            position: "absolute",
+            top: 4,
+            left: 4,
+            zIndex: 60,
+            background: "rgba(0,0,0,0.7)",
+            color: "#7CFC7C",
+            font: "11px monospace",
+            padding: "3px 7px",
+            borderRadius: 4,
+            pointerEvents: "none",
+            whiteSpace: "pre",
+          }}
+        >
+          {`scale ${displayScale.toFixed(4)}  active ${activeIndex}  partner ${String(
+            partnerIndex,
+          )}  pageW ${PAGE_W}`}
+        </div>
         {spreadMode &&
           partnerIndex !== null &&
           partnerIndex < activeIndex && (
