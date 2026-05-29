@@ -588,18 +588,25 @@ export default function Editor({
     const api = apiRef.current;
     if (!api?.canvas) return;
     const fabric = await import("fabric");
+    // On the RIGHT page of a spread, default new text to right-aligned and
+    // pinned to the right edge (mirrors the left page's left default).
+    const idx = activeIndexRef.current;
+    const isRightPage = layout === "spread" && idx >= 2 && idx % 2 === 0;
     const t = new fabric.IText("여기에 글자를 적어요", {
-      left: 80,
       top: 80,
       fontSize: 48,
       fontFamily: DEFAULT_FONT.family,
       fill: "#2c1d10",
       editable: true,
+      textAlign: isRightPage ? "right" : "left",
+      ...(isRightPage
+        ? { originX: "right" as const, left: PAGE_W - 80 }
+        : { left: 80 }),
     });
     api.canvas.add(t);
     api.canvas.setActiveObject(t);
     api.canvas.requestRenderAll();
-  }, []);
+  }, [layout, PAGE_W]);
 
   const addImageFile = useCallback(async (file: File) => {
     const api = apiRef.current;
