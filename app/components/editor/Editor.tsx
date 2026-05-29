@@ -30,7 +30,6 @@ import {
   Columns2,
   Files,
   Home,
-  Plus,
   Redo2,
   Save,
   SlidersHorizontal,
@@ -45,6 +44,11 @@ import FabricCanvas, {
   type Guide,
 } from "./FabricCanvas";
 import ColorField from "./ColorField";
+import ContentTextModal, {
+  type SpreadRow,
+  splitBlocks,
+  orderedCells,
+} from "./ContentTextModal";
 import {
   type EditorPage,
   PAGE_H,
@@ -212,8 +216,20 @@ export default function Editor({
   const [bgColor, setBgColor] = useState("#ffffff");
   const [_changeTick, setChangeTick] = useState(0);
   const [guides, setGuides] = useState<Guide[]>([]);
-  const [spreadMode, setSpreadMode] = useState(false);
+  // Default to spread (펼침) view — books are spread by default, and the
+  // 전체추가 auto-build produces left/right spread pairs that read correctly
+  // only side by side.
+  const [spreadMode, setSpreadMode] = useState(true);
   const [partnerPng, setPartnerPng] = useState<string | null>(null);
+  // 내용 추가 모달: the whole story (blank-line-separated blocks) + the set of
+  // selected page ids the blocks map onto, in page order.
+  const [contentModalOpen, setContentModalOpen] = useState(false);
+  const [captionText, setCaptionText] = useState("");
+  const [selectedPages, setSelectedPages] = useState<string[]>([]);
+  const [applyingCaptions, setApplyingCaptions] = useState(false);
+  // 글꼴 "전체" toggle: when on, changing the font applies to every text object
+  // across all pages, not just the selected one.
+  const [applyFontAll, setApplyFontAll] = useState(false);
 
   // In the book viewer: page 0 is the cover (alone on the right), then pages
   // 1+2 form the first spread (1 left, 2 right), 3+4 the next, and so on.
@@ -235,6 +251,16 @@ export default function Editor({
   const activeThumbRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const imgInputRef = useRef<HTMLInputElement | null>(null);
+  const folderInputRef = useRef<HTMLInputElement | null>(null);
+  // React's typed JSX won't reliably emit the non-standard folder-picker
+  // attributes, so set them imperatively once the input mounts.
+  useEffect(() => {
+    const el = folderInputRef.current;
+    if (!el) return;
+    el.setAttribute("webkitdirectory", "");
+    el.setAttribute("directory", "");
+    el.setAttribute("mozdirectory", "");
+  }, []);
   // Refs so the debounced snapshot callback can read the latest active page
   // index without re-binding (which would clear the pending timer).
   const activeIndexRef = useRef(activeIndex);
@@ -262,6 +288,11 @@ export default function Editor({
   // When true, snapshot pushes are skipped — used to keep the snapshot
   // debounce from re-recording the same state we just applied via undo/redo.
   const isApplyingHistoryRef = useRef(false);
+  // When true, the canvas is being driven as a scratch surface to build many
+  // pages at once (전체추가). Snapshotting must be fully suppressed: otherwise
+  // the debounced timer would serialize scratch content into whichever page is
+  // active and clobber it.
+  const bulkBuildingRef = useRef(false);
   // Bump to re-render undo/redo button disabled states.
   const [historyTick, setHistoryTick] = useState(0);
   const getHistory = useCallback((pageId: string): PageHistory => {
@@ -272,6 +303,21 @@ export default function Editor({
     }
     return h;
   }, []);
+
+  // Record a page-content change in that page's undo history. Bulk operations
+  // (전체글꼴 / 내용추가) bypass the canvas-event snapshot, so they call this so
+  // the change is still undoable. Seeds the pre-change state as a baseline when
+  // the page has no history yet, then appends the post-change state.
+  const recordPageEdit = useCallback(
+    (pageId: string, before: object | null, after: object) => {
+      const h = getHistory(pageId);
+      if (h.past.length === 0 && before) h.past.push(before);
+      h.past.push(after);
+      while (h.past.length > HISTORY_LIMIT) h.past.shift();
+      h.future = [];
+    },
+    [getHistory],
+  );
 
   // Display scale: backing canvas is fixed PAGE_W x PAGE_H, displayed scaled to fit.
   // In spread mode with a partner, two pages sit side by side, so we fit a
@@ -331,6 +377,9 @@ export default function Editor({
   // Also push the snapshot to the active page's undo history (unless we're
   // currently applying an undo/redo, which would otherwise re-record itself).
   const handleCanvasChange = useCallback(() => {
+    // While bulk-building pages the canvas is just scratch — ignore every
+    // object:added/modified/removed it fires.
+    if (bulkBuildingRef.current) return;
     setChangeTick((x) => x + 1);
     if (snapshotTimerRef.current !== null) {
       window.clearTimeout(snapshotTimerRef.current);
@@ -661,6 +710,199 @@ export default function Editor({
     api.canvas.requestRenderAll();
   }, [layout, PAGE_W]);
 
+  // Content pages (cover excluded) grouped into spreads: (1,2), (3,4), … shown
+  // side by side, but each page is its own selectable cell. Left page (odd
+  // index) → top-left caption; right page (even index ≥2) → top-right.
+  const captionSpreads = useMemo<SpreadRow[]>(() => {
+    const cell = (idx: number) => {
+      const p = pages[idx];
+      if (!p || p.kind === "cover") return null;
+      return {
+        id: p.id,
+        index: idx,
+        label: `${idx}쪽`,
+        thumb: p.thumb,
+        isRight: layout === "spread" && idx >= 2 && idx % 2 === 0,
+      };
+    };
+    const rows: SpreadRow[] = [];
+    for (let i = 1; i < pages.length; i += 2) {
+      const left = cell(i);
+      if (!left) continue;
+      rows.push({ key: left.id, left, right: cell(i + 1) });
+    }
+    return rows;
+  }, [pages, layout]);
+
+  // 내용 추가: open the modal. Snapshot the live active page first so the
+  // thumbnails are up to date, then start with everything cleared.
+  const openContentModal = useCallback(() => {
+    const api = apiRef.current;
+    if (api) {
+      const data = api.serialize();
+      const thumb = api.toPng(0.2);
+      const idx = activeIndexRef.current;
+      setPages((prev) =>
+        prev.map((p, i) => (i === idx ? { ...p, data, thumb } : p)),
+      );
+    }
+    setCaptionText("");
+    setSelectedPages([]);
+    setContentModalOpen(true);
+  }, []);
+
+  // 적용: split the story into blocks on blank lines and drop each block onto
+  // the matching selected page (page order), at its default text position —
+  // left page → top-left, right page → top-right (the 글자 default). A Textbox
+  // wraps long content within the page width; fine positioning is manual.
+  const applyCaptions = useCallback(async () => {
+    const api = apiRef.current;
+    if (!api?.canvas) return;
+
+    const blocks = splitBlocks(captionText);
+    const sel = new Set(selectedPages);
+    // Selected page cells in page order, zipped with blocks one-to-one.
+    const chosen = orderedCells(captionSpreads).filter((c) => sel.has(c.id));
+    const assignments = chosen
+      .map((c, k) => ({ index: c.index, isRight: c.isRight, text: blocks[k] }))
+      .filter((a) => a.text);
+    if (assignments.length === 0) {
+      setContentModalOpen(false);
+      return;
+    }
+
+    setApplyingCaptions(true);
+    const fabric = await import("fabric");
+    await ensureFont(
+      DEFAULT_FONT.family,
+      400,
+      assignments.map((a) => a.text).join(""),
+    );
+
+    // Capture the live active page (unsaved edits) as its baseline.
+    const curIdx = activeIndexRef.current;
+    const curData = api.serialize();
+    const curThumb = api.toPng(0.2);
+    const baseline = pages.map((p, i) =>
+      i === curIdx ? { ...p, data: curData, thumb: curThumb } : p,
+    );
+
+    bulkBuildingRef.current = true;
+    if (snapshotTimerRef.current !== null) {
+      window.clearTimeout(snapshotTimerRef.current);
+      snapshotTimerRef.current = null;
+    }
+    try {
+      const result = [...baseline];
+      for (const { index, isRight, text } of assignments) {
+        const page = result[index];
+        if (!page) continue;
+        await api.load(page.data);
+        const t = new fabric.Textbox(text, {
+          top: 80,
+          width: PAGE_W - 160,
+          fontSize: 48,
+          fontFamily: DEFAULT_FONT.family,
+          fill: "#2c1d10",
+          editable: true,
+          lineHeight: 1.5,
+          textAlign: isRight ? "right" : "left",
+          ...(isRight
+            ? { originX: "right" as const, left: PAGE_W - 80 }
+            : { left: 80 }),
+        });
+        api.canvas.add(t);
+        api.canvas.requestRenderAll();
+        const after = api.serialize();
+        recordPageEdit(page.id, page.data, after);
+        result[index] = { ...page, data: after, thumb: api.toPng(0.2) };
+      }
+      setPages(result);
+      setHistoryTick((t) => t + 1);
+      // Restore the page we were on (now carrying its caption, if any).
+      await api.load(result[curIdx]?.data ?? curData);
+      setSelected(null);
+    } finally {
+      bulkBuildingRef.current = false;
+      setApplyingCaptions(false);
+      setContentModalOpen(false);
+    }
+  }, [
+    pages,
+    captionText,
+    captionSpreads,
+    selectedPages,
+    PAGE_W,
+    recordPageEdit,
+  ]);
+
+  // Apply a font family to EVERY text object across all pages (the 글꼴 "전체"
+  // toggle). Pages without text are skipped. The active page is reloaded and
+  // its selection restored so editing continues uninterrupted.
+  const applyFontToAll = useCallback(
+    async (family: string) => {
+      const api = apiRef.current;
+      if (!api?.canvas) return;
+      await ensureFont(family);
+
+      const isTextObj = (o: { type?: string }) =>
+        o.type === "i-text" || o.type === "text" || o.type === "textbox";
+
+      // Remember the selected object's slot so we can reselect it after reload.
+      const curIdx = activeIndexRef.current;
+      const selIndex = selected
+        ? api.canvas.getObjects().indexOf(selected)
+        : -1;
+      const curData = api.serialize();
+      const curThumb = api.toPng(0.2);
+      const baseline = pages.map((p, i) =>
+        i === curIdx ? { ...p, data: curData, thumb: curThumb } : p,
+      );
+
+      bulkBuildingRef.current = true;
+      if (snapshotTimerRef.current !== null) {
+        window.clearTimeout(snapshotTimerRef.current);
+        snapshotTimerRef.current = null;
+      }
+      try {
+        const result = [...baseline];
+        for (let i = 0; i < result.length; i++) {
+          const page = result[i];
+          if (!page.data) continue;
+          await api.load(page.data);
+          const c = api.canvas;
+          if (!c) continue;
+          const texts = c.getObjects().filter(isTextObj);
+          if (texts.length === 0) continue;
+          for (const t of texts) {
+            t.set({ fontFamily: family });
+            (t as unknown as { initDimensions?: () => void }).initDimensions?.();
+          }
+          c.requestRenderAll();
+          const after = api.serialize();
+          recordPageEdit(page.id, page.data, after);
+          result[i] = { ...page, data: after, thumb: api.toPng(0.2) };
+        }
+        setPages(result);
+        setHistoryTick((t) => t + 1);
+        // Reload the active page and restore the selection.
+        await api.load(result[curIdx]?.data ?? curData);
+        const objs = api.canvas?.getObjects() ?? [];
+        const reSel = selIndex >= 0 ? objs[selIndex] : null;
+        if (api.canvas && reSel) {
+          api.canvas.setActiveObject(reSel);
+          api.canvas.requestRenderAll();
+          setSelected(reSel);
+        } else {
+          setSelected(null);
+        }
+      } finally {
+        bulkBuildingRef.current = false;
+      }
+    },
+    [pages, selected, recordPageEdit],
+  );
+
   const addImageFile = useCallback(async (file: File) => {
     const api = apiRef.current;
     if (!api?.canvas) return;
@@ -758,6 +1000,154 @@ export default function Editor({
       setBgColor("#ffffff");
     }
   }, []);
+
+  /**
+   * 전체추가: pick a folder, then auto-build content pages from every image in
+   * it — replaying the manual "그림 → 전체 → 왼쪽정렬 → 복제" flow for each one.
+   * The folder is content-only (the book's cover page is separate), so EVERY
+   * image is used, starting at page 1. Each one becomes two pages:
+   *   • LEFT  — image filling the page height, pinned to the left edge (전체 왼쪽정렬)
+   *   • RIGHT — a duplicate; a wide image (scaledW > PAGE_W) reveals its right
+   *             half so the pair reads as one continuous spread.
+   * New pages are appended after the existing ones.
+   */
+  const addAllFromFolder = useCallback(
+    async (fileList: File[]) => {
+      const api = apiRef.current;
+      if (!api?.canvas) return;
+      const fabric = await import("fabric");
+
+      // Image files only, natural-sorted by name; drop the first (the cover).
+      // Folder-picked files often have an empty `type`, so fall back to the
+      // file extension.
+      const isImage = (f: File) =>
+        f.type.startsWith("image/") ||
+        /\.(png|jpe?g|gif|webp|bmp|avif|svg|heic|heif|tiff?|jfif)$/i.test(
+          f.name,
+        );
+      const all = Array.from(fileList);
+      console.log(
+        "[전체추가] 선택된 파일",
+        all.length,
+        all.map((f) => `${f.name} (${f.type || "no-type"})`),
+      );
+      const images = all
+        .filter(isImage)
+        .sort((a, b) =>
+          a.name.localeCompare(b.name, undefined, { numeric: true }),
+        );
+      console.log("[전체추가] 이미지로 인식", images.length);
+      if (images.length === 0) {
+        window.alert("선택한 폴더에서 이미지를 찾지 못했어요.");
+        return;
+      }
+      // The folder holds content only — its first image is page 1, NOT the
+      // cover (the book's cover page is separate). So use every image.
+      const content = images;
+
+      // Generate starting at the SELECTED page: a selected content page becomes
+      // the first generated page (replaced); if the cover is selected, start on
+      // the page right after it. Pages past the start point are kept.
+      const curIdx = activeIndexRef.current;
+      const replaceActive = pages[curIdx]?.kind !== "cover";
+      const insertAt = replaceActive ? curIdx : curIdx + 1;
+      // Snapshot the current canvas so we can restore it if nothing is built.
+      const curData = api.serialize();
+      bulkBuildingRef.current = true;
+      if (snapshotTimerRef.current !== null) {
+        window.clearTimeout(snapshotTimerRef.current);
+        snapshotTimerRef.current = null;
+      }
+
+      const MAX_DIM = Math.max(PAGE_W, PAGE_H) * 2;
+      const built: EditorPage[] = [];
+      let failed = 0;
+      try {
+        for (const file of content) {
+          try {
+            const rawUrl = await new Promise<string>((resolve, reject) => {
+              const fr = new FileReader();
+              fr.onload = () => resolve(fr.result as string);
+              fr.onerror = () => reject(fr.error);
+              fr.readAsDataURL(file);
+            });
+            const url = await downscaleImageDataUrl(rawUrl, MAX_DIM);
+            const img = await fabric.FabricImage.fromURL(url, {
+              crossOrigin: "anonymous",
+            });
+
+            // 전체 + 왼쪽정렬: fill page height, left edge at 0.
+            const ih = img.height ?? PAGE_H;
+            const scale = PAGE_H / ih;
+            const scaledW = (img.width ?? PAGE_W) * scale;
+            img.set({ scaleX: scale, scaleY: scale, angle: 0, left: 0, top: 0 });
+
+            await api.load(null);
+            api.canvas.add(img);
+            api.canvas.requestRenderAll();
+            const leftData = api.serialize();
+            built.push({
+              id: Math.random().toString(36).slice(2, 10),
+              kind: "content",
+              data: leftData,
+              thumb: api.toPng(0.2),
+            });
+
+            // 복제: a wide image reveals its right half (continuous spread);
+            // a narrow one just copies in place.
+            const rightData = JSON.parse(JSON.stringify(leftData)) as {
+              objects?: Array<Record<string, unknown>>;
+            };
+            if (scaledW > PAGE_W + 1 && rightData.objects) {
+              for (const obj of rightData.objects) {
+                const type = obj.type as string | undefined;
+                if (type === "image" || type === "Image") obj.left = -PAGE_W;
+              }
+            }
+            await api.load(rightData);
+            built.push({
+              id: Math.random().toString(36).slice(2, 10),
+              kind: "content",
+              data: rightData,
+              thumb: api.toPng(0.2),
+            });
+          } catch (err) {
+            failed += 1;
+            console.error("전체추가: 이미지 처리 실패", file.name, err);
+          }
+        }
+
+        if (built.length === 0) {
+          // Nothing built — restore the canvas we scribbled on as scratch.
+          await api.load(curData);
+          window.alert(
+            "이미지를 불러오지 못했어요. 콘솔 로그를 확인해 주세요.",
+          );
+          return;
+        }
+        if (failed > 0) {
+          window.alert(`${failed}장은 불러오지 못해 건너뛰었어요.`);
+        }
+
+        // Commit: drop the built pages in starting at the selected page,
+        // keeping everything before the start and after the replaced page.
+        setPages((prev) => [
+          ...prev.slice(0, insertAt),
+          ...built,
+          ...prev.slice(replaceActive ? curIdx + 1 : insertAt),
+        ]);
+
+        // Jump to the first generated page (now at insertAt).
+        await api.load(built[0].data);
+        setActiveIndex(insertAt);
+        setSelected(null);
+        setBgColor("#ffffff");
+      } finally {
+        bulkBuildingRef.current = false;
+      }
+    },
+    [pages, PAGE_W],
+  );
 
   const removePage = useCallback(
     async (idx: number) => {
@@ -1165,7 +1555,10 @@ export default function Editor({
   const closeProps = useCallback(() => setPropsOpen(false), []);
 
   const isText = useMemo(
-    () => selected?.type === "i-text" || selected?.type === "text",
+    () =>
+      selected?.type === "i-text" ||
+      selected?.type === "text" ||
+      selected?.type === "textbox",
     [selected],
   );
   const isShape = useMemo(
@@ -1340,6 +1733,16 @@ export default function Editor({
         </div>
         <div className="ed-spacer" />
         <div className="ed-save-group">
+          <button
+            type="button"
+            className="ed-draft"
+            onClick={openContentModal}
+            disabled={exporting}
+            title="페이지별 내용(텍스트)을 한 번에 추가"
+          >
+            <TypeIcon size={16} />
+            <span className="ed-draft__label">내용추가</span>
+          </button>
           {onSaveDraft && (
             <button
               type="button"
@@ -1388,10 +1791,36 @@ export default function Editor({
           <span>페이지</span>
           <button
             type="button"
+            className="ed-pagelist__add ed-pagelist__add--all"
+            title="폴더를 선택하면 표지(첫 이미지)를 뺀 나머지를 전체 왼쪽정렬+복제(스프레드)로 자동 편집합니다"
+            onClick={() => folderInputRef.current?.click()}
+          >
+            전체추가
+          </button>
+          <input
+            ref={folderInputRef}
+            type="file"
+            multiple
+            style={{ display: "none" }}
+            onChange={(e) => {
+              const fs = e.target.files;
+              console.log("[전체추가] onChange, files=", fs?.length ?? 0);
+              // Snapshot into an array NOW — `fs` is a live FileList tied to
+              // the input, so resetting value below would empty it before the
+              // async handler reads it.
+              const files = fs ? Array.from(fs) : [];
+              e.target.value = "";
+              if (files.length) void addAllFromFolder(files);
+              else
+                window.alert("선택된 파일이 없어요. 폴더를 다시 선택해 주세요.");
+            }}
+          />
+          <button
+            type="button"
             className="ed-pagelist__add"
             onClick={() => void addPage()}
           >
-            <Plus size={12} /> 추가
+            추가
           </button>
           <button
             type="button"
@@ -1698,6 +2127,10 @@ export default function Editor({
                 }
                 onChange={async (e) => {
                   const family = e.target.value;
+                  if (applyFontAll) {
+                    await applyFontToAll(family);
+                    return;
+                  }
                   await ensureFont(family);
                   updateSelected({ fontFamily: family });
                   // Fabric caches text measurements; force a re-layout.
@@ -1723,6 +2156,17 @@ export default function Editor({
                   </optgroup>
                 ))}
               </select>
+                <label
+                  className="ed-font-all"
+                  title="체크한 뒤 글꼴을 바꾸면 모든 페이지의 글씨에 적용됩니다"
+                >
+                  <input
+                    type="checkbox"
+                    checked={applyFontAll}
+                    onChange={(e) => setApplyFontAll(e.target.checked)}
+                  />
+                  전체
+                </label>
                 <ColorField
                   className="ed-swatch ed-swatch--square"
                   value={
@@ -2063,6 +2507,25 @@ export default function Editor({
           </>
         )}
       </aside>
+
+      {contentModalOpen && (
+        <ContentTextModal
+          spreads={captionSpreads}
+          text={captionText}
+          selected={selectedPages}
+          busy={applyingCaptions}
+          onToggle={(pageId) =>
+            setSelectedPages((prev) =>
+              prev.includes(pageId)
+                ? prev.filter((k) => k !== pageId)
+                : [...prev, pageId],
+            )
+          }
+          onText={setCaptionText}
+          onApply={() => void applyCaptions()}
+          onClose={() => setContentModalOpen(false)}
+        />
+      )}
     </div>
   );
 }
