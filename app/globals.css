@@ -380,28 +380,33 @@ body {
 
 .bv-close {
   position: absolute;
-  top: 16px;
-  right: 16px;
+  top: 50%;
+  right: 18px;
+  transform: translateY(-50%);
   display: inline-flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  width: 56px;
-  height: 56px;
+  gap: 4px;
+  width: 108px;
+  height: 108px;
   background:
     linear-gradient(180deg, rgba(255, 253, 235, 0.98), rgba(255, 210, 128, 0.95));
-  border: 1px solid rgba(255, 180, 117, 0.46);
+  border: 2px solid rgba(255, 180, 117, 0.55);
   border-radius: 50%;
   color: #634431;
+  font-weight: 800;
+  font-size: 16px;
   cursor: pointer;
   z-index: 6;
-  box-shadow: 0 10px 22px rgba(92, 62, 35, 0.24);
+  box-shadow: 0 14px 28px rgba(92, 62, 35, 0.3);
   transition: transform 0.12s ease, background 0.12s ease;
 }
 
 .bv-close:hover {
   background:
     linear-gradient(180deg, #fffbe9, #ffd68b);
-  transform: scale(1.06);
+  transform: translateY(-50%) scale(1.05);
 }
 
 .bv-stage {
@@ -521,10 +526,11 @@ body {
   }
 
   .bv-close {
-    top: 12px;
-    right: 12px;
-    width: 50px;
-    height: 50px;
+    top: 50%;
+    right: 10px;
+    width: 88px;
+    height: 88px;
+    font-size: 14px;
   }
 }
 
@@ -1170,7 +1176,6 @@ textarea.ed-input {
 /* ---------- Icon alignment helpers ---------- */
 
 .upload-home,
-.bv-close,
 .ed-home,
 .ed-finish,
 .ed-pagelist__add,

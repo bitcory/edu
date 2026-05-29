@@ -173,10 +173,11 @@ export default function BookViewer({ pages, onClose, singlePage }: Props) {
           type="button"
           onClick={onClose}
           className="bv-close"
-          aria-label="다른 책 보기"
-          title="다른 책 보기"
+          aria-label="새 책 보기"
+          title="새 책 보기"
         >
-          <ArrowLeft size={24} />
+          <ArrowLeft size={30} />
+          <span>새 책 보기</span>
         </button>
       )}
       <div ref={containerRef} className="bv-stage">
