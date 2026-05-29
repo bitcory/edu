@@ -1304,27 +1304,26 @@ textarea.ed-input {
     background: rgba(0, 0, 0, 0.45);
   }
 
-  /* Properties move from a hidden side panel to a slide-up bottom sheet that
-     appears only while an object is selected — so it doesn't cover the canvas
-     otherwise, and the user can still edit text/colour/size on a phone. */
+  /* Properties slide in from the RIGHT while an object is selected (a bottom
+     sheet covered the editing area). It doesn't cover the full canvas and can
+     be closed with the X / by deselecting. */
   .ed-props {
     display: block;
     position: fixed;
-    left: 0;
-    right: 0;
+    top: 0;
     bottom: 0;
-    max-height: 62vh;
+    right: 0;
+    width: min(80vw, 300px);
     overflow-y: auto;
     z-index: 30;
-    border-top: 1px solid rgba(255, 220, 160, 0.16);
-    border-radius: 18px 18px 0 0;
+    border-left: 1px solid rgba(255, 220, 160, 0.16);
     background: rgba(28, 19, 11, 0.98);
-    box-shadow: 0 -12px 32px rgba(0, 0, 0, 0.45);
-    transform: translateY(110%);
+    box-shadow: -12px 0 32px rgba(0, 0, 0, 0.45);
+    transform: translateX(100%);
     transition: transform 0.22s ease;
   }
   .ed-props--open {
-    transform: translateY(0);
+    transform: translateX(0);
   }
   .ed-props__close {
     display: inline-flex;
