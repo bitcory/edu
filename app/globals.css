@@ -1290,6 +1290,10 @@ textarea.ed-input {
     padding: 8px 16px;
     font-size: 13px;
   }
+  /* Push the save group (임시저장 + 완성) to the right edge. */
+  .ed-draft {
+    margin-left: auto;
+  }
 
   .ed-pagelist-toggle,
   .ed-props-toggle {
