@@ -28,7 +28,10 @@ import {
   PanelTop,
   Palette,
   Columns2,
+  Home,
   Plus,
+  Redo2,
+  Undo2,
   Square as SquareIcon,
   Trash2,
   Type as TypeIcon,
@@ -41,9 +44,10 @@ import FabricCanvas, {
 import {
   type EditorPage,
   PAGE_H,
-  PAGE_W,
   makePage,
 } from "../../lib/editor-types";
+import type { BookLayout } from "../../lib/book-types";
+import { TEMPLATES } from "../../lib/templates";
 import {
   clearEditorState,
   loadEditorState,
@@ -56,20 +60,79 @@ import {
   preloadAllFonts,
 } from "../../lib/fonts";
 
+/**
+ * If a data URL's image is larger than maxDim on its longest side, re-encode
+ * it as JPEG at the capped size. Returns the original URL if no downscale is
+ * needed. Keeps memory predictable when users drop in 4000×3000 phone photos.
+ */
+async function downscaleImageDataUrl(
+  dataUrl: string,
+  maxDim: number,
+): Promise<string> {
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const el = new Image();
+    el.onload = () => resolve(el);
+    el.onerror = () => reject(new Error("image decode failed"));
+    el.src = dataUrl;
+  });
+  const longest = Math.max(img.naturalWidth, img.naturalHeight);
+  if (longest <= maxDim) return dataUrl;
+  const scale = maxDim / longest;
+  const w = Math.round(img.naturalWidth * scale);
+  const h = Math.round(img.naturalHeight * scale);
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return dataUrl;
+  ctx.drawImage(img, 0, 0, w, h);
+  // JPEG quality 0.85 — about 4-6× smaller than PNG for photos.
+  return canvas.toDataURL("image/jpeg", 0.85);
+}
+
 type Props = {
-  onFinish: (pages: EditorPage[]) => Promise<void> | void;
+  onFinish: (
+    pages: EditorPage[],
+    pageW: number,
+    layout: BookLayout,
+  ) => Promise<void> | void;
   exporting?: boolean;
+  // When editing an existing bookstore book (/edit?book=<id>), seed from its
+  // snapshot instead of the localStorage working draft. The parent remounts
+  // the Editor (via key) when this changes, so the seeders below re-run.
+  initialPages?: EditorPage[];
+  // Per-book 판형: page width (height fixed at PAGE_H) + reading layout. The
+  // parent remounts the Editor (keyed by pageW) when these change.
+  pageW: number;
+  // The width before a 판형 change (equals pageW except right after the user
+  // switches 판형) — lets us re-center centered content for the new width.
+  prevPageW: number;
+  layout: BookLayout;
+  onTemplateChange: (pageW: number, layout: BookLayout) => void;
 };
 
-export default function Editor({ onFinish, exporting = false }: Props) {
+export default function Editor({
+  onFinish,
+  exporting = false,
+  initialPages,
+  pageW,
+  prevPageW,
+  layout,
+  onTemplateChange,
+}: Props) {
+  // Shadow PAGE_W with the per-book width so all the body coordinate math uses
+  // the chosen 판형. Height stays PAGE_H. The parent remounts on 판형 change.
+  const PAGE_W = pageW;
   // Restore the previous session if present (Editor is client-only via
   // dynamic({ ssr: false }) so localStorage access here is safe).
   const [pages, setPages] = useState<EditorPage[]>(() => {
+    if (initialPages && initialPages.length > 0) return initialPages;
     const saved = loadEditorState();
     if (saved && saved.pages.length > 0) return saved.pages;
     return [{ ...makePage("cover") }, { ...makePage("content") }];
   });
   const [activeIndex, setActiveIndex] = useState<number>(() => {
+    if (initialPages && initialPages.length > 0) return 0;
     const saved = loadEditorState();
     return saved && saved.pages.length > 0
       ? Math.min(saved.activeIndex, saved.pages.length - 1)
@@ -106,6 +169,27 @@ export default function Editor({ onFinish, exporting = false }: Props) {
     activeIndexRef.current = activeIndex;
   }, [activeIndex]);
   const snapshotTimerRef = useRef<number | null>(null);
+
+  // Per-page undo/redo history. Keyed by page id so switching pages preserves
+  // each page's own history. We store serialized canvas JSON snapshots.
+  // 20 keeps memory usable when pages contain large base64 images (a typical
+  // 1600×900 photo is ~2 MB per snapshot).
+  const HISTORY_LIMIT = 20;
+  type PageHistory = { past: object[]; future: object[] };
+  const historyRef = useRef<Map<string, PageHistory>>(new Map());
+  // When true, snapshot pushes are skipped — used to keep the snapshot
+  // debounce from re-recording the same state we just applied via undo/redo.
+  const isApplyingHistoryRef = useRef(false);
+  // Bump to re-render undo/redo button disabled states.
+  const [historyTick, setHistoryTick] = useState(0);
+  const getHistory = useCallback((pageId: string): PageHistory => {
+    let h = historyRef.current.get(pageId);
+    if (!h) {
+      h = { past: [], future: [] };
+      historyRef.current.set(pageId, h);
+    }
+    return h;
+  }, []);
 
   // Display scale: backing canvas is fixed PAGE_W x PAGE_H, displayed scaled to fit.
   // In spread mode with a partner, two pages sit side by side, so we fit a
@@ -151,15 +235,19 @@ export default function Editor({ onFinish, exporting = false }: Props) {
         pages,
         activeIndex,
         savedAt: Date.now(),
+        pageW,
+        layout,
       });
     }, 500);
     return () => window.clearTimeout(id);
-  }, [pages, activeIndex]);
+  }, [pages, activeIndex, pageW, layout]);
 
   // Snapshot the live Fabric canvas into pages[activeIndex] (debounced) so
   // edits within a single page are persisted too — not only structural
   // changes like add/remove. Without this, only "switch page" actions would
   // commit the canvas into the pages state.
+  // Also push the snapshot to the active page's undo history (unless we're
+  // currently applying an undo/redo, which would otherwise re-record itself).
   const handleCanvasChange = useCallback(() => {
     setChangeTick((x) => x + 1);
     if (snapshotTimerRef.current !== null) {
@@ -171,11 +259,134 @@ export default function Editor({ onFinish, exporting = false }: Props) {
       const idx = activeIndexRef.current;
       const data = api.serialize();
       const thumb = api.toPng(0.2);
-      setPages((prev) =>
-        prev.map((p, i) => (i === idx ? { ...p, data, thumb } : p)),
-      );
+      setPages((prev) => {
+        const pageId = prev[idx]?.id;
+        if (pageId && !isApplyingHistoryRef.current) {
+          const h = getHistory(pageId);
+          // Skip dedup: each snapshot represents a meaningful edit (Fabric
+          // only fires modified/added/removed on actual user actions). Doing
+          // JSON.stringify here was blocking the main thread for tens of ms
+          // on pages with images, contributing to perceived freezing.
+          h.past.push(data);
+          if (h.past.length > HISTORY_LIMIT) h.past.shift();
+          h.future = []; // any new edit clears the redo branch
+          setHistoryTick((t) => t + 1);
+        }
+        return prev.map((p, i) => (i === idx ? { ...p, data, thumb } : p));
+      });
     }, 700);
-  }, []);
+  }, [getHistory]);
+
+  const canUndo = useMemo(() => {
+    void historyTick;
+    const pageId = pages[activeIndex]?.id;
+    if (!pageId) return false;
+    const h = historyRef.current.get(pageId);
+    return !!h && h.past.length > 1;
+  }, [historyTick, pages, activeIndex]);
+
+  const canRedo = useMemo(() => {
+    void historyTick;
+    const pageId = pages[activeIndex]?.id;
+    if (!pageId) return false;
+    const h = historyRef.current.get(pageId);
+    return !!h && h.future.length > 0;
+  }, [historyTick, pages, activeIndex]);
+
+  const undo = useCallback(async () => {
+    const api = apiRef.current;
+    if (!api) return;
+    const pageId = pages[activeIndex]?.id;
+    if (!pageId) return;
+    const h = getHistory(pageId);
+    if (h.past.length < 2) return;
+    // Pop current state into the future branch; restore the previous state.
+    const current = h.past.pop();
+    if (current) h.future.push(current);
+    const prev = h.past[h.past.length - 1];
+    if (!prev) return;
+    isApplyingHistoryRef.current = true;
+    if (snapshotTimerRef.current !== null) {
+      window.clearTimeout(snapshotTimerRef.current);
+      snapshotTimerRef.current = null;
+    }
+    await api.load(prev);
+    setPages((p) =>
+      p.map((pg, i) =>
+        i === activeIndex
+          ? { ...pg, data: prev, thumb: api.toPng(0.2) }
+          : pg,
+      ),
+    );
+    setSelected(null);
+    setHistoryTick((t) => t + 1);
+    isApplyingHistoryRef.current = false;
+  }, [pages, activeIndex, getHistory]);
+
+  const redo = useCallback(async () => {
+    const api = apiRef.current;
+    if (!api) return;
+    const pageId = pages[activeIndex]?.id;
+    if (!pageId) return;
+    const h = getHistory(pageId);
+    if (h.future.length === 0) return;
+    const next = h.future.pop();
+    if (!next) return;
+    h.past.push(next);
+    isApplyingHistoryRef.current = true;
+    if (snapshotTimerRef.current !== null) {
+      window.clearTimeout(snapshotTimerRef.current);
+      snapshotTimerRef.current = null;
+    }
+    await api.load(next);
+    setPages((p) =>
+      p.map((pg, i) =>
+        i === activeIndex
+          ? { ...pg, data: next, thumb: api.toPng(0.2) }
+          : pg,
+      ),
+    );
+    setSelected(null);
+    setHistoryTick((t) => t + 1);
+    isApplyingHistoryRef.current = false;
+  }, [pages, activeIndex, getHistory]);
+
+  // Keyboard shortcuts: Cmd/Ctrl+Z = undo, Cmd/Ctrl+Shift+Z (or Ctrl+Y) = redo.
+  // Skip when the user is editing text inline inside a Fabric IText (the
+  // canvas captures keystrokes for text editing in that mode).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      const editing =
+        (
+          apiRef.current?.canvas?.getActiveObject() as
+            | { isEditing?: boolean }
+            | null
+            | undefined
+        )?.isEditing;
+      if (editing) return;
+      const meta = e.metaKey || e.ctrlKey;
+      if (!meta) return;
+      const k = e.key.toLowerCase();
+      if (k === "z" && !e.shiftKey) {
+        e.preventDefault();
+        void undo();
+      } else if ((k === "z" && e.shiftKey) || k === "y") {
+        e.preventDefault();
+        void redo();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [undo, redo]);
 
   // Discard everything and start a fresh book.
   const resetEditor = useCallback(() => {
@@ -190,16 +401,18 @@ export default function Editor({ onFinish, exporting = false }: Props) {
     window.location.reload();
   }, []);
 
-  // Render the partner page into a PNG so we can show it side-by-side with
-  // the editable active canvas. Cheap because we reuse an offscreen Fabric
-  // static canvas and only regenerate when the partner changes.
+  // Memoize the partner page's data so the PNG-render effect doesn't re-run
+  // on EVERY pages mutation (snapshots while editing the active page would
+  // otherwise constantly thrash an expensive offscreen render and cause the
+  // UI to flicker / "shake"). The returned reference only changes when the
+  // partner's own data slot actually changes.
+  const partnerData = useMemo(() => {
+    if (partnerIndex === null) return null;
+    return pages[partnerIndex]?.data ?? null;
+  }, [partnerIndex, pages]);
+
   useEffect(() => {
     if (!spreadMode || partnerIndex === null) {
-      setPartnerPng(null);
-      return;
-    }
-    const partner = pages[partnerIndex];
-    if (!partner) {
       setPartnerPng(null);
       return;
     }
@@ -214,8 +427,8 @@ export default function Editor({ onFinish, exporting = false }: Props) {
         height: PAGE_H,
         backgroundColor: "#ffffff",
       });
-      if (partner.data) {
-        await off.loadFromJSON(partner.data);
+      if (partnerData) {
+        await off.loadFromJSON(partnerData);
       }
       off.renderAll();
       const png = off.toDataURL({ format: "png", multiplier: 1 });
@@ -225,7 +438,7 @@ export default function Editor({ onFinish, exporting = false }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [spreadMode, partnerIndex, pages]);
+  }, [spreadMode, partnerIndex, partnerData]);
 
   const handleReady = useCallback(async (api: FabricApi) => {
     apiRef.current = api;
@@ -267,6 +480,33 @@ export default function Editor({ onFinish, exporting = false }: Props) {
         api.canvas.add(sub);
         api.canvas.renderAll();
         setBgColor("#fff3c2");
+      }
+    }
+
+    // 판형(폭)이 바뀐 채로 다시 마운트되면, 가운데 정렬 요소(표지 제목·부제 등)를
+    // 새 폭의 중앙으로 다시 맞춘다.
+    if (prevPageW !== PAGE_W && api.canvas) {
+      let moved = false;
+      for (const o of api.canvas.getObjects()) {
+        if ((o as unknown as { originX?: string }).originX === "center") {
+          o.set({ left: PAGE_W / 2 });
+          o.setCoords();
+          moved = true;
+        }
+      }
+      if (moved) {
+        api.canvas.requestRenderAll();
+        const data = api.serialize();
+        const thumb = api.toPng(0.2);
+        const idx = activeIndexRef.current;
+        const w = PAGE_W;
+        setPages((prev) =>
+          prev.map((pg, i) =>
+            i === idx
+              ? { ...pg, data, thumb }
+              : { ...pg, data: recenterCenterObjects(pg.data, w) },
+          ),
+        );
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -333,18 +573,20 @@ export default function Editor({ onFinish, exporting = false }: Props) {
     const api = apiRef.current;
     if (!api?.canvas) return;
     const fabric = await import("fabric");
-    const url = await new Promise<string>((resolve, reject) => {
+    const rawUrl = await new Promise<string>((resolve, reject) => {
       const fr = new FileReader();
       fr.onload = () => resolve(fr.result as string);
       fr.onerror = () => reject(fr.error);
       fr.readAsDataURL(file);
     });
+    // Downscale very large images on import so each one doesn't bloat the
+    // canvas state (and the undo history × each snapshot × auto-save). Cap
+    // at 2× the page dimensions — more than enough for a continuous spread.
+    const MAX_DIM = Math.max(PAGE_W, PAGE_H) * 2;
+    const url = await downscaleImageDataUrl(rawUrl, MAX_DIM);
     const img = await fabric.FabricImage.fromURL(url, {
       crossOrigin: "anonymous",
     });
-    // Place the image at its native size, centered on the page. Lets the
-    // user keep their original resolution; they can resize or use the fit
-    // buttons (전체/위/아래/왼쪽/오른쪽) afterward.
     const iw = img.width ?? PAGE_W;
     const ih = img.height ?? PAGE_H;
     img.set({
@@ -740,8 +982,8 @@ export default function Editor({ onFinish, exporting = false }: Props) {
       i === activeIndex ? { ...p, data, thumb } : p,
     );
     setPages(finalPages);
-    await onFinish(finalPages);
-  }, [pages, activeIndex, onFinish]);
+    await onFinish(finalPages, pageW, layout);
+  }, [pages, activeIndex, onFinish, pageW, layout]);
 
   const isText = useMemo(
     () => selected?.type === "i-text" || selected?.type === "text",
@@ -757,8 +999,13 @@ export default function Editor({ onFinish, exporting = false }: Props) {
   return (
     <div className="ed-shell">
       <div className="ed-topbar">
-        <Link href="/" className="ed-home">
-          <ArrowLeft size={14} /> 처음으로
+        <Link
+          href="/"
+          className="ed-home ed-home--icon"
+          aria-label="처음으로"
+          title="처음으로"
+        >
+          <Home size={18} strokeWidth={2} />
         </Link>
         <button
           type="button"
@@ -820,6 +1067,23 @@ export default function Editor({ onFinish, exporting = false }: Props) {
               }}
             />
           </label>
+          <select
+            className="ed-tool-select"
+            value={pageW}
+            onChange={(e) => {
+              const t = TEMPLATES.find(
+                (tpl) => tpl.width === Number(e.target.value),
+              );
+              if (t) onTemplateChange(t.width, t.layout);
+            }}
+            title="판형 (그림책 크기)"
+          >
+            {TEMPLATES.map((t) => (
+              <option key={t.id} value={t.width}>
+                {t.label}
+              </option>
+            ))}
+          </select>
           <button
             type="button"
             className={`ed-tool${spreadMode ? " is-active" : ""}`}
@@ -827,6 +1091,28 @@ export default function Editor({ onFinish, exporting = false }: Props) {
             title="펼침면 미리보기 (좌·우 페이지를 같이 보기)"
           >
             <Columns2 size={16} /> {spreadMode ? "한 페이지" : "스프레드"}
+          </button>
+        </div>
+        <div className="ed-undo-group">
+          <button
+            type="button"
+            className="ed-round-btn"
+            onClick={() => void undo()}
+            disabled={!canUndo}
+            title="되돌리기 (⌘/Ctrl+Z)"
+            aria-label="되돌리기"
+          >
+            <Undo2 size={18} />
+          </button>
+          <button
+            type="button"
+            className="ed-round-btn"
+            onClick={() => void redo()}
+            disabled={!canRedo}
+            title="다시 실행 (⌘/Ctrl+Shift+Z)"
+            aria-label="다시 실행"
+          >
+            <Redo2 size={18} />
           </button>
         </div>
         <div className="ed-spacer" />
@@ -864,6 +1150,7 @@ export default function Editor({ onFinish, exporting = false }: Props) {
                   : ""
               }`}
               onClick={() => void switchTo(i)}
+              style={{ aspectRatio: `${pageW} / ${PAGE_H}` }}
               draggable
               onDragStart={(e) => {
                 e.dataTransfer.effectAllowed = "move";
@@ -1023,6 +1310,7 @@ export default function Editor({ onFinish, exporting = false }: Props) {
             }}
           >
             <FabricCanvas
+              pageW={pageW}
               onReady={handleReady}
               onSelection={setSelected}
               onChange={handleCanvasChange}
@@ -1135,17 +1423,41 @@ export default function Editor({ onFinish, exporting = false }: Props) {
             </div>
             <div className="ed-props__group">
               <label className="ed-props__label">글자 크기</label>
-              <input
-                type="number"
-                className="ed-input"
+              <NumberStepper
+                value={
+                  (selected as unknown as { fontSize?: number }).fontSize ?? 24
+                }
                 min={8}
                 max={300}
+                step={2}
+                onChange={(n) => updateSelected({ fontSize: n })}
+              />
+            </div>
+            <div className="ed-props__group">
+              <label className="ed-props__label">줄 간격</label>
+              <NumberStepper
                 value={
-                  (selected as unknown as { fontSize: number }).fontSize ?? 24
+                  (selected as unknown as { lineHeight?: number }).lineHeight ??
+                  1.16
                 }
-                onChange={(e) =>
-                  updateSelected({ fontSize: Number(e.target.value) })
+                min={0.6}
+                max={3}
+                step={0.1}
+                decimals={1}
+                onChange={(n) => updateSelected({ lineHeight: n })}
+              />
+            </div>
+            <div className="ed-props__group">
+              <label className="ed-props__label">자간</label>
+              <NumberStepper
+                value={
+                  (selected as unknown as { charSpacing?: number })
+                    .charSpacing ?? 0
                 }
+                min={-200}
+                max={1000}
+                step={25}
+                onChange={(n) => updateSelected({ charSpacing: n })}
               />
             </div>
             <div className="ed-props__group">
@@ -1335,6 +1647,117 @@ export default function Editor({ onFinish, exporting = false }: Props) {
           </>
         )}
       </aside>
+    </div>
+  );
+}
+
+/** Re-center horizontally-centered objects (originX:"center") to a new page
+ * width, in serialized page data. Used when the 판형 width changes so cover
+ * titles/subtitles (and other centered text) stay centered. */
+function recenterCenterObjects(
+  data: object | null,
+  pageW: number,
+): object | null {
+  if (!data) return data;
+  const d = data as { objects?: Array<Record<string, unknown>> };
+  if (!Array.isArray(d.objects)) return data;
+  const clone = JSON.parse(JSON.stringify(data)) as {
+    objects: Array<Record<string, unknown>>;
+  };
+  for (const o of clone.objects) {
+    if (o.originX === "center") o.left = pageW / 2;
+  }
+  return clone;
+}
+
+function roundTo(n: number, decimals: number): number {
+  const f = 10 ** decimals;
+  return Math.round(n * f) / f;
+}
+function fmtNum(n: number, decimals: number): string {
+  return decimals > 0 ? n.toFixed(decimals) : String(Math.round(n));
+}
+
+/**
+ * Generic − [input] + stepper. Uses a local text buffer so the field can be
+ * cleared and retyped freely (a plain controlled number input snapped empty
+ * values back to 0, which made editing impossible). The value only updates
+ * while typing if it parses in range; blur clamps + normalizes. Supports
+ * decimals (e.g. line height) and negatives (e.g. letter spacing).
+ */
+function NumberStepper({
+  value,
+  onChange,
+  min,
+  max,
+  step,
+  decimals = 0,
+}: {
+  value: number;
+  onChange: (n: number) => void;
+  min: number;
+  max: number;
+  step: number;
+  decimals?: number;
+}) {
+  const [text, setText] = useState(fmtNum(value, decimals));
+  const [editing, setEditing] = useState(false);
+
+  useEffect(() => {
+    if (!editing) setText(fmtNum(value, decimals));
+  }, [value, editing, decimals]);
+
+  const clamp = (n: number) =>
+    roundTo(Math.min(max, Math.max(min, n)), decimals);
+  const commit = (n: number) => {
+    const c = clamp(Number.isFinite(n) ? n : value);
+    onChange(c);
+    setText(fmtNum(c, decimals));
+  };
+
+  const allowNeg = min < 0;
+  const filter = new RegExp(
+    `[^0-9${decimals > 0 ? "." : ""}${allowNeg ? "\\-" : ""}]`,
+    "g",
+  );
+
+  return (
+    <div className="ed-stepper">
+      <button
+        type="button"
+        className="ed-stepper__btn"
+        onClick={() => commit(value - step)}
+        aria-label="줄이기"
+      >
+        −
+      </button>
+      <input
+        className="ed-stepper__input"
+        inputMode={decimals > 0 ? "decimal" : "numeric"}
+        value={text}
+        onFocus={() => setEditing(true)}
+        onChange={(e) => {
+          const v = e.target.value.replace(filter, "");
+          setText(v);
+          const n = parseFloat(v);
+          if (!Number.isNaN(n) && n >= min && n <= max) {
+            onChange(roundTo(n, decimals));
+          }
+        }}
+        onBlur={() => {
+          setEditing(false);
+          const n = parseFloat(text);
+          commit(Number.isNaN(n) ? value : n);
+        }}
+      />
+      <button
+        type="button"
+        className="ed-stepper__btn"
+        onClick={() => commit(value + step)}
+        aria-label="늘리기"
+      >
+        +
+      </button>
     </div>
   );
 }

@@ -1,0 +1,119 @@
+import { neon } from "@neondatabase/serverless";
+
+/**
+ * Server-only Postgres (Neon) access. Set DATABASE_URL to the Neon *pooled*
+ * connection string (host contains `-pooler`). The HTTP driver runs each query
+ * as a single stateless request — ideal for serverless (Vercel).
+ *
+ * To keep the repos backend-agnostic, `db.execute()` mimics the old libSQL
+ * interface: it takes `?`-style placeholders and `{ rows }` out, converting
+ * `?` → `$1, $2, …` for Postgres. Do NOT import this from client components.
+ */
+
+const url = process.env.DATABASE_URL;
+if (!url) {
+  throw new Error(
+    "DATABASE_URL is not set. Add the Neon pooled connection string to .env.local.",
+  );
+}
+
+const sql = neon(url);
+
+export type Row = Record<string, unknown>;
+export type ExecuteResult = { rows: Row[] };
+
+/** Rewrite SQLite-style `?` placeholders to Postgres `$1, $2, …`. */
+function toPg(text: string): string {
+  let i = 0;
+  return text.replace(/\?/g, () => `$${++i}`);
+}
+
+export const db = {
+  async execute(
+    query: string | { sql: string; args?: unknown[] },
+  ): Promise<ExecuteResult> {
+    if (typeof query === "string") {
+      const rows = (await sql.query(query)) as Row[];
+      return { rows };
+    }
+    const rows = (await sql.query(toPg(query.sql), query.args ?? [])) as Row[];
+    return { rows };
+  },
+};
+
+let schemaReady: Promise<void> | null = null;
+
+export function ensureSchema(): Promise<void> {
+  if (!schemaReady) {
+    schemaReady = (async () => {
+      // NOTE: timestamps use BIGINT — they hold Date.now() (epoch ms, ~1.7e12),
+      // which overflows Postgres' 4-byte INTEGER (max ~2.1e9).
+      await db.execute(
+        `CREATE TABLE IF NOT EXISTS books (
+          id            TEXT PRIMARY KEY,
+          title         TEXT NOT NULL,
+          kind          TEXT NOT NULL DEFAULT 'editor',
+          author        TEXT,
+          description   TEXT,
+          price         INTEGER NOT NULL DEFAULT 0,
+          page_w        INTEGER NOT NULL DEFAULT 800,
+          layout        TEXT NOT NULL DEFAULT 'spread',
+          owner_id      TEXT NOT NULL,
+          owner_name    TEXT NOT NULL,
+          pages         TEXT NOT NULL,
+          cover_thumb   TEXT,
+          status        TEXT NOT NULL,
+          submitted_at  BIGINT NOT NULL,
+          reviewed_at   BIGINT,
+          reject_reason TEXT
+        )`,
+      );
+      // Idempotent column adds (Postgres supports IF NOT EXISTS) — defensive in
+      // case an older schema predates these columns.
+      for (const ddl of [
+        `ADD COLUMN IF NOT EXISTS description TEXT`,
+        `ADD COLUMN IF NOT EXISTS price INTEGER NOT NULL DEFAULT 0`,
+        `ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'editor'`,
+        `ADD COLUMN IF NOT EXISTS page_w INTEGER NOT NULL DEFAULT 800`,
+        `ADD COLUMN IF NOT EXISTS layout TEXT NOT NULL DEFAULT 'spread'`,
+      ]) {
+        await db.execute(`ALTER TABLE books ${ddl}`);
+      }
+
+      // Author profiles, keyed by Clerk userId.
+      // WARNING: rrn / bank_account / biz_no are sensitive 개인정보 stored as
+      // PLAINTEXT for the prototype — encrypt (or move to a vault) before prod.
+      await db.execute(
+        `CREATE TABLE IF NOT EXISTS authors (
+          user_id        TEXT PRIMARY KEY,
+          email          TEXT,
+          display_name   TEXT NOT NULL,
+          type           TEXT NOT NULL,
+          business_name  TEXT,
+          intro          TEXT,
+          status         TEXT NOT NULL,
+          applied_at     BIGINT NOT NULL,
+          reviewed_at    BIGINT,
+          reject_reason  TEXT,
+          consent_pii    INTEGER NOT NULL DEFAULT 0,
+          rrn            TEXT,
+          biz_no         TEXT,
+          bank_name      TEXT,
+          bank_account   TEXT,
+          account_holder TEXT
+        )`,
+      );
+      for (const ddl of [
+        `ADD COLUMN IF NOT EXISTS consent_pii INTEGER NOT NULL DEFAULT 0`,
+        `ADD COLUMN IF NOT EXISTS rrn TEXT`,
+        `ADD COLUMN IF NOT EXISTS biz_no TEXT`,
+        `ADD COLUMN IF NOT EXISTS bank_name TEXT`,
+        `ADD COLUMN IF NOT EXISTS bank_account TEXT`,
+        `ADD COLUMN IF NOT EXISTS account_holder TEXT`,
+      ]) {
+        await db.execute(`ALTER TABLE authors ${ddl}`);
+      }
+    })();
+  }
+  return schemaReady;
+}

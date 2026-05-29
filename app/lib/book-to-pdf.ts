@@ -4,16 +4,19 @@ import { PDFDocument } from "pdf-lib";
 import { PAGE_H, PAGE_W } from "./editor-types";
 
 /**
- * Build a PDF from page image data URLs (PNG). Each PDF page has the same
- * pixel dimensions as the source canvas (PAGE_W x PAGE_H).
+ * Build a PDF from page image data URLs (PNG). Each PDF page is pageW x PAGE_H
+ * (height fixed; width varies by 판형).
  */
-export async function pagesPngToPdf(pngDataUrls: string[]): Promise<Uint8Array> {
+export async function pagesPngToPdf(
+  pngDataUrls: string[],
+  pageW: number = PAGE_W,
+): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   for (const dataUrl of pngDataUrls) {
     const bytes = dataUrlToBytes(dataUrl);
     const img = await doc.embedPng(bytes);
-    const page = doc.addPage([PAGE_W, PAGE_H]);
-    page.drawImage(img, { x: 0, y: 0, width: PAGE_W, height: PAGE_H });
+    const page = doc.addPage([pageW, PAGE_H]);
+    page.drawImage(img, { x: 0, y: 0, width: pageW, height: PAGE_H });
   }
   return doc.save();
 }

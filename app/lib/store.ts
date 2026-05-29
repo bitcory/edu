@@ -1,0 +1,145 @@
+"use client";
+
+import type {
+  BookScope,
+  StoreBook,
+  SubmitInput,
+} from "./book-types";
+
+export type { BookStatus, StoreBook, SubmitInput } from "./book-types";
+
+/**
+ * Bookstore data access. These call the Next.js API routes (which persist to
+ * libSQL and authorize via the Clerk session). Same-origin fetch carries the
+ * Clerk session cookie automatically, so no auth header is needed — the server
+ * derives the user with getServerUser().
+ */
+
+async function listByScope(scope: BookScope): Promise<StoreBook[]> {
+  const res = await fetch(`/api/books?scope=${scope}`, { cache: "no-store" });
+  if (!res.ok) return [];
+  const data = (await res.json()) as { books: StoreBook[] };
+  return data.books ?? [];
+}
+
+export async function listStoreBooks(): Promise<StoreBook[]> {
+  return listByScope("store");
+}
+
+export async function listMyBooks(): Promise<StoreBook[]> {
+  return listByScope("mine");
+}
+
+export async function listPendingBooks(): Promise<StoreBook[]> {
+  return listByScope("pending");
+}
+
+export async function listRejectedBooks(): Promise<StoreBook[]> {
+  return listByScope("rejected");
+}
+
+export async function getBook(id: string): Promise<StoreBook | null> {
+  const res = await fetch(`/api/books/${id}`, { cache: "no-store" });
+  if (!res.ok) return null;
+  const data = (await res.json()) as { book: StoreBook };
+  return data.book ?? null;
+}
+
+export async function submitBook(input: SubmitInput): Promise<StoreBook> {
+  const res = await fetch("/api/books", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    throw new Error(await errorMessage(res, "책을 올리지 못했어요."));
+  }
+  const data = (await res.json()) as { book: StoreBook };
+  return data.book;
+}
+
+export async function updateBook(
+  id: string,
+  patch: {
+    pages: SubmitInput["pages"];
+    title?: string;
+    description?: string;
+    price?: number;
+    pageW?: number;
+    layout?: StoreBook["layout"];
+  },
+): Promise<StoreBook> {
+  const res = await fetch(`/api/books/${id}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) {
+    throw new Error(await errorMessage(res, "책을 수정하지 못했어요."));
+  }
+  const data = (await res.json()) as { book: StoreBook };
+  return data.book;
+}
+
+/** Register an uploaded PDF as a private (draft) book in my library. */
+export async function registerPdfBook(
+  file: File,
+  title: string,
+  coverThumb?: string,
+): Promise<StoreBook> {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("title", title);
+  if (coverThumb) form.append("coverThumb", coverThumb);
+  const res = await fetch("/api/books/pdf", { method: "POST", body: form });
+  if (!res.ok) {
+    throw new Error(await errorMessage(res, "내 서재 등록에 실패했어요."));
+  }
+  const data = (await res.json()) as { book: StoreBook };
+  return data.book;
+}
+
+/** Edit only title/price/description (no content change, status unchanged). */
+export async function updateBookInfo(
+  id: string,
+  patch: { title?: string; price?: number; description?: string },
+): Promise<StoreBook> {
+  const res = await fetch(`/api/books/${id}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) {
+    throw new Error(await errorMessage(res, "수정하지 못했어요."));
+  }
+  const data = (await res.json()) as { book: StoreBook };
+  return data.book;
+}
+
+export async function deleteBook(id: string): Promise<void> {
+  const res = await fetch(`/api/books/${id}`, { method: "DELETE" });
+  if (!res.ok) {
+    throw new Error(await errorMessage(res, "삭제하지 못했어요."));
+  }
+}
+
+export async function approveBook(id: string): Promise<void> {
+  await fetch(`/api/books/${id}/approve`, { method: "POST" });
+}
+
+export async function rejectBook(id: string, reason?: string): Promise<void> {
+  await fetch(`/api/books/${id}/reject`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ reason }),
+  });
+}
+
+async function errorMessage(res: Response, fallback: string): Promise<string> {
+  try {
+    const data = (await res.json()) as { error?: string };
+    return data.error ?? fallback;
+  } catch {
+    return fallback;
+  }
+}

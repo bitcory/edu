@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { BookPlus, Home } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import BookViewer from "../components/BookViewer";
 import {
@@ -9,15 +9,41 @@ import {
   revokePages,
   type RenderedPage,
 } from "../lib/pdf-to-images";
+import { registerPdfBook } from "../lib/store";
 
 type LoadState =
   | { kind: "idle" }
   | { kind: "loading"; current: number; total: number; name: string }
-  | { kind: "ready"; pages: RenderedPage[]; name: string }
+  | { kind: "ready"; pages: RenderedPage[]; name: string; file: File }
   | { kind: "error"; message: string };
+
+async function makeThumb(url: string, maxW = 300): Promise<string | undefined> {
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = reject;
+      el.src = url;
+    });
+    const scale = Math.min(1, maxW / img.naturalWidth);
+    const w = Math.round(img.naturalWidth * scale);
+    const h = Math.round(img.naturalHeight * scale);
+    const c = document.createElement("canvas");
+    c.width = w;
+    c.height = h;
+    const ctx = c.getContext("2d");
+    if (!ctx) return undefined;
+    ctx.drawImage(img, 0, 0, w, h);
+    return c.toDataURL("image/jpeg", 0.7);
+  } catch {
+    return undefined;
+  }
+}
 
 export default function ViewPage() {
   const [state, setState] = useState<LoadState>({ kind: "idle" });
+  const [registering, setRegistering] = useState(false);
+  const [registered, setRegistered] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -37,7 +63,8 @@ export default function ViewPage() {
       const pages = await renderPdfToImages(file, (current, total) => {
         setState({ kind: "loading", current, total, name: file.name });
       });
-      setState({ kind: "ready", pages, name: file.name });
+      setRegistered(false);
+      setState({ kind: "ready", pages, name: file.name, file });
     } catch (err) {
       console.error(err);
       setState({
@@ -53,20 +80,62 @@ export default function ViewPage() {
     setState({ kind: "idle" });
   }, []);
 
+  const register = useCallback(async () => {
+    if (state.kind !== "ready") return;
+    const defaultTitle = state.name.replace(/\.pdf$/i, "");
+    const title = window.prompt("내 서재에 등록할 책 제목", defaultTitle);
+    if (title === null) return;
+    setRegistering(true);
+    try {
+      const cover = state.pages[0]
+        ? await makeThumb(state.pages[0].url)
+        : undefined;
+      await registerPdfBook(state.file, title, cover);
+      setRegistered(true);
+      alert("내 서재에 등록했어요!");
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setRegistering(false);
+    }
+  }, [state]);
+
   if (state.kind === "ready") {
-    return <BookViewer pages={state.pages} onClose={reset} />;
+    return (
+      <>
+        <BookViewer pages={state.pages} onClose={reset} />
+        <button
+          type="button"
+          className="bv-register"
+          onClick={() => void register()}
+          disabled={registering || registered}
+        >
+          <BookPlus size={16} />
+          {registered
+            ? "등록됨"
+            : registering
+              ? "등록 중…"
+              : "내 서재에 등록"}
+        </button>
+      </>
+    );
   }
 
   return (
     <main className="upload-shell">
       <div className="upload-card">
         <div className="upload-cover-band" aria-hidden />
-        <Link href="/" className="upload-home" aria-label="처음으로">
-          <ArrowLeft size={14} /> 처음으로
+        <Link
+          href="/"
+          className="home-btn"
+          aria-label="처음으로"
+          title="처음으로"
+        >
+          <Home size={20} strokeWidth={2} />
         </Link>
-        <h1 className="upload-title">Magic Book</h1>
+        <h1 className="upload-title">MAGIC BOOK</h1>
         <p className="upload-sub">
-          PDF 파일을 골라 주면 진짜 책처럼 펼쳐서 볼 수 있어요.
+          PDF를 올리면 그림책처럼 한 장씩 넘겨 볼 수 있어요.
         </p>
 
         <label

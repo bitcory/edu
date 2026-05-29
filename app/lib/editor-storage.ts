@@ -1,6 +1,7 @@
 "use client";
 
 import type { EditorPage } from "./editor-types";
+import type { BookLayout } from "./book-types";
 
 const STORAGE_KEY = "tbbookviewer:editor:v1";
 
@@ -8,6 +9,8 @@ export type StoredState = {
   pages: EditorPage[];
   activeIndex: number;
   savedAt: number;
+  pageW?: number; // 판형 가로폭 (없으면 기본 800)
+  layout?: BookLayout;
 };
 
 export function loadEditorState(): StoredState | null {

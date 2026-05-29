@@ -1,14 +1,36 @@
 "use client";
 
-import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
-import dynamic from "next/dynamic";
+import {
+  forwardRef,
+  lazy,
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ArrowLeft } from "lucide-react";
 import type { RenderedPage } from "../lib/pdf-to-images";
 
-// react-pageflip touches the DOM, so client-only.
-const HTMLFlipBook = dynamic(() => import("react-pageflip"), {
-  ssr: false,
-}) as unknown as React.ComponentType<FlipBookProps>;
+type FlipBookInstance = {
+  pageFlip: () => {
+    flipNext: (corner?: "top" | "bottom") => void;
+    flipPrev: (corner?: "top" | "bottom") => void;
+  };
+};
+
+// react-pageflip touches the DOM, so it's loaded lazily — it only renders once
+// `dims` is set (a client effect), so the import never runs during SSR. Using
+// React.lazy (not next/dynamic) so the ref reaches the underlying component,
+// which we need to drive keyboard page-flipping.
+const HTMLFlipBook = lazy(() =>
+  import("react-pageflip").then((m) => ({
+    default: (m as unknown as { default: React.ComponentType<FlipBookProps> })
+      .default,
+  })),
+) as unknown as React.ForwardRefExoticComponent<
+  FlipBookProps & React.RefAttributes<FlipBookInstance>
+>;
 
 type FlipBookProps = {
   width: number;
@@ -62,14 +84,43 @@ const Page = forwardRef<HTMLDivElement, PageProps>(function Page(
 type Props = {
   pages: RenderedPage[];
   onClose?: () => void;
+  /** 단면: always show one page at a time (no 2-up spread). */
+  singlePage?: boolean;
 };
 
-export default function BookViewer({ pages, onClose }: Props) {
+export default function BookViewer({ pages, onClose, singlePage }: Props) {
   const first = pages[0];
   const aspect = first ? first.width / first.height : 0.7;
 
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const bookRef = useRef<FlipBookInstance | null>(null);
   const [dims, setDims] = useState<{ w: number; h: number } | null>(null);
+
+  // Keyboard paging: → / Space = next, ← = previous.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const api = bookRef.current?.pageFlip?.();
+      if (!api) return;
+      const tag = (document.activeElement?.tagName ?? "").toLowerCase();
+      const onControl = ["input", "textarea", "select", "button", "a"].includes(
+        tag,
+      );
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        api.flipNext();
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        api.flipPrev();
+      } else if (e.key === " " || e.key === "Spacebar") {
+        // Don't hijack Space while a button/link/field is focused.
+        if (onControl) return;
+        e.preventDefault();
+        api.flipNext();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -80,8 +131,9 @@ export default function BookViewer({ pages, onClose }: Props) {
       const availH = el.clientHeight;
       if (availW <= 0 || availH <= 0) return;
       const isPortrait = availW < 768;
-      // Spread = 2 pages wide on landscape, 1 page wide on portrait.
-      const pagesAcross = isPortrait ? 1 : 2;
+      // Spread = 2 pages wide on landscape, 1 page wide on portrait. 단면
+      // books (singlePage) are always 1-up.
+      const pagesAcross = singlePage || isPortrait ? 1 : 2;
       const maxPageWByWidth = availW / pagesAcross;
       const maxPageWByHeight = availH * aspect;
       const pageW = Math.floor(Math.min(maxPageWByWidth, maxPageWByHeight));
@@ -97,7 +149,7 @@ export default function BookViewer({ pages, onClose }: Props) {
       ro.disconnect();
       window.removeEventListener("orientationchange", compute);
     };
-  }, [aspect]);
+  }, [aspect, singlePage]);
 
   const pageEls = useMemo(
     () =>
@@ -129,22 +181,25 @@ export default function BookViewer({ pages, onClose }: Props) {
       <div ref={containerRef} className="bv-stage">
         <div className="bv-book-shadow" aria-hidden />
         {dims && pages.length > 0 && (
-          <HTMLFlipBook
-            width={dims.w}
-            height={dims.h}
-            size="fixed"
-            showCover
-            mobileScrollSupport={false}
-            maxShadowOpacity={0.4}
-            drawShadow
-            flippingTime={650}
-            useMouseEvents
-            usePortrait
-            className="bv-flipbook"
-            style={{}}
-          >
-            {pageEls}
-          </HTMLFlipBook>
+          <Suspense fallback={null}>
+            <HTMLFlipBook
+              ref={bookRef}
+              width={dims.w}
+              height={dims.h}
+              size="fixed"
+              showCover
+              mobileScrollSupport={false}
+              maxShadowOpacity={0.4}
+              drawShadow
+              flippingTime={650}
+              useMouseEvents
+              usePortrait
+              className="bv-flipbook"
+              style={{}}
+            >
+              {pageEls}
+            </HTMLFlipBook>
+          </Suspense>
         )}
       </div>
     </div>

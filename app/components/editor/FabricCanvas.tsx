@@ -31,6 +31,8 @@ type Props = {
   onChange: () => void;
   /** Active snap guides — empty array when nothing is being dragged. */
   onGuides: (guides: Guide[]) => void;
+  /** Page width (height is fixed at PAGE_H). Varies by 판형. */
+  pageW?: number;
 };
 
 /** Snap threshold in canvas-pixel space — how close an edge has to get to a
@@ -38,7 +40,7 @@ type Props = {
 const SNAP_THRESHOLD = 14;
 
 export default forwardRef<FabricApi | null, Props>(function FabricCanvas(
-  { onReady, onSelection, onChange, onGuides },
+  { onReady, onSelection, onChange, onGuides, pageW = PAGE_W },
   ref,
 ) {
   const elRef = useRef<HTMLCanvasElement | null>(null);
@@ -54,7 +56,7 @@ export default forwardRef<FabricApi | null, Props>(function FabricCanvas(
       if (cancelled || !elRef.current) return;
 
       canvas = new fabric.Canvas(elRef.current, {
-        width: PAGE_W,
+        width: pageW,
         height: PAGE_H,
         backgroundColor: "#ffffff",
         preserveObjectStacking: true,
@@ -77,10 +79,10 @@ export default forwardRef<FabricApi | null, Props>(function FabricCanvas(
         // Canvas edges + center + quarter marks for richer alignment.
         const xs: number[] = [
           0,
-          PAGE_W / 4,
-          PAGE_W / 2,
-          (3 * PAGE_W) / 4,
-          PAGE_W,
+          pageW / 4,
+          pageW / 2,
+          (3 * pageW) / 4,
+          pageW,
         ];
         const ys: number[] = [
           0,
