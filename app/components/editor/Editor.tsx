@@ -1225,7 +1225,13 @@ export default function Editor({
           disabled={exporting}
         >
           <BookOpen size={16} />
-          {exporting ? "책으로 만드는 중…" : "완성 → 책으로"}
+          {exporting ? (
+            "책으로 만드는 중…"
+          ) : (
+            <>
+              완성<span className="ed-finish__suffix"> → 책으로</span>
+            </>
+          )}
         </button>
       </div>
 

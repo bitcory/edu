@@ -1264,13 +1264,27 @@ textarea.ed-input {
     bottom: 0;
     z-index: 25;
     margin: 0;
-    padding: 8px 10px;
+    /* extra left padding reserves room for the fixed undo/redo cluster */
+    padding: 8px 10px 8px 96px;
     border-left: 0;
     border-top: 1px solid rgba(255, 220, 160, 0.12);
     background: linear-gradient(180deg, #3b271a, #2a1c11);
     flex-wrap: nowrap;
     overflow-x: auto;
     gap: 8px;
+  }
+  /* Undo/redo sit at the bottom-left corner, above the tool bar. */
+  .ed-undo-group {
+    position: fixed;
+    left: 8px;
+    bottom: 8px;
+    z-index: 27;
+    display: flex;
+    gap: 6px;
+  }
+  /* "완성 → 책으로" shortens to "완성" so the save group fits the top row. */
+  .ed-finish__suffix {
+    display: none;
   }
   .ed-tools .ed-tool,
   .ed-tools .ed-tool-select {
