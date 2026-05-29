@@ -1,4 +1,5 @@
 import { db, ensureSchema, type Row } from "./db";
+import { initialEditorStatus, initialPdfStatus } from "./publish-policy";
 import type { EditorPage } from "./editor-types";
 import type {
   BookKind,
@@ -111,7 +112,7 @@ export async function insertBook(
     ownerName: owner.name,
     pages: input.pages,
     coverThumb: input.pages[0]?.thumb,
-    status: "pending",
+    status: initialEditorStatus(),
     submittedAt: Date.now(),
   };
   await db.execute({
@@ -157,13 +158,13 @@ export async function insertPdfBook(
     ownerName: owner.name,
     pages: [],
     coverThumb: input.coverThumb,
-    status: "draft",
+    status: initialPdfStatus(),
     submittedAt: Date.now(),
   };
   await db.execute({
     sql: `INSERT INTO books
             (id, title, kind, author, price, page_w, layout, owner_id, owner_name, pages, cover_thumb, status, submitted_at)
-          VALUES (?, ?, 'pdf', ?, 0, ?, ?, ?, ?, '[]', ?, 'draft', ?)`,
+          VALUES (?, ?, 'pdf', ?, 0, ?, ?, ?, ?, '[]', ?, ?, ?)`,
     args: [
       book.id,
       book.title,
@@ -173,6 +174,7 @@ export async function insertPdfBook(
       book.ownerId,
       book.ownerName,
       book.coverThumb ?? null,
+      book.status,
       book.submittedAt,
     ],
   });
@@ -208,7 +210,7 @@ export async function updateBookSnapshot(
     sql: `UPDATE books
           SET pages = ?, cover_thumb = ?, title = ?, description = ?, price = ?,
               page_w = ?, layout = ?,
-              status = 'pending', submitted_at = ?, reviewed_at = NULL, reject_reason = NULL
+              status = ?, submitted_at = ?, reviewed_at = NULL, reject_reason = NULL
           WHERE id = ?`,
     args: [
       JSON.stringify(patch.pages),
@@ -218,6 +220,7 @@ export async function updateBookSnapshot(
       price,
       pageW,
       layout,
+      initialEditorStatus(),
       submittedAt,
       id,
     ],

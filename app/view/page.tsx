@@ -10,6 +10,7 @@ import {
   type RenderedPage,
 } from "../lib/pdf-to-images";
 import { registerPdfBook } from "../lib/store";
+import { OPEN_PUBLISH } from "../lib/publish-policy";
 
 type LoadState =
   | { kind: "idle" }
@@ -83,7 +84,10 @@ export default function ViewPage() {
   const register = useCallback(async () => {
     if (state.kind !== "ready") return;
     const defaultTitle = state.name.replace(/\.pdf$/i, "");
-    const title = window.prompt("내 서재에 등록할 책 제목", defaultTitle);
+    const title = window.prompt(
+      OPEN_PUBLISH ? "스토어에 올릴 책 제목" : "내 서재에 등록할 책 제목",
+      defaultTitle,
+    );
     if (title === null) return;
     setRegistering(true);
     try {
@@ -92,7 +96,11 @@ export default function ViewPage() {
         : undefined;
       await registerPdfBook(state.file, title, cover);
       setRegistered(true);
-      alert("내 서재에 등록했어요!");
+      alert(
+        OPEN_PUBLISH
+          ? "스토어에 올렸어요! 이제 모두가 볼 수 있어요."
+          : "내 서재에 등록했어요!",
+      );
     } catch (err) {
       alert((err as Error).message);
     } finally {
@@ -115,7 +123,9 @@ export default function ViewPage() {
             ? "등록됨"
             : registering
               ? "등록 중…"
-              : "내 서재에 등록"}
+              : OPEN_PUBLISH
+                ? "스토어에 올리기"
+                : "내 서재에 등록"}
         </button>
       </>
     );

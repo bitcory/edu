@@ -1,6 +1,7 @@
 import { type NextRequest } from "next/server";
 import { insertBook, listBooks } from "../../lib/books-repo";
 import { isApprovedAuthor } from "../../lib/authors-repo";
+import { OPEN_PUBLISH } from "../../lib/publish-policy";
 import { getServerUser } from "../../lib/server-auth";
 import type { BookScope } from "../../lib/book-types";
 
@@ -25,7 +26,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const user = await getServerUser();
   if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
-  if (!user.isAdmin && !(await isApprovedAuthor(user.id))) {
+  if (!OPEN_PUBLISH && !user.isAdmin && !(await isApprovedAuthor(user.id))) {
     return Response.json(
       { error: "작가 승인을 받아야 책을 올릴 수 있어요." },
       { status: 403 },

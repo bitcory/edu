@@ -6,6 +6,7 @@ import {
   updateBookSnapshot,
 } from "../../../lib/books-repo";
 import { isApprovedAuthor } from "../../../lib/authors-repo";
+import { OPEN_PUBLISH } from "../../../lib/publish-policy";
 import { deletePdf } from "../../../lib/pdf-storage";
 import { getServerUser } from "../../../lib/server-auth";
 
@@ -58,7 +59,7 @@ export async function PATCH(
 
   // Snapshot re-edit (editor books): requires an approved author and sends the
   // book back to pending for re-approval.
-  if (!user.isAdmin && !(await isApprovedAuthor(user.id))) {
+  if (!OPEN_PUBLISH && !user.isAdmin && !(await isApprovedAuthor(user.id))) {
     return Response.json(
       { error: "작가 승인을 받아야 책을 올릴 수 있어요." },
       { status: 403 },
