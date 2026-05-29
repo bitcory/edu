@@ -46,6 +46,8 @@ export default forwardRef<FabricApi | null, Props>(function FabricCanvas(
   const elRef = useRef<HTMLCanvasElement | null>(null);
   const canvasRef = useRef<Canvas | null>(null);
   const apiRef = useRef<FabricApi | null>(null);
+  // Where the dragged object started — used to lock the axis on Shift-drag.
+  const dragStartRef = useRef<{ left: number; top: number } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -100,9 +102,34 @@ export default forwardRef<FabricApi | null, Props>(function FabricCanvas(
         return { xs, ys };
       };
 
+      canvas.on("mouse:down", (ev) => {
+        const t = ev.target as FabricObject | undefined;
+        dragStartRef.current = t
+          ? { left: t.left ?? 0, top: t.top ?? 0 }
+          : null;
+      });
+
       canvas.on("object:moving", (ev) => {
         const target = ev.target as FabricObject | undefined;
         if (!target) return;
+
+        // Shift-drag → lock to one axis (the direction dragged the most),
+        // e.g. slide a full-bleed image perfectly horizontally.
+        const pointerEv = ev.e as { shiftKey?: boolean } | undefined;
+        const start = dragStartRef.current;
+        if (pointerEv?.shiftKey && start) {
+          const dxTotal = (target.left ?? 0) - start.left;
+          const dyTotal = (target.top ?? 0) - start.top;
+          if (Math.abs(dxTotal) >= Math.abs(dyTotal)) {
+            target.set("top", start.top); // horizontal only
+          } else {
+            target.set("left", start.left); // vertical only
+          }
+          target.setCoords();
+          onGuides([]);
+          return; // skip snapping while axis-locked
+        }
+
         const r = target.getBoundingRect();
         const { xs, ys } = collectTargets(target);
         const guides: Guide[] = [];
