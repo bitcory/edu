@@ -29,6 +29,7 @@ export type StoreBook = {
   submittedAt: number;
   reviewedAt?: number;
   rejectReason?: string;
+  likeCount?: number; // populated by the store listing (좋아요 수)
 };
 
 export type SubmitInput = {

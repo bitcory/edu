@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BookOpen, Eye, Home, Library, Search } from "lucide-react";
+import { BookOpen, Eye, Heart, Home, Library, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import BookViewer from "../components/BookViewer";
 import BookPreviewModal from "../components/BookPreviewModal";
@@ -131,7 +131,12 @@ export default function StorePage() {
               </button>
               <div className="store-card__title">{b.title}</div>
               <div className="store-card__author">{b.author ?? b.ownerName}</div>
-              <div className="store-card__price">{formatPrice(b.price)}</div>
+              <div className="store-card__meta">
+                <span className="store-card__price">{formatPrice(b.price)}</span>
+                <span className="store-card__likes">
+                  <Heart size={14} fill="currentColor" /> {b.likeCount ?? 0}
+                </span>
+              </div>
               <button
                 type="button"
                 className="store-card__preview"
@@ -153,6 +158,14 @@ export default function StorePage() {
             setPreview(null);
             void open(b);
           }}
+          onLikeChange={(likeCount) =>
+            setBooks(
+              (prev) =>
+                prev?.map((x) =>
+                  x.id === preview.id ? { ...x, likeCount } : x,
+                ) ?? prev,
+            )
+          }
         />
       )}
     </main>

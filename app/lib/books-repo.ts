@@ -34,6 +34,7 @@ function rowToBook(row: Row): StoreBook {
     reviewedAt: row.reviewed_at == null ? undefined : Number(row.reviewed_at),
     rejectReason:
       row.reject_reason == null ? undefined : String(row.reject_reason),
+    likeCount: row.like_count == null ? undefined : Number(row.like_count),
   };
 }
 
@@ -44,8 +45,11 @@ export async function listBooks(
   await ensureSchema();
   if (scope === "store") {
     const res = await db.execute({
-      sql: `SELECT * FROM books WHERE status = 'approved'
-            ORDER BY COALESCE(reviewed_at, submitted_at) DESC`,
+      sql: `SELECT b.*,
+                   (SELECT COUNT(*) FROM likes l WHERE l.book_id = b.id) AS like_count
+            FROM books b
+            WHERE b.status = 'approved'
+            ORDER BY COALESCE(b.reviewed_at, b.submitted_at) DESC`,
       args: [],
     });
     return res.rows.map(rowToBook);

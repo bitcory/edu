@@ -18,9 +18,15 @@ type Props = {
   book: StoreBook;
   onClose: () => void;
   onRead: () => void;
+  onLikeChange?: (likeCount: number) => void;
 };
 
-export default function BookPreviewModal({ book, onClose, onRead }: Props) {
+export default function BookPreviewModal({
+  book,
+  onClose,
+  onRead,
+  onLikeChange,
+}: Props) {
   const { user } = useUser();
   const { isAdmin } = useIsAdmin();
   const [likeCount, setLikeCount] = useState(0);
@@ -53,6 +59,7 @@ export default function BookPreviewModal({ book, onClose, onRead }: Props) {
       const r = await toggleBookLike(book.id);
       setLiked(r.liked);
       setLikeCount(r.likeCount);
+      onLikeChange?.(r.likeCount);
     } catch (err) {
       setLiked(wasLiked);
       setLikeCount((c) => c + (wasLiked ? 1 : -1));

@@ -2377,6 +2377,27 @@ textarea.ed-input {
   color: var(--leather-deep);
 }
 
+.store-card__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.store-card__meta .store-card__price {
+  margin-top: 0;
+}
+
+.store-card__likes {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 700;
+  font-size: 13px;
+  color: #e1604c;
+}
+
 .store-card__reason {
   margin: 0;
   font-size: 12px;
