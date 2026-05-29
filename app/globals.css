@@ -1111,6 +1111,30 @@ body {
   margin-bottom: 14px;
 }
 
+.ed-props__bar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ed-props__del {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border: 1px solid rgba(225, 96, 76, 0.5);
+  border-radius: 999px;
+  background: rgba(225, 96, 76, 0.16);
+  color: #ff9b86;
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ed-props__del:hover {
+  background: rgba(225, 96, 76, 0.28);
+}
+
 .ed-props__title {
   margin: 0;
   font-weight: 700;

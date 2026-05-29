@@ -548,6 +548,7 @@ export default function Editor({
           fontWeight: "bold",
           fill: "#3a2415",
           textAlign: "center",
+          lineHeight: 1.5,
         });
         const sub = new fabric.IText("부제 또는 지은이", {
           left: PAGE_W / 2,
@@ -557,6 +558,7 @@ export default function Editor({
           fontFamily: DEFAULT_FONT.family,
           fill: "#6a4a2b",
           textAlign: "center",
+          lineHeight: 1.5,
         });
         api.canvas.add(title);
         api.canvas.add(sub);
@@ -1635,15 +1637,28 @@ export default function Editor({
       <aside className={`ed-props${propsOpen ? " ed-props--open" : ""}`}>
         <div className="ed-props__bar">
           <h3 className="ed-props__title">속성</h3>
-          <button
-            type="button"
-            className="ed-props__close"
-            onClick={closeProps}
-            aria-label="속성 닫기"
-            title="닫기"
-          >
-            <X size={18} />
-          </button>
+          <div className="ed-props__bar-actions">
+            {selected && (
+              <button
+                type="button"
+                className="ed-props__del"
+                onClick={deleteSelected}
+                title="선택한 요소 삭제"
+                aria-label="삭제"
+              >
+                <Trash2 size={16} /> 삭제
+              </button>
+            )}
+            <button
+              type="button"
+              className="ed-props__close"
+              onClick={closeProps}
+              aria-label="속성 닫기"
+              title="닫기"
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
         {!selected && (
           <p className="ed-props__hint">
@@ -1756,7 +1771,7 @@ export default function Editor({
               <NumberStepper
                 value={
                   (selected as unknown as { lineHeight?: number }).lineHeight ??
-                  1.16
+                  1.5
                 }
                 min={0.6}
                 max={3}
@@ -2036,13 +2051,6 @@ export default function Editor({
                 </button>
               </div>
             </div>
-            <button
-              type="button"
-              className="ed-danger"
-              onClick={deleteSelected}
-            >
-              <Trash2 size={16} /> 삭제
-            </button>
           </>
         )}
       </aside>
