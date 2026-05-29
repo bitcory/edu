@@ -73,6 +73,7 @@ export async function updateBook(
   patch: {
     pages: SubmitInput["pages"];
     title?: string;
+    author?: string;
     description?: string;
     price?: number;
     pageW?: number;

@@ -70,6 +70,7 @@ export async function PATCH(
   const book = await updateBookSnapshot(id, {
     pages,
     title: body.title,
+    author: body.author,
     description: body.description,
     price: body.price,
     pageW: body.pageW,

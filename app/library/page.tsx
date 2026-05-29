@@ -404,6 +404,7 @@ export default function LibraryPage() {
         <SubmitBookModal
           submitting={busy}
           authorType={author?.type}
+          initial={{ author: author?.displayName }}
           onCancel={() => setDraftPages(null)}
           onConfirm={(values) => void confirmSubmit(values)}
         />

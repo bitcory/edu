@@ -157,6 +157,7 @@ function EditPageInner() {
           await updateBook(bookId, {
             pages,
             title: values.title,
+            author: values.author,
             description: values.description,
             price: values.price,
             pageW,
@@ -241,6 +242,7 @@ function EditPageInner() {
             <SubmitBookModal
               submitting={submitting}
               authorType={author?.type}
+              initial={{ author: author?.displayName }}
               onCancel={() => setSubmitOpen(false)}
               onConfirm={(values) => void handleSubmitToStore(mode.pages, values)}
             />

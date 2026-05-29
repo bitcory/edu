@@ -207,6 +207,7 @@ export async function updateBookSnapshot(
   patch: {
     pages: EditorPage[];
     title?: string;
+    author?: string;
     description?: string;
     price?: number;
     pageW?: number;
@@ -218,6 +219,10 @@ export async function updateBookSnapshot(
   const existing = await getBookById(id);
   if (!existing) return null;
   const title = patch.title?.trim() || existing.title;
+  const author =
+    patch.author !== undefined
+      ? patch.author.trim() || existing.author || null
+      : (existing.author ?? null);
   const description =
     patch.description !== undefined
       ? patch.description.trim() || null
@@ -229,7 +234,7 @@ export async function updateBookSnapshot(
   const submittedAt = Date.now();
   await db.execute({
     sql: `UPDATE books
-          SET pages = ?, cover_thumb = ?, title = ?, description = ?, price = ?,
+          SET pages = ?, cover_thumb = ?, title = ?, author = ?, description = ?, price = ?,
               page_w = ?, layout = ?,
               status = ?, submitted_at = ?, reviewed_at = NULL, reject_reason = NULL
           WHERE id = ?`,
@@ -237,6 +242,7 @@ export async function updateBookSnapshot(
       JSON.stringify(patch.pages),
       patch.pages[0]?.thumb ?? null,
       title,
+      author,
       description,
       price,
       pageW,
