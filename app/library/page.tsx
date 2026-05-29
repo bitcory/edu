@@ -266,6 +266,15 @@ export default function LibraryPage() {
                     >
                       <Pencil size={16} />
                     </button>
+                  ) : b.status === "draft" ? (
+                    <Link
+                      href={`/edit?book=${b.id}`}
+                      className="lib-continue"
+                      title="이어서 만들기 (책 만들기에서 열기)"
+                      aria-label="이어서 만들기"
+                    >
+                      <Pencil size={14} /> 이어서 만들기
+                    </Link>
                   ) : (
                     b.status !== "pending" && (
                       <Link
