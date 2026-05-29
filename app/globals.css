@@ -864,7 +864,8 @@ body {
 
 /* Mobile-only: open the page-list drawer (topbar) and close it (drawer head)
    + the dimmed backdrop behind the drawer. Hidden on desktop. */
-.ed-pagelist-toggle {
+.ed-pagelist-toggle,
+.ed-props-toggle {
   display: none;
   align-items: center;
   gap: 6px;
@@ -876,6 +877,12 @@ body {
   font-weight: 700;
   font-size: 13px;
   cursor: pointer;
+}
+
+/* Highlight 편집하기 once something is selected — hints it's ready to edit. */
+.ed-props-toggle.is-active {
+  background: var(--accent, #ff9b6f);
+  color: #fff;
 }
 
 .ed-pagelist__close {
@@ -1265,7 +1272,8 @@ textarea.ed-input {
     font-size: 13px;
   }
 
-  .ed-pagelist-toggle {
+  .ed-pagelist-toggle,
+  .ed-props-toggle {
     display: inline-flex;
   }
 

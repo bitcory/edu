@@ -33,6 +33,7 @@ import {
   Plus,
   Redo2,
   Save,
+  SlidersHorizontal,
   Undo2,
   Square as SquareIcon,
   Trash2,
@@ -150,9 +151,11 @@ export default function Editor({
       : 0;
   });
   const [selected, setSelected] = useState<FabricObject | null>(null);
-  // Mobile: the page list is a left slide-out drawer (toggled by a topbar
-  // button); on desktop it's always-visible in the grid and this is ignored.
+  // Mobile: the page list is a left slide-out drawer and the properties panel
+  // is a right slide-out drawer, each toggled by a topbar button. On desktop
+  // both are always-visible in the grid and these are ignored.
   const [pagelistOpen, setPagelistOpen] = useState(false);
+  const [propsOpen, setPropsOpen] = useState(false);
   const [bgColor, setBgColor] = useState("#ffffff");
   const [_changeTick, setChangeTick] = useState(0);
   const [guides, setGuides] = useState<Guide[]>([]);
@@ -1025,16 +1028,9 @@ export default function Editor({
     }
   }, [pages, activeIndex, onSaveDraft, pageW, layout]);
 
-  // Deselect — closes the mobile properties sheet (which is shown while an
-  // object is selected) and clears the canvas selection.
-  const closeProps = useCallback(() => {
-    const c = apiRef.current?.canvas;
-    if (c) {
-      c.discardActiveObject();
-      c.requestRenderAll();
-    }
-    setSelected(null);
-  }, []);
+  // Close the mobile properties drawer (keeps the canvas selection so the user
+  // can reopen "편집하기" to keep editing the same object).
+  const closeProps = useCallback(() => setPropsOpen(false), []);
 
   const isText = useMemo(
     () => selected?.type === "i-text" || selected?.type === "text",
@@ -1074,6 +1070,15 @@ export default function Editor({
           aria-label="페이지 목록 열기"
         >
           <Files size={14} /> 페이지
+        </button>
+        <button
+          type="button"
+          className={`ed-props-toggle${selected ? " is-active" : ""}`}
+          onClick={() => setPropsOpen(true)}
+          title="선택한 요소 편집하기"
+          aria-label="편집하기"
+        >
+          <SlidersHorizontal size={14} /> 편집하기
         </button>
         <div className="ed-tools">
           <button type="button" className="ed-tool" onClick={addText}>
@@ -1460,7 +1465,7 @@ export default function Editor({
           )}
       </div>
 
-      <aside className={`ed-props${selected ? " ed-props--open" : ""}`}>
+      <aside className={`ed-props${propsOpen ? " ed-props--open" : ""}`}>
         <div className="ed-props__bar">
           <h3 className="ed-props__title">속성</h3>
           <button
