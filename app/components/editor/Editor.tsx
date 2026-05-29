@@ -1021,6 +1021,17 @@ export default function Editor({
     }
   }, [pages, activeIndex, onSaveDraft, pageW, layout]);
 
+  // Deselect — closes the mobile properties sheet (which is shown while an
+  // object is selected) and clears the canvas selection.
+  const closeProps = useCallback(() => {
+    const c = apiRef.current?.canvas;
+    if (c) {
+      c.discardActiveObject();
+      c.requestRenderAll();
+    }
+    setSelected(null);
+  }, []);
+
   const isText = useMemo(
     () => selected?.type === "i-text" || selected?.type === "text",
     [selected],
@@ -1417,8 +1428,19 @@ export default function Editor({
           )}
       </div>
 
-      <aside className="ed-props">
-        <h3 className="ed-props__title">속성</h3>
+      <aside className={`ed-props${selected ? " ed-props--open" : ""}`}>
+        <div className="ed-props__bar">
+          <h3 className="ed-props__title">속성</h3>
+          <button
+            type="button"
+            className="ed-props__close"
+            onClick={closeProps}
+            aria-label="속성 닫기"
+            title="닫기"
+          >
+            <X size={18} />
+          </button>
+        </div>
         {!selected && (
           <p className="ed-props__hint">
             위 도구에서 글자·그림·도형을 더해 보세요. 캔버스의 요소를

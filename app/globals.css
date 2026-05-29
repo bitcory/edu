@@ -990,13 +990,34 @@ body {
   overflow-y: auto;
 }
 
+.ed-props__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
 .ed-props__title {
-  margin: 0 0 14px;
+  margin: 0;
   font-weight: 700;
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: #ffd9a3;
+}
+
+/* Close button only exists for the mobile bottom-sheet; hidden on desktop. */
+.ed-props__close {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffe6c0;
+  cursor: pointer;
 }
 
 .ed-props__group {
@@ -1173,13 +1194,43 @@ textarea.ed-input {
 @media (max-width: 900px) {
   .ed-shell {
     grid-template-columns: 1fr;
-    grid-template-rows: 56px 110px 1fr 0;
+    /* top row auto so the wrapped toolbar can grow to multiple rows */
+    grid-template-rows: auto 96px 1fr 0;
     grid-template-areas:
       "top"
       "pages"
       "canvas"
       "props";
   }
+  /* Toolbar wraps to as many rows as needed — every tool stays reachable
+     (no horizontal clipping) instead of being pushed off-screen. */
+  .ed-topbar {
+    flex-wrap: wrap;
+    height: auto;
+    padding: 8px 10px;
+    gap: 6px;
+  }
+  .ed-spacer {
+    display: none;
+  }
+  .ed-tools {
+    flex-wrap: wrap;
+    margin-left: 0;
+    padding-left: 0;
+    border-left: 0;
+  }
+  .ed-tool,
+  .ed-tool-select,
+  .ed-home {
+    padding: 7px 11px;
+    font-size: 12px;
+  }
+  .ed-finish,
+  .ed-draft {
+    padding: 8px 16px;
+    font-size: 13px;
+  }
+
   .ed-pagelist {
     border-right: 0;
     border-bottom: 1px solid rgba(255, 220, 160, 0.08);
@@ -1193,8 +1244,31 @@ textarea.ed-input {
     width: 70px;
     flex-shrink: 0;
   }
+
+  /* Properties move from a hidden side panel to a slide-up bottom sheet that
+     appears only while an object is selected — so it doesn't cover the canvas
+     otherwise, and the user can still edit text/colour/size on a phone. */
   .ed-props {
-    display: none;
+    display: block;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    max-height: 62vh;
+    overflow-y: auto;
+    z-index: 30;
+    border-top: 1px solid rgba(255, 220, 160, 0.16);
+    border-radius: 18px 18px 0 0;
+    background: rgba(28, 19, 11, 0.98);
+    box-shadow: 0 -12px 32px rgba(0, 0, 0, 0.45);
+    transform: translateY(110%);
+    transition: transform 0.22s ease;
+  }
+  .ed-props--open {
+    transform: translateY(0);
+  }
+  .ed-props__close {
+    display: inline-flex;
   }
 }
 
