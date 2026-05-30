@@ -45,6 +45,13 @@ function EditPageInner() {
   const [submitting, setSubmitting] = useState(false);
   const [submitOpen, setSubmitOpen] = useState(false);
   const [author, setAuthor] = useState<Author | null>(null);
+  // Existing book's meta (title/category/…) to prefill the submit modal on re-edit.
+  const [bookMeta, setBookMeta] = useState<{
+    title?: string;
+    author?: string;
+    description?: string;
+    category?: string;
+  } | null>(null);
   const [pageW, setPageW] = useState<number>(DEFAULT_TEMPLATE.width);
   const [prevPageW, setPrevPageW] = useState<number>(DEFAULT_TEMPLATE.width);
   const [layout, setLayout] = useState<BookLayout>(DEFAULT_TEMPLATE.layout);
@@ -94,6 +101,12 @@ function EditPageInner() {
       if (cancelled) return;
       if (b) {
         setInitialPages(b.pages);
+        setBookMeta({
+          title: b.title,
+          author: b.author,
+          description: b.description,
+          category: b.category,
+        });
         const w = b.pageW || DEFAULT_TEMPLATE.width;
         setPageW(w);
         setPrevPageW(w); // equal → no recenter on load
@@ -159,19 +172,23 @@ function EditPageInner() {
             title: values.title,
             author: values.author,
             description: values.description,
+            category: values.category,
             price: values.price,
             pageW,
             layout,
+            coverThumb: values.cover,
           });
         } else {
           await submitBook({
             title: values.title,
             author: values.author,
             description: values.description,
+            category: values.category,
             price: values.price,
             pageW,
             layout,
             pages,
+            coverThumb: values.cover,
           });
         }
         alert("북스토어에 올렸어요! 슈퍼관리자 승인 후 모두에게 공개돼요.");
@@ -242,7 +259,13 @@ function EditPageInner() {
             <SubmitBookModal
               submitting={submitting}
               authorType={author?.type}
-              initial={{ author: author?.displayName }}
+              initial={{
+                title: bookMeta?.title,
+                author: bookMeta?.author ?? author?.displayName,
+                description: bookMeta?.description,
+                category: bookMeta?.category,
+                cover: mode.pages[0]?.thumb,
+              }}
               onCancel={() => setSubmitOpen(false)}
               onConfirm={(values) => void handleSubmitToStore(mode.pages, values)}
             />

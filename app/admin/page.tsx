@@ -233,6 +233,7 @@ export default function AdminPage() {
             author: editInfo.author ?? "",
             price: editInfo.price,
             description: editInfo.description ?? "",
+            category: editInfo.category ?? "",
           }}
           submitting={busy}
           onCancel={() => setEditInfo(null)}

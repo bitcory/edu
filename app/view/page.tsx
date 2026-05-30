@@ -10,6 +10,10 @@ import {
   type RenderedPage,
 } from "../lib/pdf-to-images";
 import { registerPdfBook } from "../lib/store";
+import SubmitBookModal, {
+  type SubmitValues,
+} from "../components/SubmitBookModal";
+import { urlToThumb } from "../lib/thumbnail";
 import { OPEN_PUBLISH } from "../lib/publish-policy";
 
 type LoadState =
@@ -18,33 +22,14 @@ type LoadState =
   | { kind: "ready"; pages: RenderedPage[]; name: string; file: File }
   | { kind: "error"; message: string };
 
-async function makeThumb(url: string, maxW = 300): Promise<string | undefined> {
-  try {
-    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const el = new Image();
-      el.onload = () => resolve(el);
-      el.onerror = reject;
-      el.src = url;
-    });
-    const scale = Math.min(1, maxW / img.naturalWidth);
-    const w = Math.round(img.naturalWidth * scale);
-    const h = Math.round(img.naturalHeight * scale);
-    const c = document.createElement("canvas");
-    c.width = w;
-    c.height = h;
-    const ctx = c.getContext("2d");
-    if (!ctx) return undefined;
-    ctx.drawImage(img, 0, 0, w, h);
-    return c.toDataURL("image/jpeg", 0.7);
-  } catch {
-    return undefined;
-  }
-}
-
 export default function ViewPage() {
   const [state, setState] = useState<LoadState>({ kind: "idle" });
   const [registering, setRegistering] = useState(false);
   const [registered, setRegistered] = useState(false);
+  // Holds the auto-generated cover while the submit modal is open.
+  const [submit, setSubmit] = useState<{ cover?: string; title: string } | null>(
+    null,
+  );
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -81,34 +66,44 @@ export default function ViewPage() {
     setState({ kind: "idle" });
   }, []);
 
-  const register = useCallback(async () => {
+  // Open the submit modal — auto-fill the cover from the first PDF page.
+  const openSubmit = useCallback(async () => {
     if (state.kind !== "ready") return;
     const defaultTitle = state.name.replace(/\.pdf$/i, "");
-    const title = window.prompt(
-      OPEN_PUBLISH ? "스토어에 올릴 책 제목" : "내 서재에 등록할 책 제목",
-      defaultTitle,
-    );
-    if (title === null) return;
-    const author =
-      window.prompt("지은이 (비워두면 내 이름으로 올라가요)", "") ?? "";
-    setRegistering(true);
-    try {
-      const cover = state.pages[0]
-        ? await makeThumb(state.pages[0].url)
-        : undefined;
-      await registerPdfBook(state.file, title, cover, author);
-      setRegistered(true);
-      alert(
-        OPEN_PUBLISH
-          ? "스토어에 올렸어요! 이제 모두가 볼 수 있어요."
-          : "내 서재에 등록했어요!",
-      );
-    } catch (err) {
-      alert((err as Error).message);
-    } finally {
-      setRegistering(false);
-    }
+    const cover = state.pages[0]
+      ? await urlToThumb(state.pages[0].url)
+      : undefined;
+    setSubmit({ cover, title: defaultTitle });
   }, [state]);
+
+  const confirmSubmit = useCallback(
+    async (values: SubmitValues) => {
+      if (state.kind !== "ready") return;
+      setRegistering(true);
+      try {
+        await registerPdfBook(state.file, {
+          title: values.title,
+          author: values.author,
+          description: values.description,
+          category: values.category,
+          price: values.price,
+          coverThumb: values.cover,
+        });
+        setRegistered(true);
+        setSubmit(null);
+        alert(
+          OPEN_PUBLISH
+            ? "스토어에 올렸어요! 이제 모두가 볼 수 있어요."
+            : "내 서재에 등록했어요!",
+        );
+      } catch (err) {
+        alert((err as Error).message);
+      } finally {
+        setRegistering(false);
+      }
+    },
+    [state],
+  );
 
   if (state.kind === "ready") {
     return (
@@ -117,7 +112,7 @@ export default function ViewPage() {
         <button
           type="button"
           className="bv-register"
-          onClick={() => void register()}
+          onClick={() => void openSubmit()}
           disabled={registering || registered}
         >
           <BookPlus size={16} />
@@ -129,6 +124,14 @@ export default function ViewPage() {
                 ? "스토어에 올리기"
                 : "내 서재에 등록"}
         </button>
+        {submit && (
+          <SubmitBookModal
+            submitting={registering}
+            initial={{ title: submit.title, cover: submit.cover }}
+            onCancel={() => setSubmit(null)}
+            onConfirm={(values) => void confirmSubmit(values)}
+          />
+        )}
       </>
     );
   }

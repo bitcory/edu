@@ -1,15 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { ImagePlus } from "lucide-react";
 import { formatPrice } from "../lib/format-price";
 import { computeSettlement } from "../lib/settlement";
+import { BOOK_CATEGORIES, DEFAULT_CATEGORY } from "../lib/categories";
+import { fileToThumb } from "../lib/thumbnail";
 import type { AuthorType } from "../lib/author-types";
 
 export type SubmitValues = {
   title: string;
   author: string;
   description: string;
+  category: string;
   price: number;
+  cover?: string;
 };
 
 type Props = {
@@ -30,11 +35,21 @@ export default function SubmitBookModal({
   const [title, setTitle] = useState(initial?.title ?? "내 그림책");
   const [author, setAuthor] = useState(initial?.author ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
+  const [category, setCategory] = useState(
+    initial?.category ?? DEFAULT_CATEGORY,
+  );
+  const [cover, setCover] = useState<string | undefined>(initial?.cover);
   const [price, setPrice] = useState<string>(
     initial?.price != null ? String(initial.price) : "0",
   );
+  const coverInputRef = useRef<HTMLInputElement | null>(null);
 
   const priceNum = Math.max(0, Math.floor(Number(price) || 0));
+
+  const pickCover = async (file: File) => {
+    const thumb = await fileToThumb(file);
+    if (thumb) setCover(thumb);
+  };
 
   const submit = () => {
     if (!title.trim()) {
@@ -45,7 +60,9 @@ export default function SubmitBookModal({
       title: title.trim(),
       author: author.trim(),
       description: description.trim(),
+      category,
       price: priceNum,
+      cover,
     });
   };
 
@@ -53,6 +70,38 @@ export default function SubmitBookModal({
     <div className="modal-overlay" role="dialog" aria-modal="true">
       <div className="modal-card">
         <h2 className="modal-title">북스토어에 올리기</h2>
+
+        <div className="modal-field">
+          <span className="modal-label">표지 이미지</span>
+          <button
+            type="button"
+            className="cover-pick"
+            onClick={() => coverInputRef.current?.click()}
+            title="표지로 쓸 이미지를 고르세요"
+          >
+            {cover ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={cover} alt="표지 미리보기" className="cover-pick__img" />
+            ) : (
+              <span className="cover-pick__empty">
+                <ImagePlus size={22} />
+                표지 고르기
+              </span>
+            )}
+            <span className="cover-pick__hint">눌러서 변경</span>
+          </button>
+          <input
+            ref={coverInputRef}
+            type="file"
+            accept="image/*"
+            style={{ display: "none" }}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void pickCover(f);
+              e.target.value = "";
+            }}
+          />
+        </div>
 
         <label className="modal-field">
           <span className="modal-label">제목</span>
@@ -62,6 +111,21 @@ export default function SubmitBookModal({
             onChange={(e) => setTitle(e.target.value)}
             maxLength={60}
           />
+        </label>
+
+        <label className="modal-field">
+          <span className="modal-label">카테고리</span>
+          <select
+            className="modal-input"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+          >
+            {BOOK_CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
         </label>
 
         <label className="modal-field">

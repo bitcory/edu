@@ -3292,6 +3292,92 @@ textarea.ed-input {
   color: #8a6c4d;
 }
 
+/* Cover-image picker (submit modal) — click to choose/replace a thumbnail. */
+.cover-pick {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 140px;
+  border: 1.5px dashed #d8c3a6;
+  border-radius: 12px;
+  background: #fbf6ee;
+  overflow: hidden;
+  cursor: pointer;
+  padding: 0;
+}
+.cover-pick:hover {
+  border-color: #c08a4a;
+}
+.cover-pick__img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #fff;
+}
+.cover-pick__empty {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  color: #9a7a52;
+  font-size: 13px;
+  font-weight: 600;
+}
+.cover-pick__hint {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Store category filter chips. */
+.store-cats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: 1100px;
+  margin: 0 auto 16px;
+  padding: 0 16px;
+}
+.store-cat {
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid #e3d4bd;
+  background: #fff;
+  color: #6b513a;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.store-cat:hover {
+  border-color: #c08a4a;
+}
+.store-cat.is-active {
+  background: #c0703a;
+  border-color: #c0703a;
+  color: #fff;
+}
+
+/* Small category tag next to the author on a store card. */
+.store-card__cat {
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #f0e6d6;
+  color: #8a6034;
+  font-size: 11px;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
 .modal-actions {
   display: flex;
   justify-content: flex-end;

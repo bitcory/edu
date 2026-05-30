@@ -17,6 +17,7 @@ export type StoreBook = {
   kind: BookKind;
   author?: string;
   description?: string; // 간략한 내용
+  category?: string; // 카테고리 (그림책/소설/시/강의자료 …)
   price: number; // 구매가격, 원(₩) 정수. 0 = 무료
   pageW: number; // 판형 가로폭 (높이는 PAGE_H 고정)
   layout: BookLayout;
@@ -37,10 +38,12 @@ export type SubmitInput = {
   title: string;
   author?: string;
   description?: string;
+  category?: string;
   price: number;
   pageW: number;
   layout: BookLayout;
   pages: EditorPage[];
+  coverThumb?: string; // optional custom cover (else derived from pages[0])
 };
 
 export type BookScope = "store" | "mine" | "pending" | "rejected";

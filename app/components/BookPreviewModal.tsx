@@ -128,7 +128,12 @@ export default function BookPreviewModal({
           </div>
           <div className="preview-info">
             <h2 className="preview-title">{book.title}</h2>
-            <p className="preview-author">{book.author ?? book.ownerName}</p>
+            <p className="preview-author">
+              {book.author ?? book.ownerName}
+              {book.category && (
+                <span className="store-card__cat">{book.category}</span>
+              )}
+            </p>
             <p className="preview-price">{formatPrice(book.price)}</p>
             {book.description && (
               <p className="preview-desc">{book.description}</p>

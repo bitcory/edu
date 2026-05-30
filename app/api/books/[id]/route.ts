@@ -57,6 +57,7 @@ export async function PATCH(
       author: body?.author,
       price: body?.price,
       description: body?.description,
+      category: body?.category,
     });
     return Response.json({ book });
   }
@@ -74,9 +75,11 @@ export async function PATCH(
     title: body.title,
     author: body.author,
     description: body.description,
+    category: body.category,
     price: body.price,
     pageW: body.pageW,
     layout: body.layout,
+    coverThumb: body.coverThumb,
   });
   return Response.json({ book });
 }

@@ -213,10 +213,12 @@ export default function LibraryPage() {
           title: values.title,
           author: values.author,
           description: values.description,
+          category: values.category,
           price: values.price,
           pageW: saved?.pageW ?? 800,
           layout: saved?.layout ?? "spread",
           pages: draftPages,
+          coverThumb: values.cover,
         });
         alert("북스토어에 올렸어요! 슈퍼관리자 승인 후 공개돼요.");
         refresh();
@@ -404,7 +406,10 @@ export default function LibraryPage() {
         <SubmitBookModal
           submitting={busy}
           authorType={author?.type}
-          initial={{ author: author?.displayName }}
+          initial={{
+            author: author?.displayName,
+            cover: draftPages[0]?.thumb,
+          }}
           onCancel={() => setDraftPages(null)}
           onConfirm={(values) => void confirmSubmit(values)}
         />
@@ -417,6 +422,7 @@ export default function LibraryPage() {
             author: editInfo.author ?? "",
             price: editInfo.price,
             description: editInfo.description ?? "",
+            category: editInfo.category ?? "",
           }}
           submitting={busy}
           onCancel={() => setEditInfo(null)}

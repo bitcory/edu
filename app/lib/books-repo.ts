@@ -1,4 +1,5 @@
 import { db, ensureSchema, type Row } from "./db";
+import { normalizeCategory } from "./categories";
 import { initialEditorStatus, initialPdfStatus } from "./publish-policy";
 import type { EditorPage } from "./editor-types";
 import type {
@@ -22,6 +23,7 @@ function rowToBook(row: Row): StoreBook {
     kind: (row.kind == null ? "editor" : String(row.kind)) as BookKind,
     author: row.author == null ? undefined : String(row.author),
     description: row.description == null ? undefined : String(row.description),
+    category: row.category == null ? undefined : String(row.category),
     price: row.price == null ? 0 : Number(row.price),
     pageW: row.page_w == null ? 800 : Number(row.page_w),
     layout: (row.layout == null ? "spread" : String(row.layout)) as StoreBook["layout"],
@@ -64,10 +66,10 @@ export async function listBooks(
     // balloon to many MB (every page's full-res base64 image), which is why
     // the store was slow to load. Pages are fetched on open via getBookById.
     const res = await db.execute({
-      sql: `SELECT b.id, b.title, b.kind, b.author, b.description, b.price,
-                   b.page_w, b.layout, b.owner_id, b.owner_name, b.cover_thumb,
-                   b.status, b.submitted_at, b.reviewed_at, b.reject_reason,
-                   b.audio_key,
+      sql: `SELECT b.id, b.title, b.kind, b.author, b.description, b.category,
+                   b.price, b.page_w, b.layout, b.owner_id, b.owner_name,
+                   b.cover_thumb, b.status, b.submitted_at, b.reviewed_at,
+                   b.reject_reason, b.audio_key,
                    (SELECT COUNT(*) FROM likes l WHERE l.book_id = b.id) AS like_count
             FROM books b
             WHERE b.status = 'approved'
@@ -132,25 +134,28 @@ export async function insertBook(
     kind: "editor",
     author: input.author?.trim() || owner.name,
     description: input.description?.trim() || undefined,
+    category: normalizeCategory(input.category),
     price: normalizePrice(input.price),
     pageW: input.pageW || 800,
     layout: input.layout || "spread",
     ownerId: owner.id,
     ownerName: owner.name,
     pages: input.pages,
-    coverThumb: input.pages[0]?.thumb,
+    // Prefer an explicit cover (from the submit modal); else the first page.
+    coverThumb: input.coverThumb || input.pages[0]?.thumb,
     status,
     submittedAt: Date.now(),
   };
   await db.execute({
     sql: `INSERT INTO books
-            (id, title, author, description, price, page_w, layout, owner_id, owner_name, pages, cover_thumb, status, submitted_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            (id, title, author, description, category, price, page_w, layout, owner_id, owner_name, pages, cover_thumb, status, submitted_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       book.id,
       book.title,
       book.author ?? null,
       book.description ?? null,
+      book.category ?? null,
       book.price,
       book.pageW,
       book.layout,
@@ -169,7 +174,14 @@ export async function insertBook(
  * The PDF bytes are stored separately (see pdf-storage); this only writes the
  * row. Returns the book so the caller can save the file under its id. */
 export async function insertPdfBook(
-  input: { title: string; author?: string; coverThumb?: string },
+  input: {
+    title: string;
+    author?: string;
+    coverThumb?: string;
+    description?: string;
+    category?: string;
+    price?: number;
+  },
   owner: { id: string; name: string },
 ): Promise<StoreBook> {
   await ensureSchema();
@@ -178,7 +190,9 @@ export async function insertPdfBook(
     title: input.title.trim() || "내 PDF 책",
     kind: "pdf",
     author: input.author?.trim() || owner.name,
-    price: 0,
+    description: input.description?.trim() || undefined,
+    category: normalizeCategory(input.category),
+    price: normalizePrice(input.price),
     pageW: 800, // unused for PDF rendering (aspect comes from the PDF itself)
     layout: "spread",
     ownerId: owner.id,
@@ -190,12 +204,15 @@ export async function insertPdfBook(
   };
   await db.execute({
     sql: `INSERT INTO books
-            (id, title, kind, author, price, page_w, layout, owner_id, owner_name, pages, cover_thumb, status, submitted_at)
-          VALUES (?, ?, 'pdf', ?, 0, ?, ?, ?, ?, '[]', ?, ?, ?)`,
+            (id, title, kind, author, description, category, price, page_w, layout, owner_id, owner_name, pages, cover_thumb, status, submitted_at)
+          VALUES (?, ?, 'pdf', ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?)`,
     args: [
       book.id,
       book.title,
       book.author ?? null,
+      book.description ?? null,
+      book.category ?? null,
+      book.price,
       book.pageW,
       book.layout,
       book.ownerId,
@@ -218,9 +235,11 @@ export async function updateBookSnapshot(
     title?: string;
     author?: string;
     description?: string;
+    category?: string;
     price?: number;
     pageW?: number;
     layout?: StoreBook["layout"];
+    coverThumb?: string;
   },
   status: BookStatus = initialEditorStatus(),
 ): Promise<StoreBook | null> {
@@ -236,23 +255,29 @@ export async function updateBookSnapshot(
     patch.description !== undefined
       ? patch.description.trim() || null
       : (existing.description ?? null);
+  const category =
+    patch.category !== undefined
+      ? normalizeCategory(patch.category)
+      : (existing.category ?? null);
   const price =
     patch.price !== undefined ? normalizePrice(patch.price) : existing.price;
   const pageW = patch.pageW ?? existing.pageW;
   const layout = patch.layout ?? existing.layout;
+  const coverThumb = patch.coverThumb || patch.pages[0]?.thumb || null;
   const submittedAt = Date.now();
   await db.execute({
     sql: `UPDATE books
-          SET pages = ?, cover_thumb = ?, title = ?, author = ?, description = ?, price = ?,
+          SET pages = ?, cover_thumb = ?, title = ?, author = ?, description = ?, category = ?, price = ?,
               page_w = ?, layout = ?,
               status = ?, submitted_at = ?, reviewed_at = NULL, reject_reason = NULL
           WHERE id = ?`,
     args: [
       JSON.stringify(patch.pages),
-      patch.pages[0]?.thumb ?? null,
+      coverThumb,
       title,
       author,
       description,
+      category,
       price,
       pageW,
       layout,
@@ -268,7 +293,13 @@ export async function updateBookSnapshot(
  * used for PDF books (no snapshot to re-render) and quick info edits. */
 export async function updateBookMeta(
   id: string,
-  patch: { title?: string; author?: string; price?: number; description?: string },
+  patch: {
+    title?: string;
+    author?: string;
+    price?: number;
+    description?: string;
+    category?: string;
+  },
 ): Promise<StoreBook | null> {
   await ensureSchema();
   const existing = await getBookById(id);
@@ -284,9 +315,13 @@ export async function updateBookMeta(
     patch.description !== undefined
       ? patch.description.trim() || null
       : (existing.description ?? null);
+  const category =
+    patch.category !== undefined
+      ? normalizeCategory(patch.category)
+      : (existing.category ?? null);
   await db.execute({
-    sql: `UPDATE books SET title = ?, author = ?, price = ?, description = ? WHERE id = ?`,
-    args: [title, author, price, description, id],
+    sql: `UPDATE books SET title = ?, author = ?, price = ?, description = ?, category = ? WHERE id = ?`,
+    args: [title, author, price, description, category, id],
   });
   return getBookById(id);
 }

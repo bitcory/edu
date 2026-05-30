@@ -64,6 +64,7 @@ export function ensureSchema(): Promise<void> {
           kind          TEXT NOT NULL DEFAULT 'editor',
           author        TEXT,
           description   TEXT,
+          category      TEXT,
           price         INTEGER NOT NULL DEFAULT 0,
           page_w        INTEGER NOT NULL DEFAULT 800,
           layout        TEXT NOT NULL DEFAULT 'spread',
@@ -87,6 +88,7 @@ export function ensureSchema(): Promise<void> {
         `ADD COLUMN IF NOT EXISTS page_w INTEGER NOT NULL DEFAULT 800`,
         `ADD COLUMN IF NOT EXISTS layout TEXT NOT NULL DEFAULT 'spread'`,
         `ADD COLUMN IF NOT EXISTS audio_key TEXT`,
+        `ADD COLUMN IF NOT EXISTS category TEXT`,
       ]) {
         await db.execute(`ALTER TABLE books ${ddl}`);
       }

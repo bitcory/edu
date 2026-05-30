@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import { formatPrice } from "../lib/format-price";
+import { BOOK_CATEGORIES, DEFAULT_CATEGORY } from "../lib/categories";
 
 export type InfoValues = {
   title: string;
   author: string;
   price: number;
   description: string;
+  category: string;
 };
 
 type Props = {
@@ -26,6 +28,9 @@ export default function BookInfoModal({
   const [title, setTitle] = useState(initial.title);
   const [author, setAuthor] = useState(initial.author ?? "");
   const [description, setDescription] = useState(initial.description);
+  const [category, setCategory] = useState(
+    initial.category ?? DEFAULT_CATEGORY,
+  );
   const [price, setPrice] = useState<string>(String(initial.price ?? 0));
 
   const priceNum = Math.max(0, Math.floor(Number(price) || 0));
@@ -40,6 +45,7 @@ export default function BookInfoModal({
       author: author.trim(),
       price: priceNum,
       description: description.trim(),
+      category,
     });
   };
 
@@ -67,6 +73,21 @@ export default function BookInfoModal({
             placeholder="비워두면 내 이름으로 표시돼요"
             maxLength={40}
           />
+        </label>
+
+        <label className="modal-field">
+          <span className="modal-label">카테고리</span>
+          <select
+            className="modal-input"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+          >
+            {BOOK_CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
         </label>
 
         <label className="modal-field">

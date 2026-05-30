@@ -21,14 +21,22 @@ export async function POST(req: NextRequest) {
     title?: unknown;
     author?: unknown;
     coverThumb?: unknown;
+    description?: unknown;
+    category?: unknown;
+    price?: unknown;
   } | null;
   const title = typeof body?.title === "string" ? body.title : "";
   const author = typeof body?.author === "string" ? body.author : undefined;
   const coverThumb =
     typeof body?.coverThumb === "string" ? body.coverThumb : undefined;
+  const description =
+    typeof body?.description === "string" ? body.description : undefined;
+  const category =
+    typeof body?.category === "string" ? body.category : undefined;
+  const price = typeof body?.price === "number" ? body.price : undefined;
 
   const book = await insertPdfBook(
-    { title, author, coverThumb },
+    { title, author, coverThumb, description, category, price },
     { id: user.id, name: user.name },
   );
   const uploadUrl = await presignPdfUpload(book.id);

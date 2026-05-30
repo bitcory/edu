@@ -45,10 +45,12 @@ export async function POST(req: NextRequest) {
       title: body.title ?? "",
       author: body.author,
       description: body.description,
+      category: body.category,
       price: body.price,
       pageW: body.pageW,
       layout: body.layout,
       pages,
+      coverThumb: body.coverThumb,
     },
     { id: user.id, name: user.name },
   );

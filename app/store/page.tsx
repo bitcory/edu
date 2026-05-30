@@ -14,6 +14,7 @@ import {
 import { openBookForReading } from "../lib/render-book";
 import { type RenderedPage } from "../lib/pdf-to-images";
 import { formatPrice } from "../lib/format-price";
+import { BOOK_CATEGORIES } from "../lib/categories";
 
 type Reader = {
   pages: RenderedPage[];
@@ -27,6 +28,7 @@ export default function StorePage() {
   const [reader, setReader] = useState<Reader | null>(null);
   const [opening, setOpening] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [cat, setCat] = useState<string | null>(null); // null = 전체
   const [preview, setPreview] = useState<StoreBook | null>(null);
 
   useEffect(() => {
@@ -39,13 +41,22 @@ export default function StorePage() {
     if (!books) return null;
     const norm = (s: string) => s.toLowerCase().normalize("NFC");
     const q = norm(query.trim());
-    if (!q) return books;
-    return books.filter(
-      (b) =>
+    return books.filter((b) => {
+      if (cat && (b.category ?? "") !== cat) return false;
+      if (!q) return true;
+      return (
         norm(b.title).includes(q) ||
-        norm(b.author ?? b.ownerName).includes(q),
-    );
-  }, [books, query]);
+        norm(b.author ?? b.ownerName).includes(q)
+      );
+    });
+  }, [books, query, cat]);
+
+  // Only show category chips that actually have books (plus 전체).
+  const activeCats = useMemo(() => {
+    if (!books) return [];
+    const present = new Set(books.map((b) => b.category).filter(Boolean));
+    return BOOK_CATEGORIES.filter((c) => present.has(c));
+  }, [books]);
 
   useEffect(() => {
     return () => {
@@ -111,6 +122,28 @@ export default function StorePage() {
         </div>
       )}
 
+      {activeCats.length > 0 && (
+        <div className="store-cats" role="tablist" aria-label="카테고리">
+          <button
+            type="button"
+            className={`store-cat${cat === null ? " is-active" : ""}`}
+            onClick={() => setCat(null)}
+          >
+            전체
+          </button>
+          {activeCats.map((c) => (
+            <button
+              key={c}
+              type="button"
+              className={`store-cat${cat === c ? " is-active" : ""}`}
+              onClick={() => setCat(c)}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+      )}
+
       {books === null ? (
         <p className="store-empty">불러오는 중…</p>
       ) : books.length === 0 ? (
@@ -124,7 +157,11 @@ export default function StorePage() {
       ) : filtered && filtered.length === 0 ? (
         <div className="store-empty">
           <Search size={40} strokeWidth={1.6} />
-          <p>&ldquo;{query.trim()}&rdquo;에 맞는 책이 없어요.</p>
+          <p>
+            {query.trim()
+              ? `“${query.trim()}”에 맞는 책이 없어요.`
+              : `‘${cat}’ 카테고리에 아직 책이 없어요.`}
+          </p>
         </div>
       ) : (
         <div className="store-grid">
@@ -148,7 +185,12 @@ export default function StorePage() {
                 </div>
               </button>
               <div className="store-card__title">{b.title}</div>
-              <div className="store-card__author">{b.author ?? b.ownerName}</div>
+              <div className="store-card__author">
+                {b.author ?? b.ownerName}
+                {b.category && (
+                  <span className="store-card__cat">{b.category}</span>
+                )}
+              </div>
               <div className="store-card__meta">
                 <span className="store-card__price">{formatPrice(b.price)}</span>
                 <span className="store-card__likes">
