@@ -51,12 +51,10 @@ export default function StorePage() {
     });
   }, [books, query, cat]);
 
-  // Only show category chips that actually have books (plus 전체).
-  const activeCats = useMemo(() => {
-    if (!books) return [];
-    const present = new Set(books.map((b) => b.category).filter(Boolean));
-    return BOOK_CATEGORIES.filter((c) => present.has(c));
-  }, [books]);
+  // Show the full category menu (so it's always navigable). Categories with no
+  // books just land on an empty state — existing books predate the category
+  // column and read as "미분류" until edited.
+  const activeCats = BOOK_CATEGORIES;
 
   useEffect(() => {
     return () => {
