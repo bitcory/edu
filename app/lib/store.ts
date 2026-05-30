@@ -194,12 +194,14 @@ export async function updateBookInfo(
     price?: number;
     description?: string;
     category?: string;
+    cover?: string; // custom cover thumbnail (data URL)
   },
 ): Promise<StoreBook> {
+  const { cover, ...rest } = patch;
   const res = await fetch(`/api/books/${id}`, {
     method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(patch),
+    body: JSON.stringify({ ...rest, coverThumb: cover }),
   });
   if (!res.ok) {
     throw new Error(await errorMessage(res, "수정하지 못했어요."));

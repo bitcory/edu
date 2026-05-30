@@ -7,7 +7,9 @@
  * for a consistent cover across both.
  */
 
-const DEFAULT_MAX_W = 420;
+// Store cards show the cover at 4:5, up to ~320px wide → 2× (retina) ≈ 640px.
+// 640px JPEG @0.72 stays tiny (~40–80KB) while looking crisp on the grid.
+const DEFAULT_MAX_W = 640;
 const DEFAULT_QUALITY = 0.72;
 
 function drawToJpeg(

@@ -423,6 +423,7 @@ export default function LibraryPage() {
             price: editInfo.price,
             description: editInfo.description ?? "",
             category: editInfo.category ?? "",
+            cover: editInfo.coverThumb,
           }}
           submitting={busy}
           onCancel={() => setEditInfo(null)}

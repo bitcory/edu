@@ -299,6 +299,7 @@ export async function updateBookMeta(
     price?: number;
     description?: string;
     category?: string;
+    coverThumb?: string;
   },
 ): Promise<StoreBook | null> {
   await ensureSchema();
@@ -319,9 +320,13 @@ export async function updateBookMeta(
     patch.category !== undefined
       ? normalizeCategory(patch.category)
       : (existing.category ?? null);
+  const coverThumb =
+    patch.coverThumb !== undefined
+      ? patch.coverThumb || null
+      : (existing.coverThumb ?? null);
   await db.execute({
-    sql: `UPDATE books SET title = ?, author = ?, price = ?, description = ?, category = ? WHERE id = ?`,
-    args: [title, author, price, description, category, id],
+    sql: `UPDATE books SET title = ?, author = ?, price = ?, description = ?, category = ?, cover_thumb = ? WHERE id = ?`,
+    args: [title, author, price, description, category, coverThumb, id],
   });
   return getBookById(id);
 }

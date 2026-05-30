@@ -58,6 +58,7 @@ export async function PATCH(
       price: body?.price,
       description: body?.description,
       category: body?.category,
+      coverThumb: body?.coverThumb,
     });
     return Response.json({ book });
   }
