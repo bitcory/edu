@@ -27,7 +27,9 @@ function rowToBook(row: Row): StoreBook {
     layout: (row.layout == null ? "spread" : String(row.layout)) as StoreBook["layout"],
     ownerId: String(row.owner_id),
     ownerName: String(row.owner_name),
-    pages: JSON.parse(String(row.pages)) as EditorPage[],
+    // Store-list queries omit the heavy `pages` blob (cards only need the
+    // cover thumb); it's hydrated on open via getBookById. Default to [].
+    pages: row.pages == null ? [] : (JSON.parse(String(row.pages)) as EditorPage[]),
     coverThumb: row.cover_thumb == null ? undefined : String(row.cover_thumb),
     status: String(row.status) as BookStatus,
     submittedAt: Number(row.submitted_at),
@@ -57,8 +59,15 @@ export async function listBooks(
 ): Promise<StoreBook[]> {
   await ensureSchema();
   if (scope === "store") {
+    // Explicitly list columns and OMIT the heavy `pages` blob — store cards
+    // only render cover_thumb + metadata. Including pages made the response
+    // balloon to many MB (every page's full-res base64 image), which is why
+    // the store was slow to load. Pages are fetched on open via getBookById.
     const res = await db.execute({
-      sql: `SELECT b.*,
+      sql: `SELECT b.id, b.title, b.kind, b.author, b.description, b.price,
+                   b.page_w, b.layout, b.owner_id, b.owner_name, b.cover_thumb,
+                   b.status, b.submitted_at, b.reviewed_at, b.reject_reason,
+                   b.audio_key,
                    (SELECT COUNT(*) FROM likes l WHERE l.book_id = b.id) AS like_count
             FROM books b
             WHERE b.status = 'approved'

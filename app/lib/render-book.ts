@@ -154,6 +154,15 @@ export async function openBookForReading(book: StoreBook): Promise<OpenedBook> {
     return { rendered, revoke: () => revokePages(rendered) };
   }
   // Editor book: render the snapshot straight to images (no PDF round-trip).
-  const rendered = await renderSnapshotToPages(book.pages, book.pageW || PAGE_W);
+  // The store list ships books WITHOUT the heavy `pages` blob (for speed), so
+  // hydrate it on open by fetching the full book record.
+  let pages = book.pages;
+  if (!pages || pages.length === 0) {
+    const res = await fetch(`/api/books/${book.id}`, { cache: "no-store" });
+    if (!res.ok) throw new Error("책 내용을 불러오지 못했어요.");
+    const { book: full } = (await res.json()) as { book: StoreBook };
+    pages = full.pages;
+  }
+  const rendered = await renderSnapshotToPages(pages, book.pageW || PAGE_W);
   return { rendered, revoke: () => revokePages(rendered) };
 }
