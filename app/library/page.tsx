@@ -18,6 +18,7 @@ import SubmitBookModal, {
 } from "../components/SubmitBookModal";
 import AuthorRegisterModal from "../components/AuthorRegisterModal";
 import BookInfoModal, { type InfoValues } from "../components/BookInfoModal";
+import BgmPoolModal from "../components/BgmPoolModal";
 import {
   attachBookAudio,
   deleteBook,
@@ -32,6 +33,7 @@ import {
 import { applyAuthor, fetchMyAuthor } from "../lib/author-store";
 import type { Author, AuthorApplyInput } from "../lib/author-types";
 import { openBookForReading } from "../lib/render-book";
+import { pickRandomPoolBgm } from "../lib/bgm";
 import { type RenderedPage } from "../lib/pdf-to-images";
 import { loadEditorState } from "../lib/editor-storage";
 import { formatPrice } from "../lib/format-price";
@@ -61,6 +63,7 @@ export default function LibraryPage() {
   const [editInfo, setEditInfo] = useState<StoreBook | null>(null);
   const audioInputRef = useRef<HTMLInputElement | null>(null);
   const [audioTarget, setAudioTarget] = useState<StoreBook | null>(null);
+  const [bgmOpen, setBgmOpen] = useState(false);
 
   const isApproved = author?.status === "approved";
 
@@ -160,9 +163,11 @@ export default function LibraryPage() {
     setBusy(true);
     try {
       const { rendered, revoke } = await openBookForReading(book);
-      const audioUrl = book.audioKey
+      // The book's own music wins; otherwise a random shared-pool track plays.
+      let audioUrl = book.audioKey
         ? ((await getBookAudioUrl(book.id)) ?? undefined)
         : undefined;
+      if (!audioUrl) audioUrl = await pickRandomPoolBgm();
       setReader({
         pages: rendered,
         revoke,
@@ -283,6 +288,13 @@ export default function LibraryPage() {
         <Link href="/edit" className="store-navlink">
           <Pencil size={16} /> 새 책 만들기
         </Link>
+        <button
+          type="button"
+          className="store-navlink"
+          onClick={() => setBgmOpen(true)}
+        >
+          <Music size={16} /> 공용 배경음악
+        </button>
       </div>
 
       {books === null ? (
@@ -414,6 +426,8 @@ export default function LibraryPage() {
           onConfirm={(values) => void confirmSubmit(values)}
         />
       )}
+
+      {bgmOpen && <BgmPoolModal onClose={() => setBgmOpen(false)} />}
 
       {editInfo && (
         <BookInfoModal

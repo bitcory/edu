@@ -266,6 +266,55 @@ export async function getBookAudioUrl(id: string): Promise<string | null> {
   return url ?? null;
 }
 
+// ---- Shared background-music pool ----
+
+export type BgmPoolTrack = {
+  id: string;
+  name: string;
+  ownerId: string;
+  ownerName: string;
+  url: string;
+};
+
+/** List the shared BGM pool (with presigned stream URLs). */
+export async function listBgmPool(): Promise<BgmPoolTrack[]> {
+  const res = await fetch("/api/bgm", { cache: "no-store" });
+  if (!res.ok) return [];
+  const { tracks } = (await res.json()) as { tracks: BgmPoolTrack[] };
+  return tracks ?? [];
+}
+
+/** Upload an MP3 to the shared pool. */
+export async function uploadBgmTrack(file: File, name: string): Promise<void> {
+  if (file.size > 30 * 1024 * 1024) {
+    throw new Error("음악 파일이 너무 커요 (최대 30MB).");
+  }
+  const res = await fetch("/api/bgm", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) {
+    throw new Error(await errorMessage(res, "배경음악 등록에 실패했어요."));
+  }
+  const { uploadUrl } = (await res.json()) as { uploadUrl: string };
+  const put = await fetch(uploadUrl, {
+    method: "PUT",
+    body: file,
+    headers: { "content-type": "audio/mpeg" },
+  });
+  if (!put.ok) {
+    throw new Error("음악 업로드에 실패했어요. 잠시 후 다시 시도해 주세요.");
+  }
+}
+
+export async function deleteBgmTrack(id: string): Promise<void> {
+  const res = await fetch(`/api/bgm/${id}`, { method: "DELETE" });
+  if (!res.ok) {
+    throw new Error(await errorMessage(res, "배경음악 삭제에 실패했어요."));
+  }
+}
+
 // ---- Likes + comments (preview modal) ----
 
 export async function getBookSocial(id: string): Promise<BookSocial> {

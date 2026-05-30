@@ -15,6 +15,7 @@ import { openBookForReading } from "../lib/render-book";
 import { type RenderedPage } from "../lib/pdf-to-images";
 import { formatPrice } from "../lib/format-price";
 import { BOOK_CATEGORIES } from "../lib/categories";
+import { pickRandomPoolBgm } from "../lib/bgm";
 
 type Reader = {
   pages: RenderedPage[];
@@ -66,9 +67,11 @@ export default function StorePage() {
     setOpening(book.id);
     try {
       const { rendered, revoke } = await openBookForReading(book);
-      const audioUrl = book.audioKey
+      // The book's own music wins; otherwise a random shared-pool track plays.
+      let audioUrl = book.audioKey
         ? ((await getBookAudioUrl(book.id)) ?? undefined)
         : undefined;
+      if (!audioUrl) audioUrl = await pickRandomPoolBgm();
       setReader({
         pages: rendered,
         revoke,

@@ -211,3 +211,41 @@ export async function deletePdf(id: string): Promise<void> {
     /* ignore — best-effort cleanup */
   }
 }
+
+// ---- Shared background-music pool (MP3), at bgm/<trackId>.mp3 ----
+function bgmKeyFor(id: string): string {
+  return `bgm/${id}.mp3`;
+}
+
+/** Presigned PUT so an author uploads a pool track straight to R2. */
+export async function presignBgmUpload(
+  id: string,
+): Promise<{ key: string; url: string }> {
+  const { client, bucket } = r2();
+  const key = bgmKeyFor(id);
+  const url = await getSignedUrl(
+    client,
+    new PutObjectCommand({ Bucket: bucket, Key: key }),
+    { expiresIn: 300 },
+  );
+  return { key, url };
+}
+
+/** Presigned GET so an <audio> element can stream a pool track. */
+export async function presignBgmDownload(key: string): Promise<string> {
+  const { client, bucket } = r2();
+  return getSignedUrl(
+    client,
+    new GetObjectCommand({ Bucket: bucket, Key: key }),
+    { expiresIn: 3600 },
+  );
+}
+
+export async function deleteBgm(key: string): Promise<void> {
+  try {
+    const { client, bucket } = r2();
+    await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+  } catch {
+    /* ignore */
+  }
+}

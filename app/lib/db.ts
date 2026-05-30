@@ -153,6 +153,19 @@ export function ensureSchema(): Promise<void> {
       await db.execute(
         `CREATE INDEX IF NOT EXISTS idx_likes_book ON likes (book_id)`,
       );
+
+      // Shared background-music pool — authors upload MP3s here; a random one
+      // plays when a book without its own music is opened. `key` is the R2 key.
+      await db.execute(
+        `CREATE TABLE IF NOT EXISTS bgm_tracks (
+          id         TEXT PRIMARY KEY,
+          name       TEXT NOT NULL,
+          key        TEXT NOT NULL,
+          owner_id   TEXT NOT NULL,
+          owner_name TEXT NOT NULL,
+          created_at BIGINT NOT NULL
+        )`,
+      );
     })();
   }
   return schemaReady;
