@@ -7,9 +7,14 @@ import {
 } from "../../../lib/books-repo";
 import { isApprovedAuthor } from "../../../lib/authors-repo";
 import { OPEN_PUBLISH } from "../../../lib/publish-policy";
-import { deletePdf } from "../../../lib/pdf-storage";
+import {
+  deletePdf,
+  deleteSnapshot,
+  readSnapshotJson,
+} from "../../../lib/pdf-storage";
 import { resolvePagesFromBody } from "../../../lib/snapshot-body";
 import { getServerUser } from "../../../lib/server-auth";
+import type { EditorPage } from "../../../lib/editor-types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,6 +26,12 @@ export async function GET(
   const { id } = await ctx.params;
   const book = await getBookById(id);
   if (!book) return Response.json({ error: "not found" }, { status: 404 });
+  // Editor pages live in R2 now — hydrate them so callers (reader/editor) get
+  // the full snapshot just like before.
+  if (book.snapshotKey && book.pages.length === 0) {
+    const json = await readSnapshotJson(book.snapshotKey);
+    if (json) book.pages = JSON.parse(json) as EditorPage[];
+  }
   return Response.json({ book });
 }
 
@@ -100,6 +111,7 @@ export async function DELETE(
   }
 
   if (existing.kind === "pdf") await deletePdf(id);
+  if (existing.snapshotKey) await deleteSnapshot(existing.snapshotKey);
   await deleteBook(id);
   return Response.json({ ok: true });
 }

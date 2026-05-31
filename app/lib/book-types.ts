@@ -23,7 +23,9 @@ export type StoreBook = {
   layout: BookLayout;
   ownerId: string;
   ownerName: string;
-  pages: EditorPage[]; // Fabric snapshot (editor kind) — empty for pdf kind
+  pages: EditorPage[]; // Fabric snapshot — empty unless hydrated from R2
+  snapshotKey?: string; // R2 key holding the full pages JSON (editor books)
+  pageCount?: number; // page count (kept on the row so lists needn't load pages)
   coverThumb?: string; // pages[0].thumb (already a 20% PNG data URL)
   pdfUrl?: string; // filled by the future server (R2); undefined for now
   status: BookStatus;

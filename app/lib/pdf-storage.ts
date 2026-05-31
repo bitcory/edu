@@ -118,6 +118,30 @@ export async function deleteSnapshot(key: string): Promise<void> {
   }
 }
 
+/** Stable per-book snapshot key — overwritten on each save (no key churn). */
+export function bookSnapshotKey(bookId: string): string {
+  return `snapshots/${bookId}.json`;
+}
+
+/** Server-side write of a book's page snapshot JSON to R2 under its stable key.
+ * Returns the key so the caller can record it on the row. */
+export async function saveSnapshot(
+  bookId: string,
+  json: string,
+): Promise<string> {
+  const { client, bucket } = r2();
+  const key = bookSnapshotKey(bookId);
+  await client.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: json,
+      ContentType: "application/json",
+    }),
+  );
+  return key;
+}
+
 export async function savePdf(id: string, bytes: Uint8Array): Promise<void> {
   const { client, bucket } = r2();
   await client.send(

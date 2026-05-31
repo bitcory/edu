@@ -1,5 +1,6 @@
 import { db, ensureSchema, type Row } from "./db";
 import { normalizeCategory } from "./categories";
+import { bookSnapshotKey, saveSnapshot } from "./pdf-storage";
 import { initialEditorStatus, initialPdfStatus } from "./publish-policy";
 import type { EditorPage } from "./editor-types";
 import type {
@@ -29,9 +30,11 @@ function rowToBook(row: Row): StoreBook {
     layout: (row.layout == null ? "spread" : String(row.layout)) as StoreBook["layout"],
     ownerId: String(row.owner_id),
     ownerName: String(row.owner_name),
-    // Store-list queries omit the heavy `pages` blob (cards only need the
-    // cover thumb); it's hydrated on open via getBookById. Default to [].
+    // The page snapshot lives in R2 (snapshot_key); the DB pages column is kept
+    // '[]'. Pages are hydrated from R2 on open (see GET /api/books/[id]).
     pages: row.pages == null ? [] : (JSON.parse(String(row.pages)) as EditorPage[]),
+    snapshotKey: row.snapshot_key == null ? undefined : String(row.snapshot_key),
+    pageCount: row.page_count == null ? undefined : Number(row.page_count),
     coverThumb: row.cover_thumb == null ? undefined : String(row.cover_thumb),
     status: String(row.status) as BookStatus,
     submittedAt: Number(row.submitted_at),
@@ -69,7 +72,7 @@ export async function listBooks(
       sql: `SELECT b.id, b.title, b.kind, b.author, b.description, b.category,
                    b.price, b.page_w, b.layout, b.owner_id, b.owner_name,
                    b.cover_thumb, b.status, b.submitted_at, b.reviewed_at,
-                   b.reject_reason, b.audio_key,
+                   b.reject_reason, b.audio_key, b.page_count,
                    (SELECT COUNT(*) FROM likes l WHERE l.book_id = b.id) AS like_count
             FROM books b
             WHERE b.status = 'approved'
@@ -99,7 +102,7 @@ export async function listBooks(
     const res = await db.execute({
       sql: `SELECT id, title, kind, author, description, category, price,
                    page_w, layout, owner_id, owner_name, cover_thumb, status,
-                   submitted_at, reviewed_at, reject_reason, audio_key
+                   submitted_at, reviewed_at, reject_reason, audio_key, page_count
             FROM books WHERE status = 'draft'
             ORDER BY submitted_at DESC`,
       args: [],
@@ -154,15 +157,20 @@ export async function insertBook(
     ownerId: owner.id,
     ownerName: owner.name,
     pages: input.pages,
+    pageCount: input.pages.length,
     // Prefer an explicit cover (from the submit modal); else the first page.
     coverThumb: input.coverThumb || input.pages[0]?.thumb,
     status,
     submittedAt: Date.now(),
   };
+  // The heavy page snapshot goes to R2, NOT Postgres — keeps the DB row tiny
+  // so repeated saves don't balloon Neon's history/storage.
+  const snapshotKey = await saveSnapshot(book.id, JSON.stringify(book.pages));
+  book.snapshotKey = snapshotKey;
   await db.execute({
     sql: `INSERT INTO books
-            (id, title, author, description, category, price, page_w, layout, owner_id, owner_name, pages, cover_thumb, status, submitted_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            (id, title, author, description, category, price, page_w, layout, owner_id, owner_name, pages, snapshot_key, page_count, cover_thumb, status, submitted_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, ?)`,
     args: [
       book.id,
       book.title,
@@ -174,7 +182,8 @@ export async function insertBook(
       book.layout,
       book.ownerId,
       book.ownerName,
-      JSON.stringify(book.pages),
+      snapshotKey,
+      book.pageCount ?? 0,
       book.coverThumb ?? null,
       book.status,
       book.submittedAt,
@@ -278,14 +287,18 @@ export async function updateBookSnapshot(
   const layout = patch.layout ?? existing.layout;
   const coverThumb = patch.coverThumb || patch.pages[0]?.thumb || null;
   const submittedAt = Date.now();
+  // Overwrite the book's R2 snapshot (stable key) — DB pages stays '[]'.
+  const snapshotKey = await saveSnapshot(id, JSON.stringify(patch.pages));
   await db.execute({
     sql: `UPDATE books
-          SET pages = ?, cover_thumb = ?, title = ?, author = ?, description = ?, category = ?, price = ?,
+          SET pages = '[]', snapshot_key = ?, page_count = ?, cover_thumb = ?,
+              title = ?, author = ?, description = ?, category = ?, price = ?,
               page_w = ?, layout = ?,
               status = ?, submitted_at = ?, reviewed_at = NULL, reject_reason = NULL
           WHERE id = ?`,
     args: [
-      JSON.stringify(patch.pages),
+      snapshotKey,
+      patch.pages.length,
       coverThumb,
       title,
       author,

@@ -89,6 +89,10 @@ export function ensureSchema(): Promise<void> {
         `ADD COLUMN IF NOT EXISTS layout TEXT NOT NULL DEFAULT 'spread'`,
         `ADD COLUMN IF NOT EXISTS audio_key TEXT`,
         `ADD COLUMN IF NOT EXISTS category TEXT`,
+        // Page snapshot now lives in R2 (snapshot_key); pages column kept '[]'.
+        // page_count preserves the "N쪽" display without loading the snapshot.
+        `ADD COLUMN IF NOT EXISTS snapshot_key TEXT`,
+        `ADD COLUMN IF NOT EXISTS page_count INTEGER`,
       ]) {
         await db.execute(`ALTER TABLE books ${ddl}`);
       }

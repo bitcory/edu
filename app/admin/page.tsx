@@ -304,8 +304,11 @@ function BooksView({
                 <div className="admin-row__title">{b.title}</div>
                 <div className="admin-row__author">
                   {b.author ?? b.ownerName}
-                  {b.pages.length > 0 && ` · ${b.pages.length}쪽`} ·{" "}
-                  <strong>{formatPrice(b.price)}</strong>
+                  {(() => {
+                    const n = b.pageCount ?? b.pages.length;
+                    return n > 0 ? ` · ${n}쪽` : "";
+                  })()}{" "}
+                  · <strong>{formatPrice(b.price)}</strong>
                 </div>
                 {b.description && (
                   <div className="admin-row__desc">{b.description}</div>

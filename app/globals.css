@@ -463,30 +463,43 @@ body {
   gap: 2px;
   width: 88px;
   height: 88px;
-  background: linear-gradient(180deg, #eaf4ff, #aecbff);
-  border: 2px solid rgba(120, 160, 230, 0.55);
+  background:
+    url("/view-auto-book.png") center / cover no-repeat,
+    linear-gradient(180deg, #fff8df, #ffd28a);
+  border: 2px solid rgba(255, 180, 117, 0.55);
   border-radius: 50%;
-  color: #2f3f63;
+  color: #263f5f;
   font-weight: 800;
   font-size: 13px;
   cursor: pointer;
   z-index: 6;
-  box-shadow: 0 14px 28px rgba(40, 60, 110, 0.3);
+  box-shadow: 0 14px 28px rgba(92, 62, 35, 0.3);
+  overflow: hidden;
   transition: transform 0.12s ease, background 0.12s ease;
 }
 .bv-auto:hover {
-  background: linear-gradient(180deg, #f1f8ff, #b9d2ff);
+  background:
+    url("/view-auto-book.png") center / cover no-repeat,
+    linear-gradient(180deg, #fffbe9, #ffd68b);
   transform: translateY(-50%) scale(1.05);
 }
 .bv-auto.is-on {
-  background: linear-gradient(180deg, #ffe1a8, #ffba5c);
-  border-color: rgba(220, 150, 60, 0.6);
-  color: #5a3a12;
+  border-color: rgba(58, 126, 151, 0.68);
+  color: #20445b;
+  box-shadow:
+    0 14px 28px rgba(48, 85, 105, 0.3),
+    0 0 0 3px rgba(116, 192, 218, 0.25);
 }
 .bv-auto svg,
 .bv-auto span {
   position: relative;
   z-index: 3;
+  filter:
+    drop-shadow(0 1px 0 rgba(255, 255, 255, 0.82))
+    drop-shadow(0 2px 3px rgba(255, 247, 214, 0.72));
+}
+.bv-auto:not(.is-on) svg {
+  opacity: 0;
 }
 
 .modal-card--narrow {

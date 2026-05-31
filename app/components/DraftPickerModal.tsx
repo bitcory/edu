@@ -55,7 +55,9 @@ export default function DraftPickerModal({ drafts, onPick, onClose }: Props) {
                 <span className="draft-pick__title">
                   {d.title?.trim() || "제목 없는 책"}
                 </span>
-                <span className="draft-pick__sub">{d.pages.length}쪽</span>
+                <span className="draft-pick__sub">
+                  {d.pageCount ?? d.pages.length}쪽
+                </span>
               </div>
             </button>
           ))}

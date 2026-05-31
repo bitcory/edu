@@ -23,6 +23,7 @@ import DraftPickerModal from "../components/DraftPickerModal";
 import {
   attachBookAudio,
   deleteBook,
+  getBook,
   getBookAudioUrl,
   listMyBooks,
   removeBookAudio,
@@ -211,7 +212,7 @@ export default function LibraryPage() {
       return;
     }
     if (drafts.length === 1) {
-      pickDraft(drafts[0]);
+      void pickDraft(drafts[0]);
       return;
     }
     // No cloud drafts → fall back to the current localStorage working draft.
@@ -230,22 +231,31 @@ export default function LibraryPage() {
   }, [author, books]);
 
   // Adopt a cloud draft as the publish target (converted in place on confirm).
+  // The draft's pages live in R2 now, so hydrate the full snapshot first.
   const pickDraft = useCallback(
-    (d: StoreBook) => {
+    async (d: StoreBook) => {
       setPickerOpen(false);
-      setPublishTarget({
-        pages: d.pages,
-        pageW: d.pageW ?? 800,
-        layout: d.layout ?? "spread",
-        draftId: d.id,
-        initial: {
-          title: d.title && d.title !== "제목 없는 책" ? d.title : undefined,
-          author: d.author ?? author?.displayName,
-          description: d.description,
-          category: d.category,
-          cover: d.coverThumb ?? d.pages[0]?.thumb,
-        },
-      });
+      setBusy(true);
+      try {
+        const full = (await getBook(d.id)) ?? d;
+        setPublishTarget({
+          pages: full.pages,
+          pageW: full.pageW ?? 800,
+          layout: full.layout ?? "spread",
+          draftId: d.id,
+          initial: {
+            title: d.title && d.title !== "제목 없는 책" ? d.title : undefined,
+            author: d.author ?? author?.displayName,
+            description: d.description,
+            category: d.category,
+            cover: d.coverThumb ?? full.pages[0]?.thumb,
+          },
+        });
+      } catch (err) {
+        alert((err as Error).message);
+      } finally {
+        setBusy(false);
+      }
     },
     [author],
   );
