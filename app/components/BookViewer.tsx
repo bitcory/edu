@@ -104,18 +104,29 @@ export default function BookViewer({
   const [dims, setDims] = useState<{ w: number; h: number } | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [musicOn, setMusicOn] = useState(false);
+  // Music starts when the reader turns the front cover into the first page —
+  // not on open. This ref guards that auto-start to fire only once.
+  const musicStartedRef = useRef(false);
 
-  // Try to start the background music softly on open. Browsers may block
-  // autoplay-with-sound until a gesture — if so, the 🎵 button starts it.
+  // Prime the volume (but don't autoplay — see onFlip below).
   useEffect(() => {
     const el = audioRef.current;
     if (!el || !audioUrl) return;
     el.volume = 0.3;
-    el.play().then(
+  }, [audioUrl]);
+
+  // Start the background music the first time the reader leaves the cover
+  // (page index ≥ 1). The flip is a user gesture, so autoplay isn't blocked.
+  const startMusicOnce = () => {
+    const el = audioRef.current;
+    if (!el || musicStartedRef.current) return;
+    musicStartedRef.current = true;
+    el.volume = 0.3;
+    void el.play().then(
       () => setMusicOn(true),
       () => setMusicOn(false),
     );
-  }, [audioUrl]);
+  };
 
   const toggleMusic = () => {
     const el = audioRef.current;
@@ -256,6 +267,10 @@ export default function BookViewer({
               usePortrait
               className="bv-flipbook"
               style={{}}
+              onFlip={(e) => {
+                // Leaving the front cover (page ≥ 1) starts the music.
+                if (e.data >= 1) startMusicOnce();
+              }}
             >
               {pageEls}
             </HTMLFlipBook>
