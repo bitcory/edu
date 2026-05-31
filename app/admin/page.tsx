@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Check, Eye, Pencil, RotateCcw, X } from "lucide-react";
+import { Check, Eye, Pencil, PencilRuler, RotateCcw, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import BookViewer from "../components/BookViewer";
 import BookInfoModal, { type InfoValues } from "../components/BookInfoModal";
@@ -327,6 +327,15 @@ function BooksView({
                 >
                   <Pencil size={16} /> 정보 수정
                 </button>
+                {b.kind === "editor" && (
+                  <Link
+                    href={`/edit?book=${b.id}`}
+                    className="admin-btn admin-btn--preview"
+                    title="책 만들기에서 내용까지 편집 (관리자 권한)"
+                  >
+                    <PencilRuler size={16} /> 책 편집
+                  </Link>
+                )}
 
                 {tab === "pending" && (
                   <>

@@ -16,6 +16,7 @@ import { getBook, saveDraft, submitBook, updateBook } from "../lib/store";
 import type { BookLayout } from "../lib/book-types";
 import { DEFAULT_TEMPLATE } from "../lib/templates";
 import { fetchMyAuthor } from "../lib/author-store";
+import { useIsAdmin } from "../components/auth/useIsAdmin";
 import type { Author } from "../lib/author-types";
 
 // Editor uses Fabric.js → must be client-only.
@@ -59,6 +60,7 @@ function EditPageInner() {
   // saves update the same draft. (Kept in state, not the URL, to avoid
   // remounting the editor mid-edit.)
   const [draftId, setDraftId] = useState<string | null>(null);
+  const { isAdmin } = useIsAdmin();
 
   useEffect(() => {
     fetchMyAuthor().then(setAuthor);
@@ -74,13 +76,15 @@ function EditPageInner() {
   );
 
   const openStoreSubmit = useCallback(() => {
-    if (author?.status !== "approved") {
+    // Admins (슈퍼관리자) can publish any book — including others' books opened
+    // from the admin page — without their own author approval.
+    if (!isAdmin && author?.status !== "approved") {
       alert("작가 승인을 받아야 책을 올릴 수 있어요. 내 서재에서 작가 등록을 해주세요.");
       router.push("/library");
       return;
     }
     setSubmitOpen(true);
-  }, [author, router]);
+  }, [author, router, isAdmin]);
 
   // Load an existing library book into the editor when ?book=<id> is present.
   useEffect(() => {
