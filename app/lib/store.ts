@@ -46,6 +46,11 @@ export async function listRejectedBooks(): Promise<StoreBook[]> {
   return listByScope("rejected");
 }
 
+/** Admin: every user's 임시저장(draft) books. */
+export async function listDraftBooks(): Promise<StoreBook[]> {
+  return listByScope("drafts");
+}
+
 export async function getBook(id: string): Promise<StoreBook | null> {
   const res = await fetch(`/api/books/${id}`, { cache: "no-store" });
   if (!res.ok) return null;

@@ -11,12 +11,15 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   const raw = req.nextUrl.searchParams.get("scope") ?? "store";
-  const scope = (["store", "mine", "pending", "rejected"].includes(raw)
+  const scope = (["store", "mine", "pending", "rejected", "drafts"].includes(raw)
     ? raw
     : "store") as BookScope;
   const user = await getServerUser();
 
-  if ((scope === "pending" || scope === "rejected") && !user?.isAdmin) {
+  if (
+    (scope === "pending" || scope === "rejected" || scope === "drafts") &&
+    !user?.isAdmin
+  ) {
     return Response.json({ error: "forbidden" }, { status: 403 });
   }
 

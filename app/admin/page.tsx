@@ -9,6 +9,7 @@ import UserChip from "../components/auth/UserChip";
 import { useIsAdmin } from "../components/auth/useIsAdmin";
 import {
   approveBook,
+  listDraftBooks,
   listPendingBooks,
   listRejectedBooks,
   listStoreBooks,
@@ -24,23 +25,26 @@ import { formatPrice } from "../lib/format-price";
 
 type Reader = { pages: RenderedPage[]; revoke: () => void; single: boolean };
 type Section = "books" | "authors";
-type Tab = "pending" | "approved" | "rejected";
+type Tab = "pending" | "approved" | "rejected" | "drafts";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "pending", label: "대기" },
   { key: "approved", label: "공개중" },
+  { key: "drafts", label: "임시저장" },
   { key: "rejected", label: "거절됨" },
 ];
 
 const FETCHERS: Record<Tab, () => Promise<StoreBook[]>> = {
   pending: listPendingBooks,
   approved: listStoreBooks,
+  drafts: listDraftBooks,
   rejected: listRejectedBooks,
 };
 
 const EMPTY: Record<Tab, string> = {
   pending: "승인 대기 중인 책이 없어요.",
   approved: "공개 중인 책이 없어요.",
+  drafts: "임시저장 중인 책이 없어요.",
   rejected: "거절된 책이 없어요.",
 };
 
@@ -299,7 +303,8 @@ function BooksView({
               <div className="admin-row__meta">
                 <div className="admin-row__title">{b.title}</div>
                 <div className="admin-row__author">
-                  {b.author ?? b.ownerName} · {b.pages.length}쪽 ·{" "}
+                  {b.author ?? b.ownerName}
+                  {b.pages.length > 0 && ` · ${b.pages.length}쪽`} ·{" "}
                   <strong>{formatPrice(b.price)}</strong>
                 </div>
                 {b.description && (
@@ -367,6 +372,18 @@ function BooksView({
                     title="공개를 취소하고 비공개로 돌립니다"
                   >
                     <X size={16} /> 공개 취소
+                  </button>
+                )}
+
+                {tab === "drafts" && (
+                  <button
+                    type="button"
+                    className="admin-btn admin-btn--approve"
+                    onClick={() => onApprove(b.id)}
+                    disabled={busy}
+                    title="이 임시저장 책을 북스토어에 바로 출품(공개)합니다"
+                  >
+                    <Check size={16} /> 출품
                   </button>
                 )}
 

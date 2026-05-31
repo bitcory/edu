@@ -46,7 +46,7 @@ export type SubmitInput = {
   coverThumb?: string; // optional custom cover (else derived from pages[0])
 };
 
-export type BookScope = "store" | "mine" | "pending" | "rejected";
+export type BookScope = "store" | "mine" | "pending" | "rejected" | "drafts";
 
 export type BookComment = {
   id: string;

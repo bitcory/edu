@@ -93,6 +93,19 @@ export async function listBooks(
     });
     return res.rows.map(rowToBook);
   }
+  if (scope === "drafts") {
+    // Admin view of EVERY user's 임시저장 books. Lite (omit the heavy pages
+    // blob) — content is hydrated on open/edit via getBookById.
+    const res = await db.execute({
+      sql: `SELECT id, title, kind, author, description, category, price,
+                   page_w, layout, owner_id, owner_name, cover_thumb, status,
+                   submitted_at, reviewed_at, reject_reason, audio_key
+            FROM books WHERE status = 'draft'
+            ORDER BY submitted_at DESC`,
+      args: [],
+    });
+    return res.rows.map(rowToBook);
+  }
   // scope === "mine"
   if (!ownerId) return [];
   const res = await db.execute({
