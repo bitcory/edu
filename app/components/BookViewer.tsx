@@ -9,7 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { ArrowLeft, Music, VolumeX } from "lucide-react";
+import { ArrowLeft, Music, Pause, Play, VolumeX } from "lucide-react";
 import type { RenderedPage } from "../lib/pdf-to-images";
 
 type FlipBookInstance = {
@@ -128,6 +128,41 @@ export default function BookViewer({
     );
   };
 
+  // ---- 자동보기: turn pages by itself every N seconds ----
+  const [autoOpen, setAutoOpen] = useState(false);
+  const [autoSeconds, setAutoSeconds] = useState(5);
+  const [autoPlaying, setAutoPlaying] = useState(false);
+  // Current page index (kept via onFlip) so auto-play knows when to stop.
+  const currentPageRef = useRef(0);
+  // Page index seen at the previous tick — if it didn't change, we've hit the
+  // end (flipNext is a no-op there) and auto-play stops.
+  const lastTickPageRef = useRef(-1);
+
+  const startAuto = (seconds: number) => {
+    const s = Math.min(60, Math.max(1, Math.round(seconds) || 5));
+    setAutoSeconds(s);
+    lastTickPageRef.current = -1;
+    setAutoOpen(false);
+    setAutoPlaying(true);
+  };
+
+  useEffect(() => {
+    if (!autoPlaying) return;
+    const id = window.setInterval(() => {
+      const api = bookRef.current?.pageFlip?.();
+      if (!api) return;
+      const cur = currentPageRef.current;
+      // No progress since last tick → reached the last page, stop.
+      if (cur === lastTickPageRef.current) {
+        setAutoPlaying(false);
+        return;
+      }
+      lastTickPageRef.current = cur;
+      api.flipNext();
+    }, autoSeconds * 1000);
+    return () => window.clearInterval(id);
+  }, [autoPlaying, autoSeconds]);
+
   const toggleMusic = () => {
     const el = audioRef.current;
     if (!el) return;
@@ -235,6 +270,23 @@ export default function BookViewer({
           <span>새 책 보기</span>
         </button>
       )}
+      <button
+        type="button"
+        className={`bv-auto${autoPlaying ? " is-on" : ""}`}
+        onClick={() => (autoPlaying ? setAutoPlaying(false) : setAutoOpen(true))}
+        aria-label={autoPlaying ? "자동보기 정지" : "자동보기"}
+        title={autoPlaying ? "자동보기 정지" : "자동보기"}
+      >
+        {autoPlaying ? <Pause size={26} /> : <Play size={26} />}
+        <span>{autoPlaying ? "정지" : "자동보기"}</span>
+      </button>
+      {autoOpen && (
+        <AutoPlayModal
+          initial={autoSeconds}
+          onStart={startAuto}
+          onClose={() => setAutoOpen(false)}
+        />
+      )}
       {audioUrl && (
         <>
           <audio ref={audioRef} src={audioUrl} loop preload="auto" />
@@ -268,6 +320,7 @@ export default function BookViewer({
               className="bv-flipbook"
               style={{}}
               onFlip={(e) => {
+                currentPageRef.current = e.data;
                 // Leaving the front cover (page ≥ 1) starts the music.
                 if (e.data >= 1) startMusicOnce();
               }}
@@ -276,6 +329,61 @@ export default function BookViewer({
             </HTMLFlipBook>
           </Suspense>
         )}
+      </div>
+    </div>
+  );
+}
+
+/** Small popup to set the auto-advance interval (seconds) before starting. */
+function AutoPlayModal({
+  initial,
+  onStart,
+  onClose,
+}: {
+  initial: number;
+  onStart: (seconds: number) => void;
+  onClose: () => void;
+}) {
+  const [value, setValue] = useState(String(initial));
+  const seconds = Math.min(60, Math.max(1, Math.round(Number(value) || 5)));
+
+  return (
+    <div className="modal-overlay" role="dialog" aria-modal="true" onClick={onClose}>
+      <div className="modal-card modal-card--narrow" onClick={(e) => e.stopPropagation()}>
+        <h2 className="modal-title">자동보기</h2>
+        <p className="modal-hint" style={{ marginTop: 0 }}>
+          설정한 시간마다 책장이 저절로 넘어가요.
+        </p>
+        <label className="modal-field">
+          <span className="modal-label">넘김 간격 (초)</span>
+          <input
+            className="modal-input"
+            type="number"
+            min={1}
+            max={60}
+            step={1}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            autoFocus
+          />
+          <span className="modal-hint">1~60초 · 기본 5초</span>
+        </label>
+        <div className="modal-actions">
+          <button
+            type="button"
+            className="modal-btn modal-btn--ghost"
+            onClick={onClose}
+          >
+            취소
+          </button>
+          <button
+            type="button"
+            className="modal-btn modal-btn--primary"
+            onClick={() => onStart(seconds)}
+          >
+            <Play size={16} /> 시작
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -450,6 +450,49 @@ body {
     linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 214, 139, 0.18));
 }
 
+/* 자동보기 button — same look as 새 책 보기, sitting just below it. */
+.bv-auto {
+  position: absolute;
+  top: calc(50% + 104px);
+  right: 14px;
+  transform: translateY(-50%);
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 88px;
+  height: 88px;
+  background: linear-gradient(180deg, #eaf4ff, #aecbff);
+  border: 2px solid rgba(120, 160, 230, 0.55);
+  border-radius: 50%;
+  color: #2f3f63;
+  font-weight: 800;
+  font-size: 13px;
+  cursor: pointer;
+  z-index: 6;
+  box-shadow: 0 14px 28px rgba(40, 60, 110, 0.3);
+  transition: transform 0.12s ease, background 0.12s ease;
+}
+.bv-auto:hover {
+  background: linear-gradient(180deg, #f1f8ff, #b9d2ff);
+  transform: translateY(-50%) scale(1.05);
+}
+.bv-auto.is-on {
+  background: linear-gradient(180deg, #ffe1a8, #ffba5c);
+  border-color: rgba(220, 150, 60, 0.6);
+  color: #5a3a12;
+}
+.bv-auto svg,
+.bv-auto span {
+  position: relative;
+  z-index: 3;
+}
+
+.modal-card--narrow {
+  max-width: 340px;
+}
+
 .bv-close__art {
   position: absolute;
   inset: 2px;
@@ -607,6 +650,25 @@ body {
   }
 
   .bv-close:hover {
+    transform: translateX(50%) scale(1.04);
+  }
+
+  /* Auto-play pill sits just above the back-button pill. */
+  .bv-auto {
+    top: auto;
+    bottom: 74px;
+    right: 50%;
+    transform: translateX(50%);
+    flex-direction: row;
+    gap: 8px;
+    width: auto;
+    height: auto;
+    padding: 10px 22px;
+    border-radius: 999px;
+    font-size: 14px;
+    white-space: nowrap;
+  }
+  .bv-auto:hover {
     transform: translateX(50%) scale(1.04);
   }
 }
