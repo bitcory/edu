@@ -19,6 +19,7 @@ import SubmitBookModal, {
 import AuthorRegisterModal from "../components/AuthorRegisterModal";
 import BookInfoModal, { type InfoValues } from "../components/BookInfoModal";
 import BgmPoolModal from "../components/BgmPoolModal";
+import DraftPickerModal from "../components/DraftPickerModal";
 import {
   attachBookAudio,
   deleteBook,
@@ -26,6 +27,7 @@ import {
   listMyBooks,
   removeBookAudio,
   submitBook,
+  updateBook,
   updateBookInfo,
   type BookStatus,
   type StoreBook,
@@ -57,7 +59,16 @@ export default function LibraryPage() {
   const [books, setBooks] = useState<StoreBook[] | null>(null);
   const [reader, setReader] = useState<Reader | null>(null);
   const [busy, setBusy] = useState(false);
-  const [draftPages, setDraftPages] = useState<EditorPage[] | null>(null);
+  // What to publish: either a selected cloud draft (convert in place via
+  // draftId) or the localStorage working draft (new book, no draftId).
+  const [publishTarget, setPublishTarget] = useState<{
+    pages: EditorPage[];
+    pageW: number;
+    layout: StoreBook["layout"];
+    draftId?: string;
+    initial: Partial<SubmitValues>;
+  } | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [author, setAuthor] = useState<Author | null | undefined>(undefined);
   const [authorOpen, setAuthorOpen] = useState(false);
   const [editInfo, setEditInfo] = useState<StoreBook | null>(null);
@@ -181,18 +192,63 @@ export default function LibraryPage() {
     }
   }, []);
 
+  // Cloud drafts (임시저장) that can be published, newest first.
+  const editorDrafts = (books ?? []).filter(
+    (b) => b.status === "draft" && b.kind === "editor",
+  );
+
   const openSubmit = useCallback(() => {
     if (author?.status !== "approved") {
       setAuthorOpen(true);
       return;
     }
+    const drafts = (books ?? []).filter(
+      (b) => b.status === "draft" && b.kind === "editor",
+    );
+    // Multiple works-in-progress → let the user pick which one to publish.
+    if (drafts.length > 1) {
+      setPickerOpen(true);
+      return;
+    }
+    if (drafts.length === 1) {
+      pickDraft(drafts[0]);
+      return;
+    }
+    // No cloud drafts → fall back to the current localStorage working draft.
     const saved = loadEditorState();
     if (!saved || saved.pages.length === 0) {
       alert("작업 중인 책이 없어요. 먼저 책을 만들어 주세요.");
       return;
     }
-    setDraftPages(saved.pages);
-  }, [author]);
+    setPublishTarget({
+      pages: saved.pages,
+      pageW: saved.pageW ?? 800,
+      layout: saved.layout ?? "spread",
+      initial: { author: author?.displayName, cover: saved.pages[0]?.thumb },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [author, books]);
+
+  // Adopt a cloud draft as the publish target (converted in place on confirm).
+  const pickDraft = useCallback(
+    (d: StoreBook) => {
+      setPickerOpen(false);
+      setPublishTarget({
+        pages: d.pages,
+        pageW: d.pageW ?? 800,
+        layout: d.layout ?? "spread",
+        draftId: d.id,
+        initial: {
+          title: d.title && d.title !== "제목 없는 책" ? d.title : undefined,
+          author: d.author ?? author?.displayName,
+          description: d.description,
+          category: d.category,
+          cover: d.coverThumb ?? d.pages[0]?.thumb,
+        },
+      });
+    },
+    [author],
+  );
 
   const confirmAuthorApply = useCallback(async (input: AuthorApplyInput) => {
     setBusy(true);
@@ -210,31 +266,46 @@ export default function LibraryPage() {
 
   const confirmSubmit = useCallback(
     async (values: SubmitValues) => {
-      if (!draftPages) return;
-      const saved = loadEditorState();
+      if (!publishTarget) return;
       setBusy(true);
       try {
-        await submitBook({
-          title: values.title,
-          author: values.author,
-          description: values.description,
-          category: values.category,
-          price: values.price,
-          pageW: saved?.pageW ?? 800,
-          layout: saved?.layout ?? "spread",
-          pages: draftPages,
-          coverThumb: values.cover,
-        });
-        alert("북스토어에 올렸어요! 슈퍼관리자 승인 후 공개돼요.");
+        if (publishTarget.draftId) {
+          // Convert the selected cloud draft into a published book in place
+          // (same id — no empty duplicate).
+          await updateBook(publishTarget.draftId, {
+            pages: publishTarget.pages,
+            title: values.title,
+            author: values.author,
+            description: values.description,
+            category: values.category,
+            price: values.price,
+            pageW: publishTarget.pageW,
+            layout: publishTarget.layout,
+            coverThumb: values.cover,
+          });
+        } else {
+          await submitBook({
+            title: values.title,
+            author: values.author,
+            description: values.description,
+            category: values.category,
+            price: values.price,
+            pageW: publishTarget.pageW,
+            layout: publishTarget.layout,
+            pages: publishTarget.pages,
+            coverThumb: values.cover,
+          });
+        }
+        alert("북스토어에 올렸어요!");
         refresh();
       } catch (err) {
         alert((err as Error).message);
       } finally {
         setBusy(false);
-        setDraftPages(null);
+        setPublishTarget(null);
       }
     },
-    [draftPages, refresh],
+    [publishTarget, refresh],
   );
 
   if (reader) {
@@ -414,15 +485,20 @@ export default function LibraryPage() {
         </div>
       )}
 
-      {draftPages && (
+      {pickerOpen && (
+        <DraftPickerModal
+          drafts={editorDrafts}
+          onPick={pickDraft}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
+
+      {publishTarget && (
         <SubmitBookModal
           submitting={busy}
           authorType={author?.type}
-          initial={{
-            author: author?.displayName,
-            cover: draftPages[0]?.thumb,
-          }}
-          onCancel={() => setDraftPages(null)}
+          initial={publishTarget.initial}
+          onCancel={() => setPublishTarget(null)}
           onConfirm={(values) => void confirmSubmit(values)}
         />
       )}

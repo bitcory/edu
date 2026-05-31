@@ -3418,6 +3418,64 @@ textarea.ed-input {
   margin-top: 8px;
 }
 
+/* ---- Draft picker modal ---- */
+.draft-pick-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 52vh;
+  overflow-y: auto;
+}
+.draft-pick {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border: 1px solid #ece0cd;
+  border-radius: 12px;
+  background: #fdfaf4;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.draft-pick:hover {
+  border-color: #c08a4a;
+  background: #fff6e9;
+}
+.draft-pick__cover {
+  flex-shrink: 0;
+  width: 52px;
+  height: 65px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #f0e6cf;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #b09a78;
+  font-size: 11px;
+}
+.draft-pick__cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.draft-pick__meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.draft-pick__title {
+  font-weight: 700;
+  font-size: 14px;
+  color: #4a3526;
+}
+.draft-pick__sub {
+  font-size: 12px;
+  color: #9a7a52;
+}
+
 /* ---- Shared BGM pool modal ---- */
 .bgm-head {
   display: flex;
