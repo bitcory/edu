@@ -3227,11 +3227,21 @@ textarea.ed-input {
   color: #c0392b;
   font-weight: 600;
 }
+/* Narration editor: bigger than the shared 내용추가 modal so the long segment
+   list is editable. */
+.ed-cmodal--narr {
+  width: min(1240px, 96vw);
+  height: min(94vh, 960px);
+}
+
 .narr-ed__list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  align-content: start;
   gap: 6px;
-  max-height: 40vh;
+  /* Fill the remaining height of the right pane and scroll inside. */
+  flex: 1 1 auto;
+  min-height: 140px;
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -4305,6 +4315,7 @@ textarea.ed-input {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
   padding: 16px 20px;
   gap: 12px;
 }

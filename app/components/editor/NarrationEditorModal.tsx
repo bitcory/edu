@@ -242,7 +242,10 @@ export default function NarrationEditorModal({
 
   return (
     <div className="ed-cmodal-backdrop" onClick={onClose}>
-      <div className="ed-cmodal" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="ed-cmodal ed-cmodal--narr"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="ed-cmodal__head">
           <span>🎙 나레이션 편집</span>
           <button
