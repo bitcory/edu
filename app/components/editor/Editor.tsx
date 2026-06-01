@@ -2654,7 +2654,7 @@ export default function Editor({
       {narrEditorOpen && bookId && (
         <NarrationEditorModal
           bookId={bookId}
-          pageCount={pages.length}
+          spreads={captionSpreads}
           onApplied={markNarrationPages}
           onClose={() => setNarrEditorOpen(false)}
         />

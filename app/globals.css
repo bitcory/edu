@@ -2974,11 +2974,17 @@ textarea.ed-input {
 
 .store-card__btns {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
+}
+/* Keep the draft/editor action row on one line even on narrow cards. */
+.store-card__btns .icon-btn {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
 }
 
 .icon-btn {
@@ -3002,9 +3008,10 @@ textarea.ed-input {
 .lib-continue {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  height: 32px;
-  padding: 0 13px;
+  gap: 4px;
+  height: 30px;
+  flex-shrink: 0;
+  padding: 0 11px;
   border-radius: 999px;
   background: linear-gradient(180deg, #ff9b6f, #f06f5f);
   color: #fff;
@@ -3110,15 +3117,17 @@ textarea.ed-input {
 }
 
 /* ---- Narration editor (waveform) modal ---- */
+/* Big on PC so the waveform is easy to edit; full-ish width on mobile. */
 .narr-ed {
-  max-width: 640px;
-  width: min(640px, 94vw);
-  padding: 16px;
+  max-width: 1040px;
+  width: min(1040px, 95vw);
+  max-height: 92vh;
+  padding: 20px;
 }
 /* Keep every row inside the card on narrow screens (no clipped buttons). */
-.narr-ed .icon-btn {
-  width: 30px;
-  height: 30px;
+.narr-ed__seg .icon-btn {
+  width: 28px;
+  height: 28px;
   flex-shrink: 0;
 }
 .narr-ed__drop {
@@ -3219,10 +3228,10 @@ textarea.ed-input {
   font-weight: 600;
 }
 .narr-ed__list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 6px;
-  max-height: 38vh;
+  max-height: 40vh;
   overflow-y: auto;
   overflow-x: hidden;
 }
