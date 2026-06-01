@@ -45,6 +45,7 @@ import FabricCanvas, {
   type Guide,
 } from "./FabricCanvas";
 import ColorField from "./ColorField";
+import NarrationEditorModal from "./NarrationEditorModal";
 import ContentTextModal, {
   type SpreadRow,
   splitBlocks,
@@ -282,8 +283,23 @@ export default function Editor({
     () => initialNarration ?? [],
   );
   const [narrBusy, setNarrBusy] = useState(false);
+  const [narrEditorOpen, setNarrEditorOpen] = useState(false);
   const narrInputRef = useRef<HTMLInputElement | null>(null);
   const activeHasNarration = !!narration[activeIndex];
+
+  // Mark the given page indices as having narration (after the editor applies
+  // segments). Keeps the 음성 tool's green dot in sync.
+  const markNarrationPages = useCallback((indices: number[]) => {
+    setNarration((prev) => {
+      const next = [...prev];
+      for (const i of indices) {
+        while (next.length <= i) next.push(null);
+        next[i] = `narration/${bookId}/${i}.mp3`;
+      }
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookId]);
 
   const onNarrationFile = useCallback(
     async (file: File) => {
@@ -1827,6 +1843,24 @@ export default function Editor({
           <button
             type="button"
             className="ed-draft"
+            onClick={() => {
+              if (!bookId) {
+                alert(
+                  "먼저 '임시저장'을 눌러 책을 저장한 뒤 나레이션을 넣을 수 있어요.",
+                );
+                return;
+              }
+              setNarrEditorOpen(true);
+            }}
+            disabled={exporting}
+            title="음성 한 파일을 구간으로 나눠 페이지별 나레이션으로 넣기"
+          >
+            <Mic size={16} />
+            <span className="ed-draft__label">나레이션 편집</span>
+          </button>
+          <button
+            type="button"
+            className="ed-draft"
             onClick={openContentModal}
             disabled={exporting}
             title="페이지별 내용(텍스트)을 한 번에 추가"
@@ -2614,6 +2648,15 @@ export default function Editor({
           onText={setCaptionText}
           onApply={() => void applyCaptions()}
           onClose={() => setContentModalOpen(false)}
+        />
+      )}
+
+      {narrEditorOpen && bookId && (
+        <NarrationEditorModal
+          bookId={bookId}
+          pageCount={pages.length}
+          onApplied={markNarrationPages}
+          onClose={() => setNarrEditorOpen(false)}
         />
       )}
     </div>
