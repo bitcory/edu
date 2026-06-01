@@ -88,6 +88,8 @@ type Props = {
   singlePage?: boolean;
   /** Background music to play softly while reading. */
   audioUrl?: string;
+  /** Per-page narration URLs (aligned to page index; null where none). */
+  narrationUrls?: (string | null)[];
 };
 
 export default function BookViewer({
@@ -95,14 +97,21 @@ export default function BookViewer({
   onClose,
   singlePage,
   audioUrl,
+  narrationUrls,
 }: Props) {
   const first = pages[0];
   const aspect = first ? first.width / first.height : 0.7;
+
+  const hasNarration = !!narrationUrls?.some(Boolean);
+  // Music sits a touch lower (constant — no ducking) when narration is present,
+  // so the voice stays clearly on top.
+  const MUSIC_VOL = hasNarration ? 0.18 : 0.3;
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const bookRef = useRef<FlipBookInstance | null>(null);
   const [dims, setDims] = useState<{ w: number; h: number } | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const narrationRef = useRef<HTMLAudioElement | null>(null);
   const [musicOn, setMusicOn] = useState(false);
   // Music starts when the reader turns the front cover into the first page —
   // not on open. This ref guards that auto-start to fire only once.
@@ -112,8 +121,8 @@ export default function BookViewer({
   useEffect(() => {
     const el = audioRef.current;
     if (!el || !audioUrl) return;
-    el.volume = 0.3;
-  }, [audioUrl]);
+    el.volume = MUSIC_VOL;
+  }, [audioUrl, MUSIC_VOL]);
 
   // Start the background music the first time the reader leaves the cover
   // (page index ≥ 1). The flip is a user gesture, so autoplay isn't blocked.
@@ -121,53 +130,105 @@ export default function BookViewer({
     const el = audioRef.current;
     if (!el || musicStartedRef.current) return;
     musicStartedRef.current = true;
-    el.volume = 0.3;
+    el.volume = MUSIC_VOL;
     void el.play().then(
       () => setMusicOn(true),
       () => setMusicOn(false),
     );
   };
 
-  // ---- 자동보기: turn pages by itself every N seconds ----
+  // ---- Per-page narration ----
+  // Play (or stop) the narration for a given page index.
+  const playNarrationForPage = (i: number) => {
+    const el = narrationRef.current;
+    if (!el) return;
+    const url = narrationUrls?.[i] ?? null;
+    if (url) {
+      if (el.src !== url) el.src = url;
+      el.currentTime = 0;
+      void el.play().catch(() => {});
+    } else {
+      el.pause();
+    }
+  };
+
+  // ---- 자동보기: turn pages by itself ----
+  // With narration: advance when the voice ends. Without: after N seconds.
   const [autoOpen, setAutoOpen] = useState(false);
   const [autoSeconds, setAutoSeconds] = useState(5);
   const [autoPlaying, setAutoPlaying] = useState(false);
-  // Current page index (kept via onFlip) so auto-play knows when to stop.
+  const autoPlayingRef = useRef(false);
   const currentPageRef = useRef(0);
-  // Page index seen at the previous tick — if it didn't change, we've hit the
-  // end (flipNext is a no-op there) and auto-play stops.
-  const lastTickPageRef = useRef(-1);
+  const autoTimerRef = useRef<number | null>(null);
+  // True while we're holding for the current page's narration to finish.
+  const waitingForNarrationRef = useRef(false);
+
+  const clearAutoTimer = () => {
+    if (autoTimerRef.current !== null) {
+      window.clearTimeout(autoTimerRef.current);
+      autoTimerRef.current = null;
+    }
+    waitingForNarrationRef.current = false;
+  };
+
+  // Move to the next page; stop auto-play at the end.
+  const advance = () => {
+    if (currentPageRef.current >= pages.length - 1) {
+      setAutoPlaying(false);
+      return;
+    }
+    bookRef.current?.pageFlip?.().flipNext();
+  };
+
+  // Decide when to advance from the page we're currently on.
+  const scheduleAdvance = () => {
+    clearAutoTimer();
+    if (!autoPlayingRef.current) return;
+    const i = currentPageRef.current;
+    if (narrationUrls?.[i]) {
+      // This page has narration → advance when the voice 'ended' fires.
+      waitingForNarrationRef.current = true;
+    } else {
+      autoTimerRef.current = window.setTimeout(advance, autoSeconds * 1000);
+    }
+  };
+
+  const onNarrationEnded = () => {
+    if (autoPlayingRef.current && waitingForNarrationRef.current) {
+      waitingForNarrationRef.current = false;
+      autoTimerRef.current = window.setTimeout(advance, 600);
+    }
+  };
+
+  // If a page's narration fails to load/play in auto mode, don't get stuck —
+  // fall back to the timed advance.
+  const onNarrationError = () => {
+    if (autoPlayingRef.current && waitingForNarrationRef.current) {
+      waitingForNarrationRef.current = false;
+      autoTimerRef.current = window.setTimeout(advance, autoSeconds * 1000);
+    }
+  };
+
+  useEffect(() => {
+    autoPlayingRef.current = autoPlaying;
+    if (autoPlaying) scheduleAdvance();
+    else clearAutoTimer();
+    return () => clearAutoTimer();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoPlaying, autoSeconds]);
 
   const startAuto = (seconds: number) => {
     const s = Math.min(60, Math.max(1, Math.round(seconds) || 5));
     setAutoSeconds(s);
-    lastTickPageRef.current = -1;
     setAutoOpen(false);
     setAutoPlaying(true);
   };
-
-  useEffect(() => {
-    if (!autoPlaying) return;
-    const id = window.setInterval(() => {
-      const api = bookRef.current?.pageFlip?.();
-      if (!api) return;
-      const cur = currentPageRef.current;
-      // No progress since last tick → reached the last page, stop.
-      if (cur === lastTickPageRef.current) {
-        setAutoPlaying(false);
-        return;
-      }
-      lastTickPageRef.current = cur;
-      api.flipNext();
-    }, autoSeconds * 1000);
-    return () => window.clearInterval(id);
-  }, [autoPlaying, autoSeconds]);
 
   const toggleMusic = () => {
     const el = audioRef.current;
     if (!el) return;
     if (el.paused) {
-      el.volume = 0.3;
+      el.volume = MUSIC_VOL;
       void el.play().then(
         () => setMusicOn(true),
         () => setMusicOn(false),
@@ -287,6 +348,14 @@ export default function BookViewer({
           onClose={() => setAutoOpen(false)}
         />
       )}
+      {hasNarration && (
+        <audio
+          ref={narrationRef}
+          preload="auto"
+          onEnded={onNarrationEnded}
+          onError={onNarrationError}
+        />
+      )}
       {audioUrl && (
         <>
           <audio ref={audioRef} src={audioUrl} loop preload="auto" />
@@ -323,6 +392,10 @@ export default function BookViewer({
                 currentPageRef.current = e.data;
                 // Leaving the front cover (page ≥ 1) starts the music.
                 if (e.data >= 1) startMusicOnce();
+                // Play this page's narration (manual or auto).
+                playNarrationForPage(e.data);
+                // In auto mode, decide when to turn next from this page.
+                if (autoPlayingRef.current) scheduleAdvance();
               }}
             >
               {pageEls}

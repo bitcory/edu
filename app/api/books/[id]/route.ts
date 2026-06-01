@@ -8,6 +8,7 @@ import {
 import { isApprovedAuthor } from "../../../lib/authors-repo";
 import { OPEN_PUBLISH } from "../../../lib/publish-policy";
 import {
+  deleteNarration,
   deletePdf,
   deleteSnapshot,
   readSnapshotJson,
@@ -112,6 +113,9 @@ export async function DELETE(
 
   if (existing.kind === "pdf") await deletePdf(id);
   if (existing.snapshotKey) await deleteSnapshot(existing.snapshotKey);
+  for (const k of existing.narration ?? []) {
+    if (k) await deleteNarration(k);
+  }
   await deleteBook(id);
   return Response.json({ ok: true });
 }

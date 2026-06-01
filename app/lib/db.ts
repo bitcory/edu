@@ -93,6 +93,8 @@ export function ensureSchema(): Promise<void> {
         // page_count preserves the "N쪽" display without loading the snapshot.
         `ADD COLUMN IF NOT EXISTS snapshot_key TEXT`,
         `ADD COLUMN IF NOT EXISTS page_count INTEGER`,
+        // Per-page narration: JSON array of R2 keys (or null) per page index.
+        `ADD COLUMN IF NOT EXISTS narration TEXT`,
       ]) {
         await db.execute(`ALTER TABLE books ${ddl}`);
       }

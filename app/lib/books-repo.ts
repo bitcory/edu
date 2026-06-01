@@ -43,7 +43,23 @@ function rowToBook(row: Row): StoreBook {
       row.reject_reason == null ? undefined : String(row.reject_reason),
     likeCount: row.like_count == null ? undefined : Number(row.like_count),
     audioKey: row.audio_key == null ? undefined : String(row.audio_key),
+    narration:
+      row.narration == null
+        ? undefined
+        : (JSON.parse(String(row.narration)) as (string | null)[]),
   };
+}
+
+/** Replace a book's per-page narration manifest (JSON array of R2 keys). */
+export async function setBookNarration(
+  id: string,
+  narration: (string | null)[],
+): Promise<void> {
+  await ensureSchema();
+  await db.execute({
+    sql: `UPDATE books SET narration = ? WHERE id = ?`,
+    args: [JSON.stringify(narration), id],
+  });
 }
 
 /** Set or clear (null) a book's background-music R2 key. */

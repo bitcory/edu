@@ -4,6 +4,7 @@ import Link from "next/link";
 import {
   BookOpen,
   Lock,
+  Mic,
   Music,
   Pencil,
   Store,
@@ -20,11 +21,13 @@ import AuthorRegisterModal from "../components/AuthorRegisterModal";
 import BookInfoModal, { type InfoValues } from "../components/BookInfoModal";
 import BgmPoolModal from "../components/BgmPoolModal";
 import DraftPickerModal from "../components/DraftPickerModal";
+import NarrationModal from "../components/NarrationModal";
 import {
   attachBookAudio,
   deleteBook,
   getBook,
   getBookAudioUrl,
+  getNarrationUrls,
   listMyBooks,
   removeBookAudio,
   submitBook,
@@ -54,6 +57,7 @@ type Reader = {
   revoke: () => void;
   single: boolean;
   audioUrl?: string;
+  narrationUrls?: (string | null)[];
 };
 
 export default function LibraryPage() {
@@ -76,6 +80,7 @@ export default function LibraryPage() {
   const audioInputRef = useRef<HTMLInputElement | null>(null);
   const [audioTarget, setAudioTarget] = useState<StoreBook | null>(null);
   const [bgmOpen, setBgmOpen] = useState(false);
+  const [narrTarget, setNarrTarget] = useState<StoreBook | null>(null);
 
   const isApproved = author?.status === "approved";
 
@@ -180,11 +185,13 @@ export default function LibraryPage() {
         ? ((await getBookAudioUrl(book.id)) ?? undefined)
         : undefined;
       if (!audioUrl) audioUrl = await pickRandomPoolBgm();
+      const nUrls = await getNarrationUrls(book.id);
       setReader({
         pages: rendered,
         revoke,
         single: book.layout === "single",
         audioUrl,
+        narrationUrls: nUrls.some(Boolean) ? nUrls : undefined,
       });
     } catch (err) {
       alert("책을 여는 중 문제가 생겼어요: " + (err as Error).message);
@@ -324,6 +331,7 @@ export default function LibraryPage() {
         pages={reader.pages}
         singlePage={reader.single}
         audioUrl={reader.audioUrl}
+        narrationUrls={reader.narrationUrls}
         onClose={() => setReader(null)}
       />
     );
@@ -478,6 +486,18 @@ export default function LibraryPage() {
                   >
                     <Music size={16} />
                   </button>
+                  {b.kind === "editor" && (
+                    <button
+                      type="button"
+                      className="icon-btn icon-btn--narr"
+                      onClick={() => setNarrTarget(b)}
+                      disabled={busy}
+                      title="페이지별 나레이션(음성) 넣기"
+                      aria-label="나레이션"
+                    >
+                      <Mic size={16} />
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="icon-btn icon-btn--delete"
@@ -514,6 +534,13 @@ export default function LibraryPage() {
       )}
 
       {bgmOpen && <BgmPoolModal onClose={() => setBgmOpen(false)} />}
+
+      {narrTarget && (
+        <NarrationModal
+          bookId={narrTarget.id}
+          onClose={() => setNarrTarget(null)}
+        />
+      )}
 
       {editInfo && (
         <BookInfoModal

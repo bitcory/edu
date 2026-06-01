@@ -34,6 +34,7 @@ export type StoreBook = {
   rejectReason?: string;
   likeCount?: number; // populated by the store listing (좋아요 수)
   audioKey?: string; // R2 key of the background music (MP3), if any
+  narration?: (string | null)[]; // R2 key per page index (null = no narration)
 };
 
 export type SubmitInput = {

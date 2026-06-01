@@ -8,6 +8,7 @@ import BookPreviewModal from "../components/BookPreviewModal";
 import UserChip from "../components/auth/UserChip";
 import {
   getBookAudioUrl,
+  getNarrationUrls,
   listStoreBooks,
   type StoreBook,
 } from "../lib/store";
@@ -22,6 +23,7 @@ type Reader = {
   revoke: () => void;
   single: boolean;
   audioUrl?: string;
+  narrationUrls?: (string | null)[];
 };
 
 export default function StorePage() {
@@ -72,11 +74,13 @@ export default function StorePage() {
         ? ((await getBookAudioUrl(book.id)) ?? undefined)
         : undefined;
       if (!audioUrl) audioUrl = await pickRandomPoolBgm();
+      const nUrls = await getNarrationUrls(book.id);
       setReader({
         pages: rendered,
         revoke,
         single: book.layout === "single",
         audioUrl,
+        narrationUrls: nUrls.some(Boolean) ? nUrls : undefined,
       });
     } catch (err) {
       alert("책을 여는 중 문제가 생겼어요: " + (err as Error).message);
@@ -91,6 +95,7 @@ export default function StorePage() {
         pages={reader.pages}
         singlePage={reader.single}
         audioUrl={reader.audioUrl}
+        narrationUrls={reader.narrationUrls}
         onClose={() => setReader(null)}
       />
     );

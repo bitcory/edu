@@ -271,6 +271,60 @@ export async function getBookAudioUrl(id: string): Promise<string | null> {
   return url ?? null;
 }
 
+// ---- Per-page narration ----
+
+/** Upload a page's narration MP3. */
+export async function uploadNarration(
+  bookId: string,
+  index: number,
+  file: File,
+): Promise<void> {
+  if (file.size > 30 * 1024 * 1024) {
+    throw new Error("음성 파일이 너무 커요 (최대 30MB).");
+  }
+  const res = await fetch(`/api/books/${bookId}/narration`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ index }),
+  });
+  if (!res.ok) {
+    throw new Error(await errorMessage(res, "나레이션 등록에 실패했어요."));
+  }
+  const { uploadUrl } = (await res.json()) as { uploadUrl: string };
+  const put = await fetch(uploadUrl, {
+    method: "PUT",
+    body: file,
+    headers: { "content-type": "audio/mpeg" },
+  });
+  if (!put.ok) {
+    throw new Error("음성 업로드에 실패했어요. 잠시 후 다시 시도해 주세요.");
+  }
+}
+
+export async function removeNarration(
+  bookId: string,
+  index: number,
+): Promise<void> {
+  const res = await fetch(`/api/books/${bookId}/narration?index=${index}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    throw new Error(await errorMessage(res, "나레이션 삭제에 실패했어요."));
+  }
+}
+
+/** Presigned narration URLs per page index (null where none). */
+export async function getNarrationUrls(
+  bookId: string,
+): Promise<(string | null)[]> {
+  const res = await fetch(`/api/books/${bookId}/narration-urls`, {
+    cache: "no-store",
+  });
+  if (!res.ok) return [];
+  const { urls } = (await res.json()) as { urls: (string | null)[] };
+  return urls ?? [];
+}
+
 // ---- Shared background-music pool ----
 
 export type BgmPoolTrack = {

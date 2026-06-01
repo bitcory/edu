@@ -53,6 +53,9 @@ function EditPageInner() {
     description?: string;
     category?: string;
   } | null>(null);
+  const [bookNarration, setBookNarration] = useState<
+    (string | null)[] | undefined
+  >(undefined);
   const [pageW, setPageW] = useState<number>(DEFAULT_TEMPLATE.width);
   const [prevPageW, setPrevPageW] = useState<number>(DEFAULT_TEMPLATE.width);
   const [layout, setLayout] = useState<BookLayout>(DEFAULT_TEMPLATE.layout);
@@ -111,6 +114,7 @@ function EditPageInner() {
           description: b.description,
           category: b.category,
         });
+        setBookNarration(b.narration);
         const w = b.pageW || DEFAULT_TEMPLATE.width;
         setPageW(w);
         setPrevPageW(w); // equal → no recenter on load
@@ -225,6 +229,8 @@ function EditPageInner() {
           prevPageW={prevPageW}
           layout={layout}
           onTemplateChange={onTemplateChange}
+          bookId={bookId ?? draftId ?? undefined}
+          initialNarration={bookNarration}
         />
       </div>
       {mode.kind === "exporting" && (

@@ -908,6 +908,25 @@ body {
   font-size: 13px;
 }
 
+/* Narration tool: highlights when the current page already has a voice file. */
+.ed-tool--narr {
+  position: relative;
+}
+.ed-tool--narr.is-on {
+  background: rgba(240, 111, 95, 0.28);
+  color: #ffe3da;
+}
+.ed-tool--narr input {
+  display: none;
+}
+.ed-tool__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #58d68d;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.2);
+}
+
 .ed-tool-select {
   padding: 8px 12px;
   border: 1px solid rgba(255, 220, 160, 0.16);
@@ -3021,6 +3040,73 @@ textarea.ed-input {
 
 .icon-btn--edit:hover {
   background: rgba(47, 157, 150, 0.28);
+}
+
+.icon-btn--narr {
+  background: rgba(224, 122, 95, 0.16);
+  color: #c0603a;
+}
+.icon-btn--narr:hover:not(:disabled) {
+  background: rgba(224, 122, 95, 0.28);
+}
+
+/* ---- Narration modal ---- */
+.narr-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 56vh;
+  overflow-y: auto;
+}
+.narr-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border: 1px solid #ece0cd;
+  border-radius: 10px;
+  background: #fdfaf4;
+}
+.narr-row__thumb {
+  flex-shrink: 0;
+  width: 40px;
+  height: 50px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #f0e6cf;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #b09a78;
+  font-size: 12px;
+  font-weight: 700;
+}
+.narr-row__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.narr-row__no {
+  flex-shrink: 0;
+  width: 34px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #6a4a2b;
+}
+.narr-row__audio {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+}
+.narr-row__empty {
+  flex: 1;
+  font-size: 12px;
+  color: #b09a78;
+}
+.narr-row__busy {
+  color: #c0603a;
+  font-weight: 700;
 }
 
 .icon-btn--delete {

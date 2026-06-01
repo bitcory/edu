@@ -236,6 +236,45 @@ export async function deletePdf(id: string): Promise<void> {
   }
 }
 
+// ---- Per-page narration (MP3), at narration/<bookId>/<pageIndex>.mp3 ----
+export function narrationKeyFor(bookId: string, index: number): string {
+  return `narration/${bookId}/${index}.mp3`;
+}
+
+/** Presigned PUT so the browser uploads a page's narration straight to R2. */
+export async function presignNarrationUpload(
+  bookId: string,
+  index: number,
+): Promise<{ key: string; url: string }> {
+  const { client, bucket } = r2();
+  const key = narrationKeyFor(bookId, index);
+  const url = await getSignedUrl(
+    client,
+    new PutObjectCommand({ Bucket: bucket, Key: key }),
+    { expiresIn: 300 },
+  );
+  return { key, url };
+}
+
+/** Presigned GET so an <audio> element can stream a page's narration. */
+export async function presignNarrationDownload(key: string): Promise<string> {
+  const { client, bucket } = r2();
+  return getSignedUrl(
+    client,
+    new GetObjectCommand({ Bucket: bucket, Key: key }),
+    { expiresIn: 3600 },
+  );
+}
+
+export async function deleteNarration(key: string): Promise<void> {
+  try {
+    const { client, bucket } = r2();
+    await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+  } catch {
+    /* ignore */
+  }
+}
+
 // ---- Shared background-music pool (MP3), at bgm/<trackId>.mp3 ----
 function bgmKeyFor(id: string): string {
   return `bgm/${id}.mp3`;
