@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 190" role="img" aria-labelledby="title desc">
+  <title id="title">MAGIC BOOK</title>
+  <desc id="desc">Transparent MAGIC BOOK logo text with a soft storybook style.</desc>
+  <style>
+    @font-face {
+      font-family: "MagicLogoLuckiest";
+      src: url("/fonts/LuckiestGuy-Regular.ttf") format("truetype");
+      font-weight: 400;
+    }
+  </style>
+  <defs>
+    <linearGradient id="goldFill" x1="0" x2="0" y1="20" y2="168" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fffdf0"/>
+      <stop offset="0.48" stop-color="#fff1be"/>
+      <stop offset="1" stop-color="#e9bf6b"/>
+    </linearGradient>
+    <linearGradient id="tealStroke" x1="0" x2="980" y1="0" y2="190" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#315f5e"/>
+      <stop offset="1" stop-color="#7a5b2e"/>
+    </linearGradient>
+    <filter id="logoShadow" x="-8%" y="-18%" width="116%" height="142%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="10" stdDeviation="5" flood-color="#2b291c" flood-opacity="0.34"/>
+      <feDropShadow dx="0" dy="3" stdDeviation="0.8" flood-color="#7a5528" flood-opacity="0.5"/>
+    </filter>
+    <filter id="sparkleShadow" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="2" stdDeviation="1" flood-color="#71511f" flood-opacity="0.28"/>
+    </filter>
+  </defs>
+  <g filter="url(#logoShadow)">
+    <text
+      x="490"
+      y="132"
+      text-anchor="middle"
+      font-family="MagicLogoLuckiest, Luckiest Guy, Arial Black, sans-serif"
+      font-size="112"
+      font-weight="900"
+      letter-spacing="6"
+      stroke="url(#tealStroke)"
+      stroke-width="11"
+      stroke-linejoin="round"
+      paint-order="stroke fill"
+      fill="url(#goldFill)">MAGIC BOOK</text>
+    <text
+      x="490"
+      y="132"
+      text-anchor="middle"
+      font-family="MagicLogoLuckiest, Luckiest Guy, Arial Black, sans-serif"
+      font-size="112"
+      font-weight="900"
+      letter-spacing="6"
+      stroke="#fff9d8"
+      stroke-width="2.5"
+      stroke-linejoin="round"
+      fill="url(#goldFill)"
+      opacity="0.95">MAGIC BOOK</text>
+  </g>
+  <g filter="url(#sparkleShadow)" fill="#ffe08a" stroke="#9d7428" stroke-width="2" stroke-linejoin="round">
+    <path d="M76 62l8 20 20 8-20 8-8 20-8-20-20-8 20-8z"/>
+    <path d="M895 49l6 15 15 6-15 6-6 15-6-15-15-6 15-6z"/>
+    <path d="M842 140l5 12 12 5-12 5-5 12-5-12-12-5 12-5z" opacity="0.86"/>
+  </g>
+</svg>

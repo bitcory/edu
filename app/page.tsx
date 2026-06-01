@@ -13,7 +13,9 @@ export default function Home() {
       </div>
 
       <header className="landing-header">
-        <h1 className="landing-title">MAGIC BOOK</h1>
+        <h1 className="landing-title" aria-label="MAGIC BOOK">
+          <span>MAGIC BOOK</span>
+        </h1>
         <p className="landing-sub">
           PDF 그림책을 펼쳐 보고, 직접 책도 만들어 북스토어에 올려 보세요.
         </p>
