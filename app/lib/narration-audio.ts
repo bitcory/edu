@@ -98,11 +98,35 @@ type LameModule = {
   };
 };
 
+/** Concatenate Int16 PCM chunks into one buffer. */
+function concatInt16(parts: Int16Array[]): Int16Array {
+  const total = parts.reduce((n, p) => n + p.length, 0);
+  const out = new Int16Array(total);
+  let off = 0;
+  for (const p of parts) {
+    out.set(p, off);
+    off += p.length;
+  }
+  return out;
+}
+
 /** Encode [startSec, endSec) of the buffer to an MP3 byte array. */
 export async function encodeSliceToMp3(
   buffer: AudioBuffer,
   startSec: number,
   endSec: number,
+  kbps = 128,
+): Promise<Uint8Array> {
+  return encodeSlicesToMp3(buffer, [{ start: startSec, end: endSec }], kbps);
+}
+
+/**
+ * Encode several [start, end) ranges of the buffer into ONE MP3, concatenated
+ * in the given order — used when a page holds multiple narration segments.
+ */
+export async function encodeSlicesToMp3(
+  buffer: AudioBuffer,
+  ranges: { start: number; end: number }[],
   kbps = 128,
 ): Promise<Uint8Array> {
   const mod = (await import("@breezystack/lamejs")) as unknown as
@@ -114,11 +138,19 @@ export async function encodeSliceToMp3(
 
   const sampleRate = buffer.sampleRate;
   const channels = Math.min(2, buffer.numberOfChannels);
-  const a = Math.floor(startSec * sampleRate);
-  const b = Math.floor(endSec * sampleRate);
-  const left = floatTo16(buffer.getChannelData(0).subarray(a, b));
-  const right =
-    channels > 1 ? floatTo16(buffer.getChannelData(1).subarray(a, b)) : null;
+  const ch0 = buffer.getChannelData(0);
+  const ch1 = channels > 1 ? buffer.getChannelData(1) : null;
+  const leftParts: Int16Array[] = [];
+  const rightParts: Int16Array[] = [];
+  for (const { start, end } of ranges) {
+    const a = Math.floor(start * sampleRate);
+    const b = Math.floor(end * sampleRate);
+    if (b <= a) continue;
+    leftParts.push(floatTo16(ch0.subarray(a, b)));
+    if (ch1) rightParts.push(floatTo16(ch1.subarray(a, b)));
+  }
+  const left = concatInt16(leftParts);
+  const right = ch1 ? concatInt16(rightParts) : null;
 
   const enc = new Mp3Encoder(channels, sampleRate, kbps);
   const chunks: Uint8Array[] = [];

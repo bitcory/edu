@@ -263,6 +263,21 @@ export async function removeBookAudio(id: string): Promise<void> {
   }
 }
 
+/** Use a shared-pool track as the book's music (references it, no copy). */
+export async function attachBookAudioFromPool(
+  id: string,
+  trackId: string,
+): Promise<void> {
+  const res = await fetch(`/api/books/${id}/audio/from-pool`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ trackId }),
+  });
+  if (!res.ok) {
+    throw new Error(await errorMessage(res, "공용 음악 적용에 실패했어요."));
+  }
+}
+
 /** Presigned URL to play a book's background music; null if none/forbidden. */
 export async function getBookAudioUrl(id: string): Promise<string | null> {
   const res = await fetch(`/api/books/${id}/audio-url`, { cache: "no-store" });
@@ -332,6 +347,8 @@ export type BgmPoolTrack = {
   name: string;
   ownerId: string;
   ownerName: string;
+  /** R2 key (bgm/<id>.mp3) — used to tell which track a book references. */
+  key: string;
   url: string;
 };
 

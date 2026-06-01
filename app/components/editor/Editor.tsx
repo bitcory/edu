@@ -23,6 +23,7 @@ import {
   Image as ImageIcon,
   Maximize2,
   Mic,
+  Music,
   PanelBottom,
   PanelLeft,
   PanelRight,
@@ -46,6 +47,7 @@ import FabricCanvas, {
 } from "./FabricCanvas";
 import ColorField from "./ColorField";
 import NarrationEditorModal from "./NarrationEditorModal";
+import BookMusicModal from "./BookMusicModal";
 import ContentTextModal, {
   type SpreadRow,
   splitBlocks,
@@ -58,7 +60,6 @@ import {
 } from "../../lib/editor-types";
 import type { BookLayout } from "../../lib/book-types";
 import { TEMPLATES } from "../../lib/templates";
-import { removeNarration, uploadNarration } from "../../lib/store";
 import {
   clearEditorState,
   loadEditorState,
@@ -181,6 +182,8 @@ type Props = {
   bookId?: string;
   // Existing per-page narration keys (null where none), for showing state.
   initialNarration?: (string | null)[];
+  // The book's current background-music R2 key (audioKey), if any.
+  initialAudioKey?: string;
 };
 
 export default function Editor({
@@ -194,6 +197,7 @@ export default function Editor({
   onTemplateChange,
   bookId,
   initialNarration,
+  initialAudioKey,
 }: Props) {
   // Shadow PAGE_W with the per-book width so all the body coordinate math uses
   // the chosen 판형. Height stays PAGE_H. The parent remounts on 판형 change.
@@ -279,13 +283,19 @@ export default function Editor({
 
   // Per-page narration (R2 keys, null = none). Uploaded straight to R2 via the
   // book's id — so the book must be saved (임시저장) first to have an id.
-  const [narration, setNarration] = useState<(string | null)[]>(
+  // Per-page narration keys are tracked so the 나레이션 편집 modal can report
+  // applied pages; narration is added there (no separate per-page 음성 button).
+  const [, setNarration] = useState<(string | null)[]>(
     () => initialNarration ?? [],
   );
-  const [narrBusy, setNarrBusy] = useState(false);
   const [narrEditorOpen, setNarrEditorOpen] = useState(false);
-  const narrInputRef = useRef<HTMLInputElement | null>(null);
-  const activeHasNarration = !!narration[activeIndex];
+
+  // Background music (BGM) for the whole book — same audioKey storage the
+  // library uses. The book must be saved (임시저장) first to have an id.
+  // Picking is done in BookMusicModal (own upload or shared-pool select).
+  const [bgmKey, setBgmKey] = useState<string | null>(initialAudioKey ?? null);
+  const [bgmModalOpen, setBgmModalOpen] = useState(false);
+  const hasBgm = !!bgmKey;
 
   // Mark the given page indices as having narration (after the editor applies
   // segments). Keeps the 음성 tool's green dot in sync.
@@ -299,49 +309,6 @@ export default function Editor({
       return next;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bookId]);
-
-  const onNarrationFile = useCallback(
-    async (file: File) => {
-      if (!bookId) {
-        alert("먼저 '임시저장'을 눌러 책을 저장한 뒤 음성을 넣을 수 있어요.");
-        return;
-      }
-      const i = activeIndexRef.current;
-      setNarrBusy(true);
-      try {
-        await uploadNarration(bookId, i, file);
-        setNarration((prev) => {
-          const next = [...prev];
-          while (next.length <= i) next.push(null);
-          next[i] = `narration/${bookId}/${i}.mp3`;
-          return next;
-        });
-      } catch (err) {
-        alert((err as Error).message);
-      } finally {
-        setNarrBusy(false);
-      }
-    },
-    [bookId],
-  );
-
-  const removeActiveNarration = useCallback(async () => {
-    if (!bookId) return;
-    const i = activeIndexRef.current;
-    setNarrBusy(true);
-    try {
-      await removeNarration(bookId, i);
-      setNarration((prev) => {
-        const next = [...prev];
-        if (i < next.length) next[i] = null;
-        return next;
-      });
-    } catch (err) {
-      alert((err as Error).message);
-    } finally {
-      setNarrBusy(false);
-    }
   }, [bookId]);
 
   // Keep the active page's thumbnail in view — so adding a page (which appends
@@ -1744,44 +1711,6 @@ export default function Editor({
           >
             <CircleIcon size={16} /> 동그라미
           </button>
-          <button
-            type="button"
-            className={`ed-tool ed-tool--narr${
-              activeHasNarration ? " is-on" : ""
-            }`}
-            disabled={narrBusy}
-            title={
-              activeHasNarration
-                ? "이 페이지 음성 등록됨 (눌러서 교체, 길게/우클릭은 아니고 ✕로 제거)"
-                : "이 페이지에 나레이션 음성 넣기"
-            }
-            onClick={() => {
-              if (activeHasNarration) {
-                if (
-                  window.confirm(
-                    "이 페이지 음성을 제거할까요?\n(취소를 누르면 다른 음성으로 교체할 수 있어요.)",
-                  )
-                ) {
-                  void removeActiveNarration();
-                  return;
-                }
-              }
-              narrInputRef.current?.click();
-            }}
-          >
-            <Mic size={16} /> {narrBusy ? "올리는 중…" : "음성"}
-            {activeHasNarration && <span className="ed-tool__dot" />}
-            <input
-              ref={narrInputRef}
-              type="file"
-              accept="audio/*,.mp3"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) void onNarrationFile(f);
-                e.target.value = "";
-              }}
-            />
-          </button>
           <span className="ed-tool ed-tool--bg">
             <Palette size={16} /> 배경
             <ColorField
@@ -1857,6 +1786,30 @@ export default function Editor({
           >
             <Mic size={16} />
             <span className="ed-draft__label">나레이션 편집</span>
+          </button>
+          <button
+            type="button"
+            className={`ed-draft${hasBgm ? " is-on" : ""}`}
+            disabled={exporting}
+            title={
+              hasBgm
+                ? "배경음악 등록됨 (눌러서 교체/제거)"
+                : "내 파일을 올리거나 공용음악에서 골라 배경음악 넣기"
+            }
+            onClick={() => {
+              if (!bookId) {
+                alert(
+                  "먼저 '임시저장'을 눌러 책을 저장한 뒤 배경음악을 넣을 수 있어요.",
+                );
+                return;
+              }
+              setBgmModalOpen(true);
+            }}
+          >
+            <Music size={16} />
+            <span className="ed-draft__label">
+              {hasBgm ? "배경음악 ✓" : "배경음악"}
+            </span>
           </button>
           <button
             type="button"
@@ -2657,6 +2610,15 @@ export default function Editor({
           spreads={captionSpreads}
           onApplied={markNarrationPages}
           onClose={() => setNarrEditorOpen(false)}
+        />
+      )}
+
+      {bgmModalOpen && bookId && (
+        <BookMusicModal
+          bookId={bookId}
+          currentKey={bgmKey}
+          onChanged={setBgmKey}
+          onClose={() => setBgmModalOpen(false)}
         />
       )}
     </div>

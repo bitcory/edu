@@ -19,6 +19,7 @@ export async function GET() {
       name: t.name,
       ownerId: t.ownerId,
       ownerName: t.ownerName,
+      key: t.key,
       url: await presignBgmDownload(t.key),
     })),
   );

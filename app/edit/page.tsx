@@ -56,6 +56,9 @@ function EditPageInner() {
   const [bookNarration, setBookNarration] = useState<
     (string | null)[] | undefined
   >(undefined);
+  const [bookAudioKey, setBookAudioKey] = useState<string | undefined>(
+    undefined,
+  );
   const [pageW, setPageW] = useState<number>(DEFAULT_TEMPLATE.width);
   const [prevPageW, setPrevPageW] = useState<number>(DEFAULT_TEMPLATE.width);
   const [layout, setLayout] = useState<BookLayout>(DEFAULT_TEMPLATE.layout);
@@ -115,6 +118,7 @@ function EditPageInner() {
           category: b.category,
         });
         setBookNarration(b.narration);
+        setBookAudioKey(b.audioKey ?? undefined);
         const w = b.pageW || DEFAULT_TEMPLATE.width;
         setPageW(w);
         setPrevPageW(w); // equal → no recenter on load
@@ -231,6 +235,7 @@ function EditPageInner() {
           onTemplateChange={onTemplateChange}
           bookId={bookId ?? draftId ?? undefined}
           initialNarration={bookNarration}
+          initialAudioKey={bookAudioKey}
         />
       </div>
       {mode.kind === "exporting" && (

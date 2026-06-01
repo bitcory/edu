@@ -137,6 +137,32 @@ export default function BookViewer({
     );
   };
 
+  // Fade the music out and stop it — called when the reader reaches the very
+  // last page (the book is over), so the loop doesn't keep playing forever.
+  const musicFadeRef = useRef<number | null>(null);
+  const stopMusic = () => {
+    const el = audioRef.current;
+    if (!el || el.paused) return;
+    if (musicFadeRef.current !== null) return; // already fading
+    const startVol = el.volume || MUSIC_VOL;
+    const steps = 24;
+    let n = 0;
+    musicFadeRef.current = window.setInterval(() => {
+      n += 1;
+      el.volume = Math.max(0, startVol * (1 - n / steps));
+      if (n >= steps) {
+        if (musicFadeRef.current !== null) {
+          window.clearInterval(musicFadeRef.current);
+          musicFadeRef.current = null;
+        }
+        el.pause();
+        el.currentTime = 0;
+        el.volume = startVol; // restore for a later manual re-play
+        setMusicOn(false);
+      }
+    }, 70);
+  };
+
   // ---- Per-page narration ----
   // Play (or stop) the narration for a given page index.
   const playNarrationForPage = (i: number) => {
@@ -392,6 +418,9 @@ export default function BookViewer({
                 currentPageRef.current = e.data;
                 // Leaving the front cover (page ≥ 1) starts the music.
                 if (e.data >= 1) startMusicOnce();
+                // Reaching the last page (back cover) ends the book → fade the
+                // music out so the loop doesn't keep playing.
+                if (e.data >= pages.length - 1) stopMusic();
                 // Play this page's narration (manual or auto).
                 playNarrationForPage(e.data);
                 // In auto mode, decide when to turn next from this page.
