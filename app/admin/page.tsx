@@ -9,6 +9,8 @@ import UserChip from "../components/auth/UserChip";
 import { useIsAdmin } from "../components/auth/useIsAdmin";
 import {
   approveBook,
+  getBookAudioUrl,
+  getNarrationUrls,
   listDraftBooks,
   listPendingBooks,
   listRejectedBooks,
@@ -22,8 +24,15 @@ import type { Author, AuthorStatus } from "../lib/author-types";
 import { openBookForReading } from "../lib/render-book";
 import { type RenderedPage } from "../lib/pdf-to-images";
 import { formatPrice } from "../lib/format-price";
+import { pickRandomPoolBgm } from "../lib/bgm";
 
-type Reader = { pages: RenderedPage[]; revoke: () => void; single: boolean };
+type Reader = {
+  pages: RenderedPage[];
+  revoke: () => void;
+  single: boolean;
+  audioUrl?: string;
+  narrationUrls?: (string | null)[];
+};
 type Section = "books" | "authors";
 type Tab = "pending" | "approved" | "rejected" | "drafts";
 
@@ -104,7 +113,18 @@ export default function AdminPage() {
     setBusy(true);
     try {
       const { rendered, revoke } = await openBookForReading(book);
-      setReader({ pages: rendered, revoke, single: book.layout === "single" });
+      let audioUrl = book.audioKey
+        ? ((await getBookAudioUrl(book.id)) ?? undefined)
+        : undefined;
+      if (!audioUrl) audioUrl = await pickRandomPoolBgm();
+      const nUrls = await getNarrationUrls(book.id);
+      setReader({
+        pages: rendered,
+        revoke,
+        single: book.layout === "single",
+        audioUrl,
+        narrationUrls: nUrls.some(Boolean) ? nUrls : undefined,
+      });
     } catch (err) {
       alert("책을 여는 중 문제가 생겼어요: " + (err as Error).message);
     } finally {
@@ -176,6 +196,8 @@ export default function AdminPage() {
       <BookViewer
         pages={reader.pages}
         singlePage={reader.single}
+        audioUrl={reader.audioUrl}
+        narrationUrls={reader.narrationUrls}
         onClose={() => setReader(null)}
       />
     );
