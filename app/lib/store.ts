@@ -409,6 +409,52 @@ export async function toggleBookLike(
   return (await res.json()) as { liked: boolean; likeCount: number };
 }
 
+/** Log that the current user read this book (for the monthly author
+ *  settlement). Fire-and-forget — never blocks or interrupts reading. */
+export async function recordBookRead(id: string): Promise<void> {
+  try {
+    await fetch(`/api/books/${id}/read`, { method: "POST" });
+  } catch {
+    /* ignore */
+  }
+}
+
+export type AuthorSettlement = {
+  userId: string;
+  name: string;
+  reads: number;
+  share: number; // author % (platform keeps 100 − share)
+};
+export type Settlement = {
+  period: string;
+  totalReads: number;
+  authors: AuthorSettlement[];
+};
+
+/** Admin: monthly read-based settlement for `period` ('YYYY-MM'). */
+export async function getSettlement(period: string): Promise<Settlement> {
+  const res = await fetch(`/api/admin/settlement?period=${period}`, {
+    cache: "no-store",
+  });
+  if (!res.ok) return { period, totalReads: 0, authors: [] };
+  return (await res.json()) as Settlement;
+}
+
+/** Admin: set one author's revenue-share percent (0–100). */
+export async function setAuthorShare(
+  userId: string,
+  share: number,
+): Promise<void> {
+  const res = await fetch(`/api/admin/settlement`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ userId, share }),
+  });
+  if (!res.ok) {
+    throw new Error(await errorMessage(res, "작가 비율을 수정하지 못했어요."));
+  }
+}
+
 export async function addBookComment(
   id: string,
   body: string,

@@ -1,15 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { BookOpen, Eye, Heart, Library, Search } from "lucide-react";
+import { BookOpen, Eye, Heart, Library, Search, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import BookViewer from "../components/BookViewer";
 import BookPreviewModal from "../components/BookPreviewModal";
+import AuthorPickerModal from "../components/AuthorPickerModal";
 import UserChip from "../components/auth/UserChip";
 import {
   getBookAudioUrl,
   getNarrationUrls,
   listStoreBooks,
+  recordBookRead,
   type StoreBook,
 } from "../lib/store";
 import { openBookForReading } from "../lib/render-book";
@@ -33,6 +35,7 @@ export default function StorePage() {
   const [query, setQuery] = useState("");
   const [cat, setCat] = useState<string | null>(null); // null = 전체
   const [preview, setPreview] = useState<StoreBook | null>(null);
+  const [authorPicker, setAuthorPicker] = useState(false);
 
   useEffect(() => {
     listStoreBooks().then(setBooks);
@@ -82,6 +85,9 @@ export default function StorePage() {
         audioUrl,
         narrationUrls: nUrls.some(Boolean) ? nUrls : undefined,
       });
+      // Log the read for the monthly author settlement (server dedupes per
+      // month and ignores self-reads / non-logged-in / unpublished).
+      void recordBookRead(book.id);
     } catch (err) {
       alert("책을 여는 중 문제가 생겼어요: " + (err as Error).message);
     } finally {
@@ -147,6 +153,14 @@ export default function StorePage() {
               {c}
             </button>
           ))}
+          <button
+            type="button"
+            className="store-cat store-cat--authors"
+            onClick={() => setAuthorPicker(true)}
+            title="등록된 작가들의 프로필 보기"
+          >
+            <Users size={15} /> 작가선택
+          </button>
         </div>
       )}
 
@@ -219,6 +233,10 @@ export default function StorePage() {
             </div>
           ))}
         </div>
+      )}
+
+      {authorPicker && (
+        <AuthorPickerModal onClose={() => setAuthorPicker(false)} />
       )}
 
       {preview && (

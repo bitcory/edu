@@ -129,6 +129,9 @@ export function ensureSchema(): Promise<void> {
         `ADD COLUMN IF NOT EXISTS bank_name TEXT`,
         `ADD COLUMN IF NOT EXISTS bank_account TEXT`,
         `ADD COLUMN IF NOT EXISTS account_holder TEXT`,
+        // Revenue share: percent (0–100) of this author's earnings paid to the
+        // author; the platform keeps the rest. Default 80 (author-favourable).
+        `ADD COLUMN IF NOT EXISTS revenue_share INTEGER NOT NULL DEFAULT 80`,
       ]) {
         await db.execute(`ALTER TABLE authors ${ddl}`);
       }
@@ -158,6 +161,22 @@ export function ensureSchema(): Promise<void> {
       );
       await db.execute(
         `CREATE INDEX IF NOT EXISTS idx_likes_book ON likes (book_id)`,
+      );
+
+      // Reads — one row per (book, user, month). The PK dedupes so one reader
+      // re-reading a book within a month counts once, which is what the monthly
+      // author settlement (read-share of the subscription pool) divides by.
+      await db.execute(
+        `CREATE TABLE IF NOT EXISTS reads (
+          book_id    TEXT NOT NULL,
+          user_id    TEXT NOT NULL,
+          period     TEXT NOT NULL,
+          created_at BIGINT NOT NULL,
+          PRIMARY KEY (book_id, user_id, period)
+        )`,
+      );
+      await db.execute(
+        `CREATE INDEX IF NOT EXISTS idx_reads_period ON reads (period)`,
       );
 
       // Shared background-music pool — authors upload MP3s here; a random one

@@ -12,7 +12,7 @@ import {
   Store,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import BookViewer from "../components/BookViewer";
 import BookInfoModal, { type InfoValues } from "../components/BookInfoModal";
 import UserChip from "../components/auth/UserChip";
@@ -22,12 +22,15 @@ import {
   getBook,
   getBookAudioUrl,
   getNarrationUrls,
+  getSettlement,
   listDraftBooks,
   listPendingBooks,
   listRejectedBooks,
   listStoreBooks,
   rejectBook,
+  setAuthorShare,
   updateBookInfo,
+  type Settlement,
   type StoreBook,
 } from "../lib/store";
 import { approveAuthor, fetchAuthors, rejectAuthor } from "../lib/author-store";
@@ -44,7 +47,7 @@ type Reader = {
   audioUrl?: string;
   narrationUrls?: (string | null)[];
 };
-type Section = "books" | "authors";
+type Section = "books" | "authors" | "settlement";
 type Tab = "pending" | "approved" | "rejected" | "drafts";
 
 const TABS: { key: Tab; label: string }[] = [
@@ -316,9 +319,18 @@ export default function AdminPage() {
         >
           작가 승인
         </button>
+        <button
+          type="button"
+          className={`admin-tab${section === "settlement" ? " is-active" : ""}`}
+          onClick={() => setSection("settlement")}
+        >
+          정산
+        </button>
       </div>
 
-      {section === "authors" ? (
+      {section === "settlement" ? (
+        <SettlementView />
+      ) : section === "authors" ? (
         <AuthorsView
           tab={authorTab}
           setTab={setAuthorTab}
@@ -718,5 +730,300 @@ function AuthorsView({
         </ul>
       )}
     </>
+  );
+}
+
+// Standard KR rates; confirm with an accountant per the platform's tax status.
+const VAT_RATE = 0.1; // 부가가치세 10%
+const WITHHOLDING = 0.033; // 사업소득 원천징수 3.3%
+
+// Themed inline styles (kept inline so they don't depend on globals.css build).
+const sControls: CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 16,
+  alignItems: "flex-end",
+  marginBottom: 18,
+};
+const sField: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+  fontSize: 13,
+  fontWeight: 700,
+  color: "#6a4a2b",
+};
+const sInput: CSSProperties = {
+  padding: "10px 14px",
+  borderRadius: 12,
+  border: "1px solid rgba(120,90,60,0.22)",
+  background: "var(--paper)",
+  color: "#3a2a1d",
+  fontSize: 15,
+  fontWeight: 600,
+  outline: "none",
+};
+const sSummary: CSSProperties = {
+  color: "#6a4a2b",
+  fontSize: 14,
+  margin: "0 0 12px",
+};
+const sCard: CSSProperties = {
+  background: "var(--paper)",
+  borderRadius: 16,
+  boxShadow: "0 14px 30px -24px rgba(70,48,30,0.5)",
+  overflow: "hidden",
+};
+const sTable: CSSProperties = {
+  width: "100%",
+  borderCollapse: "collapse",
+  fontSize: 14,
+};
+const sTh: CSSProperties = {
+  textAlign: "left",
+  padding: "12px 16px",
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#8a7561",
+  background: "rgba(120,90,60,0.06)",
+};
+const sTd: CSSProperties = {
+  padding: "12px 16px",
+  color: "#3a2a1d",
+  borderTop: "1px solid rgba(120,90,60,0.1)",
+};
+const sShare: CSSProperties = {
+  width: 60,
+  padding: "7px 8px",
+  borderRadius: 9,
+  border: "1px solid rgba(120,90,60,0.22)",
+  background: "#fff",
+  color: "#3a2a1d",
+  fontSize: 14,
+  fontWeight: 700,
+  textAlign: "center",
+  outline: "none",
+};
+const sSave: CSSProperties = {
+  marginLeft: 6,
+  padding: "6px 12px",
+  border: 0,
+  borderRadius: 999,
+  background: "linear-gradient(180deg,#ff9b6f,#f06f5f)",
+  color: "#fff",
+  fontWeight: 700,
+  fontSize: 13,
+  cursor: "pointer",
+};
+const sNote: CSSProperties = {
+  color: "#b09a78",
+  fontSize: 12,
+  marginTop: 12,
+  lineHeight: 1.5,
+};
+
+// Monthly read-based author settlement: VAT split out, payment fees deducted →
+// distributable pool shared by read proportion × each author's revenue share,
+// then 3.3% withheld per author.
+function SettlementView() {
+  const now = new Date();
+  const thisMonth = `${now.getFullYear()}-${String(
+    now.getMonth() + 1,
+  ).padStart(2, "0")}`;
+  const [period, setPeriod] = useState(thisMonth);
+  const [gross, setGross] = useState("0");
+  const [feePct, setFeePct] = useState("3");
+  const [data, setData] = useState<Settlement | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [shareEdits, setShareEdits] = useState<Record<string, string>>({});
+
+  const load = useCallback(() => {
+    setData(null);
+    getSettlement(period).then(setData);
+  }, [period]);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const saveShare = async (userId: string) => {
+    const share = Math.max(
+      0,
+      Math.min(100, Math.round(Number(shareEdits[userId]))),
+    );
+    if (Number.isNaN(share)) return;
+    setBusy(true);
+    try {
+      await setAuthorShare(userId, share);
+      setShareEdits((p) => {
+        const n = { ...p };
+        delete n[userId];
+        return n;
+      });
+      load();
+    } catch (e) {
+      alert((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const grossNum = Math.max(0, Math.floor(Number(gross) || 0));
+  const feeRate = Math.max(0, Math.min(100, Number(feePct) || 0)) / 100;
+  const vat = Math.round(grossNum - grossNum / (1 + VAT_RATE));
+  const supply = grossNum - vat;
+  const fee = Math.round(grossNum * feeRate);
+  const pool = Math.max(0, supply - fee);
+  const total = data?.totalReads ?? 0;
+  const won = (n: number) => formatPrice(Math.round(n));
+
+  let totNet = 0;
+  let totWithhold = 0;
+  let totPlatform = 0;
+  for (const a of data?.authors ?? []) {
+    const slice = total > 0 ? (pool * a.reads) / total : 0;
+    const ag = slice * (a.share / 100);
+    totWithhold += ag * WITHHOLDING;
+    totNet += ag * (1 - WITHHOLDING);
+    totPlatform += slice - ag;
+  }
+
+  return (
+    <div>
+      <div style={sControls}>
+        <label style={sField}>
+          정산 월
+          <input
+            type="month"
+            style={sInput}
+            value={period}
+            onChange={(e) => setPeriod(e.target.value)}
+          />
+        </label>
+        <label style={sField}>
+          총 구독 매출 (₩, 부가세 포함)
+          <input
+            type="number"
+            min={0}
+            style={{ ...sInput, width: 200 }}
+            value={gross}
+            placeholder="예: 1100000"
+            onChange={(e) => setGross(e.target.value)}
+          />
+        </label>
+        <label style={sField}>
+          결제 수수료 (%)
+          <input
+            type="number"
+            min={0}
+            step={0.1}
+            style={{ ...sInput, width: 110 }}
+            value={feePct}
+            onChange={(e) => setFeePct(e.target.value)}
+          />
+        </label>
+      </div>
+
+      {grossNum > 0 && (
+        <p style={sSummary}>
+          공급가액 <strong>{won(supply)}</strong>{" "}
+          <span style={{ color: "#b09a78" }}>(부가세 {won(vat)} 분리)</span> ·
+          결제수수료 −<strong>{won(fee)}</strong> → 분배 풀{" "}
+          <strong style={{ color: "#c75b46" }}>{won(pool)}</strong>
+        </p>
+      )}
+
+      {data === null ? (
+        <p className="store-empty">불러오는 중…</p>
+      ) : data.authors.length === 0 ? (
+        <div className="store-empty">
+          <p>{period}에 읽힌 책이 없어요.</p>
+        </div>
+      ) : (
+        <>
+          <p style={sSummary}>
+            총 읽힘 <strong>{total}</strong>회 · 작가 실지급 합계{" "}
+            <strong style={{ color: "#c75b46" }}>{won(totNet)}</strong>{" "}
+            <span style={{ color: "#b09a78" }}>
+              (원천징수 {won(totWithhold)})
+            </span>{" "}
+            · 플랫폼 몫 <strong style={{ color: "#c75b46" }}>{won(totPlatform)}</strong>
+          </p>
+          <div style={sCard}>
+            <table style={sTable}>
+              <thead>
+                <tr>
+                  <th style={sTh}>작가</th>
+                  <th style={sTh}>읽힘</th>
+                  <th style={sTh}>비율</th>
+                  <th style={sTh}>작가 비율(%)</th>
+                  <th style={sTh}>정산액(세전)</th>
+                  <th style={sTh}>원천징수 3.3%</th>
+                  <th style={sTh}>실지급액</th>
+                  <th style={sTh}>플랫폼 몫</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.authors.map((a) => {
+                  const readShare = total > 0 ? a.reads / total : 0;
+                  const slice = pool * readShare;
+                  const ag = slice * (a.share / 100);
+                  const wh = ag * WITHHOLDING;
+                  const net = ag - wh;
+                  const platform = slice - ag;
+                  const editing = shareEdits[a.userId] ?? String(a.share);
+                  const dirty =
+                    shareEdits[a.userId] !== undefined &&
+                    Number(shareEdits[a.userId]) !== a.share;
+                  return (
+                    <tr key={a.userId}>
+                      <td style={{ ...sTd, fontWeight: 700 }}>
+                        {a.name || a.userId}
+                      </td>
+                      <td style={sTd}>{a.reads}</td>
+                      <td style={sTd}>{(readShare * 100).toFixed(1)}%</td>
+                      <td style={sTd}>
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          style={sShare}
+                          value={editing}
+                          onChange={(e) =>
+                            setShareEdits((p) => ({
+                              ...p,
+                              [a.userId]: e.target.value,
+                            }))
+                          }
+                        />
+                        {dirty && (
+                          <button
+                            type="button"
+                            style={sSave}
+                            disabled={busy}
+                            onClick={() => void saveShare(a.userId)}
+                          >
+                            저장
+                          </button>
+                        )}
+                      </td>
+                      <td style={{ ...sTd, fontWeight: 700 }}>{won(ag)}</td>
+                      <td style={sTd}>−{won(wh)}</td>
+                      <td style={{ ...sTd, fontWeight: 700 }}>{won(net)}</td>
+                      <td style={sTd}>{won(platform)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p style={sNote}>
+            계산: 총매출 → 부가세(10%) 분리 → 결제수수료 공제 = 분배 풀. 작가
+            정산액 = 풀 × (작가 읽힘 ÷ 전체 읽힘) × (작가 비율 ÷ 100). 실지급액 =
+            정산액 − 원천징수 3.3%. 비율은 작가별로 조정·저장 즉시 반영(기본 80%).
+            ※ 세무 처리는 플랫폼 과세유형에 따라 다르니 회계사 확인 권장.
+          </p>
+        </>
+      )}
+    </div>
   );
 }

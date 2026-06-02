@@ -66,6 +66,32 @@ export async function getPublicAuthor(
   };
 }
 
+/** Directory of all APPROVED authors (PII-free) with aggregates over their
+ *  approved books, most-liked authors first. For the "작가 선택" picker. */
+export async function listPublicAuthors(): Promise<
+  import("./author-types").AuthorCard[]
+> {
+  await ensureSchema();
+  const res = await db.execute({
+    sql: `SELECT a.user_id, a.display_name, a.intro,
+            (SELECT COUNT(*) FROM books b
+               WHERE b.owner_id = a.user_id AND b.status = 'approved') AS book_count,
+            (SELECT COUNT(*) FROM likes l JOIN books b ON l.book_id = b.id
+               WHERE b.owner_id = a.user_id AND b.status = 'approved') AS total_likes
+          FROM authors a
+          WHERE a.status = 'approved'
+          ORDER BY total_likes DESC, book_count DESC, a.display_name ASC`,
+    args: [],
+  });
+  return res.rows.map((row) => ({
+    userId: String(row.user_id),
+    displayName: String(row.display_name),
+    intro: row.intro == null ? undefined : String(row.intro),
+    bookCount: Number(row.book_count ?? 0),
+    totalLikes: Number(row.total_likes ?? 0),
+  }));
+}
+
 export async function isApprovedAuthor(userId: string): Promise<boolean> {
   const a = await getAuthor(userId);
   return a?.status === "approved";

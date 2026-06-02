@@ -44,3 +44,13 @@ export type PublicAuthor = {
   businessName?: string;
   intro?: string;
 };
+
+// A compact author card for the "작가 선택" directory: public name/intro plus
+// aggregates over their APPROVED books.
+export type AuthorCard = {
+  userId: string;
+  displayName: string;
+  intro?: string;
+  bookCount: number;
+  totalLikes: number;
+};

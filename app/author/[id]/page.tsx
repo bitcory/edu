@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { BookOpen, Eye, Heart } from "lucide-react";
+import { ArrowLeft, BookOpen, Eye, Heart } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import BookViewer from "../../components/BookViewer";
 import BookPreviewModal from "../../components/BookPreviewModal";
@@ -133,6 +133,10 @@ export default function AuthorPage() {
           <UserChip />
         </div>
       </header>
+
+      <Link href="/store" className="author-back">
+        <ArrowLeft size={16} /> 북스토어로 돌아가기
+      </Link>
 
       {author === undefined && <p className="store-empty">불러오는 중…</p>}
       {author === null && (
