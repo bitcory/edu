@@ -192,7 +192,13 @@ export default function StorePage() {
               </button>
               <div className="store-card__title">{b.title}</div>
               <div className="store-card__author">
-                {b.author ?? b.ownerName}
+                <Link
+                  href={`/author/${b.ownerId}`}
+                  className="store-card__authorlink"
+                  title={`${b.author ?? b.ownerName} 작가의 다른 책 보기`}
+                >
+                  {b.author ?? b.ownerName}
+                </Link>
                 {b.category && (
                   <span className="store-card__cat">{b.category}</span>
                 )}

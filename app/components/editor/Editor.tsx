@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   useCallback,
   useEffect,
@@ -15,6 +16,7 @@ import {
   AlignRight,
   ArrowLeft,
   Bold,
+  BookMarked,
   BookOpen,
   ChevronDown,
   ChevronUp,
@@ -22,8 +24,6 @@ import {
   Copy as CopyIcon,
   Image as ImageIcon,
   Maximize2,
-  Mic,
-  Music,
   PanelBottom,
   PanelLeft,
   PanelRight,
@@ -33,7 +33,6 @@ import {
   Files,
   Home,
   Redo2,
-  Save,
   SlidersHorizontal,
   Undo2,
   Square as SquareIcon,
@@ -46,6 +45,7 @@ import FabricCanvas, {
   type Guide,
 } from "./FabricCanvas";
 import ColorField from "./ColorField";
+import ThumbnailModal from "../ThumbnailModal";
 import NarrationEditorModal from "./NarrationEditorModal";
 import BookMusicModal from "./BookMusicModal";
 import ContentTextModal, {
@@ -151,6 +151,154 @@ async function downscaleImageDataUrl(
   return canvas.toDataURL("image/jpeg", 0.85);
 }
 
+// The first image object (the spread background) in a serialized page.
+function firstSpreadImage(
+  data: object | null,
+): Record<string, unknown> | null {
+  if (!data) return null;
+  const objs = (data as { objects?: Array<Record<string, unknown>> }).objects;
+  if (!Array.isArray(objs)) return null;
+  return (
+    objs.find((o) => o.type === "image" || o.type === "Image") ?? null
+  );
+}
+
+/**
+ * Keep the two halves of a continuous spread aligned: when the image on one
+ * half is moved/scaled, the partner half follows so the seam at the page edge
+ * stays matched. The right half's image left = the left half's left − pageW
+ * (and vice-versa); top/scale/angle are mirrored exactly. Returns the same
+ * array reference when there's no linked partner or nothing actually changed,
+ * so callers don't trigger needless re-renders.
+ */
+function syncSpreadPartnerPages(
+  pages: EditorPage[],
+  idx: number,
+  pageW: number,
+): EditorPage[] {
+  const src = pages[idx];
+  if (!src?.spreadId || !src.spreadSide) return pages;
+  const partnerIdx = pages.findIndex(
+    (p, i) => i !== idx && p.spreadId === src.spreadId,
+  );
+  if (partnerIdx < 0) return pages;
+  const partner = pages[partnerIdx];
+  const srcImg = firstSpreadImage(src.data);
+  const curImg = firstSpreadImage(partner.data);
+  if (!srcImg || !curImg || !partner.data) return pages;
+
+  const shift = src.spreadSide === "left" ? -pageW : pageW;
+  const targetLeft = ((srcImg.left as number) ?? 0) + shift;
+  const targetTop = (srcImg.top as number) ?? 0;
+  const targetSX = srcImg.scaleX;
+  const targetSY = srcImg.scaleY;
+  const targetAngle = (srcImg.angle as number) ?? 0;
+
+  // Skip work (and the partner re-render) when the image edit didn't actually
+  // move the partner — e.g. editing text on this half.
+  if (
+    curImg.left === targetLeft &&
+    curImg.top === targetTop &&
+    curImg.scaleX === targetSX &&
+    curImg.scaleY === targetSY &&
+    ((curImg.angle as number) ?? 0) === targetAngle
+  ) {
+    return pages;
+  }
+
+  const partnerData = JSON.parse(JSON.stringify(partner.data)) as object;
+  const dstImg = firstSpreadImage(partnerData);
+  if (!dstImg) return pages;
+  dstImg.left = targetLeft;
+  dstImg.top = targetTop;
+  if (targetSX !== undefined) dstImg.scaleX = targetSX;
+  if (targetSY !== undefined) dstImg.scaleY = targetSY;
+  dstImg.angle = targetAngle;
+
+  return pages.map((p, i) =>
+    i === partnerIdx ? { ...p, data: partnerData } : p,
+  );
+}
+
+/**
+ * Backfill spread links onto existing pages. Books built before spread linking
+ * hold a wide image split across two pages with no spreadId, so the two halves
+ * drift apart when nudged independently (a few px gap at the fold). Detect
+ * adjacent content pairs that are clearly two halves of one image — same image
+ * source, same scale, right half within a page-width of continuity — then link
+ * them (shared spreadId) and snap the right half to `leftLeft − pageW` so the
+ * seam meets exactly. Anchors on the left page. Idempotent: returns the same
+ * array reference when every pair is already linked and aligned. Pairs that are
+ * just duplicates (right.left == left.left) are left alone — not a split.
+ */
+function linkAndHealSpreadPairs(
+  pages: EditorPage[],
+  pageW: number,
+): EditorPage[] {
+  let changed = false;
+  const next = pages.slice();
+  for (let i = 1; i + 1 < pages.length; i += 2) {
+    const left = pages[i];
+    const right = pages[i + 1];
+    if (left?.kind !== "content" || right?.kind !== "content") continue;
+    const lImg = firstSpreadImage(left.data);
+    const rImg = firstSpreadImage(right.data);
+    if (!lImg || !rImg) continue;
+    if (!lImg.src || lImg.src !== rImg.src) continue; // not the same image
+    const lsx = lImg.scaleX as number | undefined;
+    const rsx = rImg.scaleX as number | undefined;
+    if (lsx === undefined || rsx === undefined) continue;
+    if (Math.abs(lsx - rsx) > Math.abs(lsx) * 0.01) continue; // scales differ
+    const lLeft = (lImg.left as number) ?? 0;
+    const ideal = lLeft - pageW;
+    // Within one page-width of perfect continuity → a split spread; a plain
+    // duplicate sits exactly `pageW` away, so it's excluded.
+    if (Math.abs(((rImg.left as number) ?? 0) - ideal) >= pageW) continue;
+
+    const sid =
+      left.spreadId ??
+      right.spreadId ??
+      Math.random().toString(36).slice(2, 10);
+    const lTop = (lImg.top as number) ?? 0;
+    const lAngle = (lImg.angle as number) ?? 0;
+    const needLink =
+      left.spreadId !== sid ||
+      left.spreadSide !== "left" ||
+      right.spreadId !== sid ||
+      right.spreadSide !== "right";
+    const needHeal =
+      rImg.left !== ideal ||
+      rImg.top !== lTop ||
+      rImg.scaleX !== lsx ||
+      rImg.scaleY !== (lImg.scaleY as number) ||
+      ((rImg.angle as number) ?? 0) !== lAngle;
+    if (!needLink && !needHeal) continue;
+
+    changed = true;
+    next[i] = { ...left, spreadId: sid, spreadSide: "left" };
+    if (needHeal) {
+      const rData = JSON.parse(JSON.stringify(right.data)) as object;
+      const d = firstSpreadImage(rData);
+      if (d) {
+        d.left = ideal;
+        d.top = lTop;
+        d.scaleX = lsx;
+        d.scaleY = lImg.scaleY as number;
+        d.angle = lAngle;
+      }
+      next[i + 1] = {
+        ...right,
+        spreadId: sid,
+        spreadSide: "right",
+        data: rData,
+      };
+    } else {
+      next[i + 1] = { ...right, spreadId: sid, spreadSide: "right" };
+    }
+  }
+  return changed ? next : pages;
+}
+
 type Props = {
   onFinish: (
     pages: EditorPage[],
@@ -202,21 +350,17 @@ export default function Editor({
   // Shadow PAGE_W with the per-book width so all the body coordinate math uses
   // the chosen 판형. Height stays PAGE_H. The parent remounts on 판형 change.
   const PAGE_W = pageW;
-  // Restore the previous session if present (Editor is client-only via
-  // dynamic({ ssr: false }) so localStorage access here is safe).
+  // Restore the previous session if present. The draft lives in IndexedDB
+  // (async), so we start from defaults and hydrate in an effect below; the
+  // autosave effect is gated on `hydratedRef` so it can't overwrite the stored
+  // draft with these defaults before the load lands.
   const [pages, setPages] = useState<EditorPage[]>(() => {
-    if (initialPages && initialPages.length > 0) return initialPages;
-    const saved = loadEditorState();
-    if (saved && saved.pages.length > 0) return saved.pages;
+    if (initialPages && initialPages.length > 0)
+      return linkAndHealSpreadPairs(initialPages, pageW);
     return [{ ...makePage("cover") }, { ...makePage("content") }];
   });
-  const [activeIndex, setActiveIndex] = useState<number>(() => {
-    if (initialPages && initialPages.length > 0) return 0;
-    const saved = loadEditorState();
-    return saved && saved.pages.length > 0
-      ? Math.min(saved.activeIndex, saved.pages.length - 1)
-      : 0;
-  });
+  const [activeIndex, setActiveIndex] = useState<number>(0);
+  const hydratedRef = useRef(false);
   const [selected, setSelected] = useState<FabricObject | null>(null);
   // Mobile: the page list is a left slide-out drawer and the properties panel
   // is a right slide-out drawer, each toggled by a topbar button. On desktop
@@ -240,8 +384,9 @@ export default function Editor({
   const [captionText, setCaptionText] = useState("");
   const [selectedPages, setSelectedPages] = useState<string[]>([]);
   const [applyingCaptions, setApplyingCaptions] = useState(false);
-  // 글꼴 "전체" toggle: when on, changing the font applies to every text object
-  // across all pages, not just the selected one.
+  // "전체" toggle: when on, changing any text property (글꼴/글씨색/크기/두께/
+  // 줄간격/자간/정렬/외곽선/그림자) applies to every text object across all
+  // pages, not just the selected one.
   const [applyFontAll, setApplyFontAll] = useState(false);
 
   // In the book viewer: page 0 is the cover (alone on the right), then pages
@@ -280,6 +425,13 @@ export default function Editor({
   useEffect(() => {
     activeIndexRef.current = activeIndex;
   }, [activeIndex]);
+  // Latest pages, so handleReady (a stable [] callback) doesn't decide whether
+  // to seed a blank cover from a STALE first-render snapshot — which, on a 판형
+  // change remount, wrongly re-seeded the default cover over a saved one.
+  const pagesRef = useRef(pages);
+  useEffect(() => {
+    pagesRef.current = pages;
+  }, [pages]);
 
   // Per-page narration (R2 keys, null = none). Uploaded straight to R2 via the
   // book's id — so the book must be saved (임시저장) first to have an id.
@@ -296,6 +448,10 @@ export default function Editor({
   const [bgmKey, setBgmKey] = useState<string | null>(initialAudioKey ?? null);
   const [bgmModalOpen, setBgmModalOpen] = useState(false);
   const hasBgm = !!bgmKey;
+
+  // 썸네일 만들기: a mini-editor modal that seeds from the cover (page 0) and
+  // exports a downloadable thumbnail at 16:9 / 9:16 / 1:1 / 판형.
+  const [thumbOpen, setThumbOpen] = useState(false);
 
   // Mark the given page indices as having narration (after the editor applies
   // segments). Keeps the 음성 tool's green dot in sync.
@@ -397,12 +553,47 @@ export default function Editor({
     setDisplayScale(Math.max(0.1, s));
   }, [spreadMode, partnerIndex]);
 
-  // Auto-save pages + activeIndex to localStorage so closing the tab or
-  // jumping to the book viewer and back doesn't lose work. Debounced so
-  // dragging a single object doesn't write to storage 60 times a second.
+  // Hydrate the previous session from IndexedDB once on mount (only for a fresh
+  // editor — when initialPages is passed we're editing an existing book and the
+  // working draft must not stomp it).
   useEffect(() => {
+    if (initialPages && initialPages.length > 0) {
+      hydratedRef.current = true;
+      return;
+    }
+    let cancelled = false;
+    void loadEditorState().then((saved) => {
+      if (cancelled) return;
+      if (saved && saved.pages.length > 0) {
+        // Link + align any pre-existing spread pairs (older drafts have no
+        // spreadId, so their two halves can sit a few px off at the fold).
+        const healed = linkAndHealSpreadPairs(saved.pages, saved.pageW ?? pageW);
+        const idx = Math.min(saved.activeIndex, healed.length - 1);
+        setPages(healed);
+        setActiveIndex(idx);
+        // If the canvas is already up (handleReady ran first, before this async
+        // draft load, and may have seeded a blank default cover), reload it with
+        // the restored active page so the saved content isn't left hidden. Only
+        // when that page actually has data — never blank out a seeded cover.
+        const api = apiRef.current;
+        if (api && healed[idx]?.data) void api.load(healed[idx].data as object);
+      }
+      hydratedRef.current = true;
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Auto-save pages + activeIndex to IndexedDB so closing the tab or jumping to
+  // the book viewer and back doesn't lose work. Debounced so dragging a single
+  // object doesn't write to storage 60 times a second. Skipped until the draft
+  // has hydrated so the initial defaults don't overwrite a saved session.
+  useEffect(() => {
+    if (!hydratedRef.current) return;
     const id = window.setTimeout(() => {
-      saveEditorState({
+      void saveEditorState({
         pages,
         activeIndex,
         savedAt: Date.now(),
@@ -423,11 +614,20 @@ export default function Editor({
     // While bulk-building pages the canvas is just scratch — ignore every
     // object:added/modified/removed it fires.
     if (bulkBuildingRef.current) return;
+    // Programmatic loads (undo/redo, page switch, initial restore) fire Fabric
+    // object:added events too. Skip scheduling a snapshot for those, otherwise
+    // every load re-records the loaded state and floods history with identical
+    // entries — which made undo a no-op (it "restored" the same state).
+    if (isApplyingHistoryRef.current) return;
     setChangeTick((x) => x + 1);
     if (snapshotTimerRef.current !== null) {
       window.clearTimeout(snapshotTimerRef.current);
     }
     snapshotTimerRef.current = window.setTimeout(() => {
+      // The timer fired — mark it not-pending so a later flushSnapshot (on
+      // undo/redo) doesn't think there's still a snapshot to take and record a
+      // duplicate (which made undo need two presses for one change).
+      snapshotTimerRef.current = null;
       const api = apiRef.current;
       if (!api) return;
       const idx = activeIndexRef.current;
@@ -437,6 +637,12 @@ export default function Editor({
         const pageId = prev[idx]?.id;
         if (pageId && !isApplyingHistoryRef.current) {
           const h = getHistory(pageId);
+          // Seed the pre-edit state as a baseline the first time this page is
+          // touched — otherwise the first edit leaves past=[afterState] and
+          // undo (which needs ≥2 entries) silently no-ops.
+          if (h.past.length === 0 && prev[idx]?.data) {
+            h.past.push(prev[idx].data as object);
+          }
           // Skip dedup: each snapshot represents a meaningful edit (Fabric
           // only fires modified/added/removed on actual user actions). Doing
           // JSON.stringify here was blocking the main thread for tens of ms
@@ -446,10 +652,46 @@ export default function Editor({
           h.future = []; // any new edit clears the redo branch
           setHistoryTick((t) => t + 1);
         }
-        return prev.map((p, i) => (i === idx ? { ...p, data, thumb } : p));
+        const saved = prev.map((p, i) =>
+          i === idx ? { ...p, data, thumb } : p,
+        );
+        // Linked spread half? Pull its partner along to keep the seam aligned.
+        return syncSpreadPartnerPages(saved, idx, PAGE_W);
       });
     }, 700);
-  }, [getHistory]);
+  }, [getHistory, PAGE_W]);
+
+  // Commit any pending (debounced) snapshot right now, so undo/redo pressed
+  // within 700ms of an edit still see that edit in history.
+  const flushSnapshot = useCallback(() => {
+    if (snapshotTimerRef.current === null) return;
+    window.clearTimeout(snapshotTimerRef.current);
+    snapshotTimerRef.current = null;
+    const api = apiRef.current;
+    if (!api || isApplyingHistoryRef.current) return;
+    const idx = activeIndexRef.current;
+    const data = api.serialize();
+    const thumb = api.toPng(0.2);
+    const cur = pagesRef.current;
+    const pageId = cur[idx]?.id;
+    if (pageId) {
+      const h = getHistory(pageId);
+      if (h.past.length === 0 && cur[idx]?.data) {
+        h.past.push(cur[idx].data as object);
+      }
+      h.past.push(data);
+      if (h.past.length > HISTORY_LIMIT) h.past.shift();
+      h.future = [];
+      setHistoryTick((t) => t + 1);
+    }
+    setPages((prev) =>
+      syncSpreadPartnerPages(
+        prev.map((p, i) => (i === idx ? { ...p, data, thumb } : p)),
+        idx,
+        PAGE_W,
+      ),
+    );
+  }, [getHistory, PAGE_W]);
 
   const canUndo = useMemo(() => {
     void historyTick;
@@ -470,6 +712,7 @@ export default function Editor({
   const undo = useCallback(async () => {
     const api = apiRef.current;
     if (!api) return;
+    flushSnapshot(); // capture a just-made edit that hasn't debounced yet
     const pageId = pages[activeIndex]?.id;
     if (!pageId) return;
     const h = getHistory(pageId);
@@ -485,21 +728,24 @@ export default function Editor({
       snapshotTimerRef.current = null;
     }
     await api.load(prev);
-    setPages((p) =>
-      p.map((pg, i) =>
+    setPages((p) => {
+      const restored = p.map((pg, i) =>
         i === activeIndex
           ? { ...pg, data: prev, thumb: api.toPng(0.2) }
           : pg,
-      ),
-    );
+      );
+      // Keep a linked spread half's partner in step with the undone page.
+      return syncSpreadPartnerPages(restored, activeIndex, PAGE_W);
+    });
     setSelected(null);
     setHistoryTick((t) => t + 1);
     isApplyingHistoryRef.current = false;
-  }, [pages, activeIndex, getHistory]);
+  }, [pages, activeIndex, getHistory, flushSnapshot, PAGE_W]);
 
   const redo = useCallback(async () => {
     const api = apiRef.current;
     if (!api) return;
+    flushSnapshot(); // commit any just-made edit first
     const pageId = pages[activeIndex]?.id;
     if (!pageId) return;
     const h = getHistory(pageId);
@@ -513,17 +759,18 @@ export default function Editor({
       snapshotTimerRef.current = null;
     }
     await api.load(next);
-    setPages((p) =>
-      p.map((pg, i) =>
+    setPages((p) => {
+      const restored = p.map((pg, i) =>
         i === activeIndex
           ? { ...pg, data: next, thumb: api.toPng(0.2) }
           : pg,
-      ),
-    );
+      );
+      return syncSpreadPartnerPages(restored, activeIndex, PAGE_W);
+    });
     setSelected(null);
     setHistoryTick((t) => t + 1);
     isApplyingHistoryRef.current = false;
-  }, [pages, activeIndex, getHistory]);
+  }, [pages, activeIndex, getHistory, flushSnapshot, PAGE_W]);
 
   // Keyboard shortcuts: Cmd/Ctrl+Z = undo, Cmd/Ctrl+Shift+Z (or Ctrl+Y) = redo.
   // Skip when the user is editing text inline inside a Fabric IText (the
@@ -571,8 +818,7 @@ export default function Editor({
     ) {
       return;
     }
-    clearEditorState();
-    window.location.reload();
+    void clearEditorState().finally(() => window.location.reload());
   }, []);
 
   // Memoize the partner page's data so the PNG-render effect doesn't re-run
@@ -616,9 +862,17 @@ export default function Editor({
 
   const handleReady = useCallback(async (api: FabricApi) => {
     apiRef.current = api;
+    // Suppress snapshotting while we programmatically load/seed the page —
+    // the load's object:added events would otherwise record a fake "edit".
+    isApplyingHistoryRef.current = true;
+    try {
     // Preload fonts so the Fabric canvas renders the right glyphs.
     await preloadAllFonts();
-    const activePage = pages[activeIndex];
+    // Read the CURRENT pages (not the stale first-render closure) so a 판형
+    // change remount doesn't treat an already-saved cover as blank and re-seed.
+    const curPages = pagesRef.current;
+    const curIdx = activeIndexRef.current;
+    const activePage = curPages[curIdx];
     if (activePage?.data) {
       // Restored from storage (or any non-blank page) — load it in.
       await api.load(activePage.data);
@@ -676,14 +930,21 @@ export default function Editor({
         const thumb = api.toPng(0.2);
         const idx = activeIndexRef.current;
         const w = PAGE_W;
+        // Only trust the live canvas for the active page if real content was
+        // loaded into it. If it was a freshly-seeded blank cover, recenter the
+        // stored data instead so we never overwrite a saved page with the seed.
+        const activeHadData = !!activePage?.data;
         setPages((prev) =>
           prev.map((pg, i) =>
-            i === idx
+            i === idx && activeHadData
               ? { ...pg, data, thumb }
               : { ...pg, data: recenterCenterObjects(pg.data, w) },
           ),
         );
       }
+    }
+    } finally {
+      isApplyingHistoryRef.current = false;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -710,13 +971,21 @@ export default function Editor({
       if (!api) return;
       const data = api.serialize();
       const thumb = api.toPng(0.2);
-      setPages((prev) => {
-        const next = prev.map((p, i) =>
-          i === activeIndex ? { ...p, data, thumb } : p,
-        );
-        return next;
-      });
-      await api.load(pages[newIndex]?.data ?? null);
+      const saved = pages.map((p, i) =>
+        i === activeIndex ? { ...p, data, thumb } : p,
+      );
+      // Sync the spread partner before loading, so switching to the other half
+      // right after adjusting this one shows the freshly-aligned position.
+      const synced = syncSpreadPartnerPages(saved, activeIndex, PAGE_W);
+      setPages(synced);
+      // Suppress snapshotting for this programmatic load (its object:added
+      // events would otherwise record the loaded page as a fake "edit").
+      isApplyingHistoryRef.current = true;
+      try {
+        await api.load(synced[newIndex]?.data ?? null);
+      } finally {
+        isApplyingHistoryRef.current = false;
+      }
       const c = api.canvas;
       if (c) {
         setBgColor((c.backgroundColor as string) || "#ffffff");
@@ -724,8 +993,10 @@ export default function Editor({
       setSelected(null);
       setActiveIndex(newIndex);
     },
-    [activeIndex, pages],
+    [activeIndex, pages, PAGE_W],
   );
+
+  // Tools: add text / image / rect / circle.
 
   // Tools: add text / image / rect / circle.
   const addText = useCallback(async () => {
@@ -879,14 +1150,19 @@ export default function Editor({
     recordPageEdit,
   ]);
 
-  // Apply a font family to EVERY text object across all pages (the 글꼴 "전체"
-  // toggle). Pages without text are skipped. The active page is reloaded and
-  // its selection restored so editing continues uninterrupted.
-  const applyFontToAll = useCallback(
-    async (family: string) => {
+  // Apply a mutation to EVERY text object across all pages (the "전체" toggle).
+  // Pages without text are skipped. The active page is reloaded and its
+  // selection restored so editing continues uninterrupted. `apply` mutates one
+  // text object; `ensureFontFamily` (optional) preloads a webfont first so the
+  // off-screen reflow measures the right glyphs.
+  const applyToAllText = useCallback(
+    async (
+      apply: (t: FabricObject) => void,
+      opts?: { ensureFontFamily?: string },
+    ) => {
       const api = apiRef.current;
       if (!api?.canvas) return;
-      await ensureFont(family);
+      if (opts?.ensureFontFamily) await ensureFont(opts.ensureFontFamily);
 
       const isTextObj = (o: { type?: string }) =>
         o.type === "i-text" || o.type === "text" || o.type === "textbox";
@@ -918,7 +1194,7 @@ export default function Editor({
           const texts = c.getObjects().filter(isTextObj);
           if (texts.length === 0) continue;
           for (const t of texts) {
-            t.set({ fontFamily: family });
+            apply(t as FabricObject);
             (t as unknown as { initDimensions?: () => void }).initDimensions?.();
           }
           c.requestRenderAll();
@@ -944,6 +1220,15 @@ export default function Editor({
       }
     },
     [pages, selected, recordPageEdit],
+  );
+
+  // 글꼴 "전체": apply a font family to every text object across all pages.
+  const applyFontToAll = useCallback(
+    (family: string) =>
+      applyToAllText((t) => t.set({ fontFamily: family }), {
+        ensureFontFamily: family,
+      }),
+    [applyToAllText],
   );
 
   const addImageFile = useCallback(async (file: File) => {
@@ -1112,32 +1397,53 @@ export default function Editor({
               crossOrigin: "anonymous",
             });
 
-            // 전체 + 왼쪽정렬: fill page height, left edge at 0.
+            // One image spans the whole spread: fill the page height, then lay
+            // it across the two facing pages. A wide image starts at the
+            // spread's left edge (left half here, right half on the next page);
+            // a narrow image is centered over the fold so the single picture
+            // sits continuously across both pages. Both halves share a spreadId
+            // and the invariant `rightLeft = leftLeft − PAGE_W`, so the page
+            // frames reveal continuous slices that meet exactly at the seam —
+            // and moving/scaling one half keeps the other aligned.
             const ih = img.height ?? PAGE_H;
+            const iw = img.width ?? PAGE_W;
             const scale = PAGE_H / ih;
-            const scaledW = (img.width ?? PAGE_W) * scale;
-            img.set({ scaleX: scale, scaleY: scale, angle: 0, left: 0, top: 0 });
+            const scaledW = iw * scale;
+            const isWide = scaledW > PAGE_W + 1;
+            const leftPageLeft = isWide ? 0 : (PAGE_W * 2 - scaledW) / 2;
+            img.set({
+              scaleX: scale,
+              scaleY: scale,
+              angle: 0,
+              left: leftPageLeft,
+              top: 0,
+            });
 
             await api.load(null);
             api.canvas.add(img);
             api.canvas.requestRenderAll();
             const leftData = api.serialize();
+            const spreadId = Math.random().toString(36).slice(2, 10);
             built.push({
               id: Math.random().toString(36).slice(2, 10),
               kind: "content",
               data: leftData,
               thumb: api.toPng(0.2),
+              spreadId,
+              spreadSide: "left" as const,
             });
 
-            // 복제: a wide image reveals its right half (continuous spread);
-            // a narrow one just copies in place.
+            // Right half: same image shifted one page-width left, so this page
+            // frame reveals the continuation just past the fold.
             const rightData = JSON.parse(JSON.stringify(leftData)) as {
               objects?: Array<Record<string, unknown>>;
             };
-            if (scaledW > PAGE_W + 1 && rightData.objects) {
+            if (rightData.objects) {
               for (const obj of rightData.objects) {
                 const type = obj.type as string | undefined;
-                if (type === "image" || type === "Image") obj.left = -PAGE_W;
+                if (type === "image" || type === "Image") {
+                  obj.left = leftPageLeft - PAGE_W;
+                }
               }
             }
             await api.load(rightData);
@@ -1146,6 +1452,8 @@ export default function Editor({
               kind: "content",
               data: rightData,
               thumb: api.toPng(0.2),
+              spreadId,
+              spreadSide: "right" as const,
             });
           } catch (err) {
             failed += 1;
@@ -1280,56 +1588,56 @@ export default function Editor({
           })
         : null;
 
-      // 3) Spread auto-shift (opt-in): for a wide image the user has aligned to
-      //    one edge, the copy reveals the *adjacent* half so the two pages form
-      //    a continuous spread:
-      //      • left-aligned (left half)  → copy = right half, placed AFTER
-      //      • right-aligned (right half) → copy = left half, placed BEFORE
-      //    Otherwise the copy keeps the same position (image stays in place).
+      // 3) Spread auto-shift: a wide image duplicated becomes the facing half
+      //    of a continuous spread. By default the source is the LEFT half and
+      //    the copy reveals the RIGHT half (`srcLeft − PAGE_W`, placed AFTER);
+      //    if the source is already the RIGHT half of a spread, the copy reveals
+      //    the LEFT half (`srcLeft + PAGE_W`, placed BEFORE). Unlike before this
+      //    works at ANY source offset (not just a perfectly edge-aligned image)
+      //    and LINKS both halves with a shared spreadId, so nudging one keeps
+      //    the other aligned at the fold — exactly like 전체추가.
       let insertBefore = false;
-      let directionDecided = false;
+      let spreadId: string | undefined;
+      let sourceSide: "left" | "right" | undefined;
       if (clonedData?.objects) {
-        for (const obj of clonedData.objects) {
-          const type = obj.type as string | undefined;
-          if (type !== "image" && type !== "Image") continue;
-          const baseW = Number(obj.width ?? 0);
-          const scaleX = Number(obj.scaleX ?? 1);
-          const left = Number(obj.left ?? 0);
-          const scaledW = baseW * scaleX;
-          if (scaledW <= PAGE_W + 1) continue;
-          if (Math.abs(left) < 1) {
-            // left half → reveal the right half on the copy (after)
-            obj.left = -PAGE_W;
-            if (!directionDecided) {
-              insertBefore = false;
-              directionDecided = true;
-            }
-          } else if (Math.abs(left + scaledW - PAGE_W) < 1) {
-            // right half → reveal the left half on the copy (before)
-            obj.left = left + PAGE_W;
-            if (!directionDecided) {
-              insertBefore = true;
-              directionDecided = true;
-            }
+        const imgObj = clonedData.objects.find(
+          (o) => o.type === "image" || o.type === "Image",
+        );
+        if (imgObj) {
+          const scaledW =
+            Number(imgObj.width ?? 0) * Number(imgObj.scaleX ?? 1);
+          if (scaledW > PAGE_W + 1) {
+            const srcLeft = Number(imgObj.left ?? 0);
+            const copyLeftHalf = source.spreadSide === "right";
+            insertBefore = copyLeftHalf;
+            imgObj.left = copyLeftHalf ? srcLeft + PAGE_W : srcLeft - PAGE_W;
+            spreadId =
+              source.spreadId ?? Math.random().toString(36).slice(2, 10);
+            sourceSide = copyLeftHalf ? "right" : "left";
           }
         }
       }
+      const copySide: "left" | "right" | undefined =
+        sourceSide === "left"
+          ? "right"
+          : sourceSide === "right"
+            ? "left"
+            : undefined;
 
-      // 4) Commit: keep source as-is (with snapshot if needed) and insert
-      //    the cloned page right after it.
+      // 4) Commit: keep the source (now linked, with snapshot if it was active)
+      //    and insert the cloned half next to it → spread reads [left][right].
+      const updatedSource: EditorPage = spreadId
+        ? { ...source, spreadId, spreadSide: sourceSide }
+        : source;
       const newPage: EditorPage = {
         id: Math.random().toString(36).slice(2, 10),
         kind: "content",
         data: clonedData,
+        ...(spreadId ? { spreadId, spreadSide: copySide } : {}),
       };
-      // Right-aligned source → the left-half copy goes BEFORE the source so the
-      // spread reads [left half][right half]; otherwise after.
       const insertAt = insertBefore ? idx : idx + 1;
       setPages((prev) => {
-        const next =
-          idx === activeIndex
-            ? prev.map((p, i) => (i === idx ? source : p))
-            : prev;
+        const next = prev.map((p, i) => (i === idx ? updatedSource : p));
         return [
           ...next.slice(0, insertAt),
           newPage,
@@ -1372,7 +1680,21 @@ export default function Editor({
     [selected],
   );
 
-  // Drop shadow on the selected object (fabric.Shadow). Pass null to clear.
+  // Apply a text-property patch honoring the "전체" toggle: when it's on the
+  // patch hits every text object on every page, otherwise just the selection.
+  const applyTextPatch = useCallback(
+    (patch: Record<string, unknown>) => {
+      if (applyFontAll) {
+        void applyToAllText((t) => t.set(patch));
+      } else {
+        updateSelected(patch);
+      }
+    },
+    [applyFontAll, applyToAllText, updateSelected],
+  );
+
+  // Drop shadow on the selected text (fabric.Shadow). Pass on:false to clear.
+  // Respects the "전체" toggle just like the other text properties.
   const applyShadowParams = useCallback(
     async (p: {
       on: boolean;
@@ -1384,25 +1706,26 @@ export default function Editor({
     }) => {
       const api = apiRef.current;
       if (!api?.canvas || !selected) return;
-      if (!p.on) {
-        selected.set("shadow", null);
-      } else {
+      let shadowVal: object | null = null;
+      if (p.on) {
         const fabric = await import("fabric");
         const rad = (p.angle * Math.PI) / 180;
-        selected.set(
-          "shadow",
-          new fabric.Shadow({
-            color: rgbaStr(p.hex, p.opacity),
-            blur: p.blur,
-            offsetX: Math.round(Math.cos(rad) * p.distance),
-            offsetY: Math.round(Math.sin(rad) * p.distance),
-          }),
-        );
+        shadowVal = new fabric.Shadow({
+          color: rgbaStr(p.hex, p.opacity),
+          blur: p.blur,
+          offsetX: Math.round(Math.cos(rad) * p.distance),
+          offsetY: Math.round(Math.sin(rad) * p.distance),
+        });
       }
+      if (applyFontAll) {
+        await applyToAllText((t) => t.set("shadow", shadowVal));
+        return;
+      }
+      selected.set("shadow", shadowVal);
       api.canvas.requestRenderAll();
       setChangeTick((x) => x + 1);
     },
-    [selected],
+    [selected, applyFontAll, applyToAllText],
   );
 
   const deleteSelected = useCallback(() => {
@@ -1565,10 +1888,10 @@ export default function Editor({
   const [draftState, setDraftState] = useState<"idle" | "saving" | "saved">(
     "idle",
   );
-  const handleSaveDraft = useCallback(async () => {
-    if (!onSaveDraft) return;
+  const handleSaveDraft = useCallback(async (): Promise<boolean> => {
+    if (!onSaveDraft) return false;
     const api = apiRef.current;
-    if (!api) return;
+    if (!api) return false;
     const data = api.serialize();
     const thumb = api.toPng(0.2);
     const finalPages = pages.map((p, i) =>
@@ -1580,11 +1903,21 @@ export default function Editor({
       await onSaveDraft(finalPages, pageW, layout);
       setDraftState("saved");
       window.setTimeout(() => setDraftState("idle"), 2000);
+      return true;
     } catch (err) {
       setDraftState("idle");
       alert((err as Error).message);
+      return false;
     }
   }, [pages, activeIndex, onSaveDraft, pageW, layout]);
+
+  // 내서재로: 임시저장한 다음 내 서재로 이동. 저장이 실패하면(작업 유실 방지)
+  // 이동하지 않는다.
+  const router = useRouter();
+  const handleSaveAndLibrary = useCallback(async () => {
+    const ok = await handleSaveDraft();
+    if (ok) router.push("/library");
+  }, [handleSaveDraft, router]);
 
   // Close the mobile properties drawer (keeps the canvas selection so the user
   // can reopen "편집하기" to keep editing the same object).
@@ -1674,8 +2007,141 @@ export default function Editor({
           title="선택한 요소 편집하기"
           aria-label="편집하기"
         >
-          <SlidersHorizontal size={14} /> 편집하기
+          <SlidersHorizontal size={14} /> 편집
         </button>
+        <div className="ed-spacer" />
+        <div className="ed-save-group">
+          <button
+            type="button"
+            className="ed-draft"
+            onClick={() => setThumbOpen(true)}
+            title="표지로 썸네일(16:9·9:16·1:1·판형) 만들기"
+          >
+            <ImageIcon size={16} />
+            <span className="ed-draft__label">썸네일</span>
+          </button>
+          <button
+            type="button"
+            className="ed-draft ed-step ed-step--1"
+            title="폴더를 선택하면 표지(첫 이미지)를 뺀 나머지를 전체 왼쪽정렬+복제(스프레드)로 자동 편집합니다"
+            onClick={() => folderInputRef.current?.click()}
+          >
+            <span className="ed-step-num" aria-hidden>
+              1
+            </span>
+            <span className="ed-draft__label">전체추가</span>
+          </button>
+          <button
+            type="button"
+            className="ed-draft ed-step ed-step--2"
+            onClick={openContentModal}
+            disabled={exporting}
+            title="페이지별 내용(텍스트)을 한 번에 추가"
+          >
+            <span className="ed-step-num" aria-hidden>
+              2
+            </span>
+            <span className="ed-draft__label">내용추가</span>
+          </button>
+          {onSaveDraft && (
+            <button
+              type="button"
+              className="ed-draft ed-step ed-step--3"
+              onClick={() => void handleSaveDraft()}
+              disabled={exporting || draftState === "saving"}
+              title="작업을 내 서재에 임시저장 (공개 안 됨)"
+            >
+              <span className="ed-step-num" aria-hidden>
+                3
+              </span>
+              <span className="ed-draft__label">
+                {draftState === "saving"
+                  ? "저장 중…"
+                  : draftState === "saved"
+                    ? "저장됨 ✓"
+                    : "임시저장"}
+              </span>
+            </button>
+          )}
+          <button
+            type="button"
+            className="ed-draft ed-step ed-step--4"
+            onClick={() => {
+              if (!bookId) {
+                alert(
+                  "먼저 '임시저장'을 눌러 책을 저장한 뒤 나레이션을 넣을 수 있어요.",
+                );
+                return;
+              }
+              setNarrEditorOpen(true);
+            }}
+            disabled={exporting}
+            title="음성 한 파일을 구간으로 나눠 페이지별 나레이션으로 넣기"
+          >
+            <span className="ed-step-num" aria-hidden>
+              4
+            </span>
+            <span className="ed-draft__label">나레이션</span>
+          </button>
+          <button
+            type="button"
+            className={`ed-draft ed-step ed-step--5${hasBgm ? " is-on" : ""}`}
+            disabled={exporting}
+            title={
+              hasBgm
+                ? "배경음악 등록됨 (눌러서 교체/제거)"
+                : "내 파일을 올리거나 공용음악에서 골라 배경음악 넣기"
+            }
+            onClick={() => {
+              if (!bookId) {
+                alert(
+                  "먼저 '임시저장'을 눌러 책을 저장한 뒤 배경음악을 넣을 수 있어요.",
+                );
+                return;
+              }
+              setBgmModalOpen(true);
+            }}
+          >
+            <span className="ed-step-num" aria-hidden>
+              5
+            </span>
+            <span className="ed-draft__label">
+              {hasBgm ? "배경음악 ✓" : "배경음악"}
+            </span>
+          </button>
+          {onSaveDraft && (
+            <button
+              type="button"
+              className="ed-draft"
+              onClick={() => void handleSaveAndLibrary()}
+              disabled={exporting || draftState === "saving"}
+              title="임시저장한 뒤 내 서재로 이동"
+            >
+              <BookMarked size={16} />
+              <span className="ed-draft__label">내서재</span>
+            </button>
+          )}
+          <button
+            type="button"
+            className="ed-finish"
+            onClick={handleFinish}
+            disabled={exporting}
+          >
+            <BookOpen size={16} />
+            {exporting ? (
+              "출판심사 준비 중…"
+            ) : (
+              <span>
+                출판<span className="ed-finish__suffix">심사</span>
+              </span>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Creative tools + undo/redo live at the top of the body (canvas
+          column) — on desktop and mobile alike — not in the header. */}
+      <div className="ed-toolbar">
         <div className="ed-tools">
           <button type="button" className="ed-tool" onClick={addText}>
             <TypeIcon size={16} /> 글자
@@ -1767,94 +2233,6 @@ export default function Editor({
             <Redo2 size={18} />
           </button>
         </div>
-        <div className="ed-spacer" />
-        <div className="ed-save-group">
-          <button
-            type="button"
-            className="ed-draft"
-            onClick={() => {
-              if (!bookId) {
-                alert(
-                  "먼저 '임시저장'을 눌러 책을 저장한 뒤 나레이션을 넣을 수 있어요.",
-                );
-                return;
-              }
-              setNarrEditorOpen(true);
-            }}
-            disabled={exporting}
-            title="음성 한 파일을 구간으로 나눠 페이지별 나레이션으로 넣기"
-          >
-            <Mic size={16} />
-            <span className="ed-draft__label">나레이션 편집</span>
-          </button>
-          <button
-            type="button"
-            className={`ed-draft${hasBgm ? " is-on" : ""}`}
-            disabled={exporting}
-            title={
-              hasBgm
-                ? "배경음악 등록됨 (눌러서 교체/제거)"
-                : "내 파일을 올리거나 공용음악에서 골라 배경음악 넣기"
-            }
-            onClick={() => {
-              if (!bookId) {
-                alert(
-                  "먼저 '임시저장'을 눌러 책을 저장한 뒤 배경음악을 넣을 수 있어요.",
-                );
-                return;
-              }
-              setBgmModalOpen(true);
-            }}
-          >
-            <Music size={16} />
-            <span className="ed-draft__label">
-              {hasBgm ? "배경음악 ✓" : "배경음악"}
-            </span>
-          </button>
-          <button
-            type="button"
-            className="ed-draft"
-            onClick={openContentModal}
-            disabled={exporting}
-            title="페이지별 내용(텍스트)을 한 번에 추가"
-          >
-            <TypeIcon size={16} />
-            <span className="ed-draft__label">내용추가</span>
-          </button>
-          {onSaveDraft && (
-            <button
-              type="button"
-              className="ed-draft"
-              onClick={() => void handleSaveDraft()}
-              disabled={exporting || draftState === "saving"}
-              title="작업을 내 서재에 임시저장 (공개 안 됨)"
-            >
-              <Save size={16} />
-              <span className="ed-draft__label">
-                {draftState === "saving"
-                  ? "저장 중…"
-                  : draftState === "saved"
-                    ? "저장됨 ✓"
-                    : "임시저장"}
-              </span>
-            </button>
-          )}
-          <button
-            type="button"
-            className="ed-finish"
-            onClick={handleFinish}
-            disabled={exporting}
-          >
-            <BookOpen size={16} />
-            {exporting ? (
-              "책으로 만드는 중…"
-            ) : (
-              <>
-                완성<span className="ed-finish__suffix"> → 책으로</span>
-              </>
-            )}
-          </button>
-        </div>
       </div>
 
       {pagelistOpen && (
@@ -1867,14 +2245,8 @@ export default function Editor({
       <aside className={`ed-pagelist${pagelistOpen ? " ed-pagelist--open" : ""}`}>
         <div className="ed-pagelist__head">
           <span>페이지</span>
-          <button
-            type="button"
-            className="ed-pagelist__add ed-pagelist__add--all"
-            title="폴더를 선택하면 표지(첫 이미지)를 뺀 나머지를 전체 왼쪽정렬+복제(스프레드)로 자동 편집합니다"
-            onClick={() => folderInputRef.current?.click()}
-          >
-            전체추가
-          </button>
+          {/* 전체추가 버튼은 헤더(저장그룹, 단계 ①)로 옮겨졌습니다. 이 숨은 폴더
+              input은 여기 남아 folderInputRef로 열립니다. */}
           <input
             ref={folderInputRef}
             type="file"
@@ -2235,7 +2607,7 @@ export default function Editor({
               </select>
                 <label
                   className="ed-font-all"
-                  title="체크한 뒤 글꼴을 바꾸면 모든 페이지의 글씨에 적용됩니다"
+                  title="체크한 뒤 글꼴·글씨색·크기·두께·줄간격·자간·정렬·외곽선·그림자를 바꾸면 모든 페이지의 글씨에 적용됩니다"
                 >
                   <input
                     type="checkbox"
@@ -2249,7 +2621,7 @@ export default function Editor({
                   value={
                     (selected as unknown as { fill: string }).fill || "#000000"
                   }
-                  onChange={(c) => updateSelected({ fill: c })}
+                  onChange={(c) => applyTextPatch({ fill: c })}
                 />
               </div>
             </div>
@@ -2262,7 +2634,7 @@ export default function Editor({
                 min={8}
                 max={300}
                 step={2}
-                onChange={(n) => updateSelected({ fontSize: n })}
+                onChange={(n) => applyTextPatch({ fontSize: n })}
               />
             </div>
             <div className="ed-props__group ed-props__group--half">
@@ -2276,7 +2648,7 @@ export default function Editor({
                       ? " is-active"
                       : ""
                   }`}
-                  onClick={() => updateSelected({ fontWeight: "normal" })}
+                  onClick={() => applyTextPatch({ fontWeight: "normal" })}
                   title="보통"
                 >
                   보통
@@ -2289,7 +2661,7 @@ export default function Editor({
                       ? " is-active"
                       : ""
                   }`}
-                  onClick={() => updateSelected({ fontWeight: "bold" })}
+                  onClick={() => applyTextPatch({ fontWeight: "bold" })}
                   title="굵게"
                 >
                   <Bold size={14} />
@@ -2307,7 +2679,7 @@ export default function Editor({
                 max={3}
                 step={0.1}
                 decimals={1}
-                onChange={(n) => updateSelected({ lineHeight: n })}
+                onChange={(n) => applyTextPatch({ lineHeight: n })}
               />
             </div>
             <div className="ed-props__group ed-props__group--half">
@@ -2320,7 +2692,7 @@ export default function Editor({
                 min={-200}
                 max={1000}
                 step={25}
-                onChange={(n) => updateSelected({ charSpacing: n })}
+                onChange={(n) => applyTextPatch({ charSpacing: n })}
               />
             </div>
             <div className="ed-props__group">
@@ -2342,7 +2714,7 @@ export default function Editor({
                         ? " is-active"
                         : ""
                     }`}
-                    onClick={() => updateSelected({ textAlign: a })}
+                    onClick={() => applyTextPatch({ textAlign: a })}
                     title={title}
                   >
                     <Icon size={14} />
@@ -2371,9 +2743,9 @@ export default function Editor({
                   className={`ed-switch${outlineOn ? " is-on" : ""}`}
                   onClick={() => {
                     if (outlineOn) {
-                      updateSelected({ strokeWidth: 0, stroke: null });
+                      applyTextPatch({ strokeWidth: 0, stroke: null });
                     } else {
-                      updateSelected({
+                      applyTextPatch({
                         strokeWidth: 4,
                         stroke: strokeColor,
                         paintFirst: "stroke",
@@ -2393,7 +2765,7 @@ export default function Editor({
                       className="ed-swatch"
                       value={strokeColor}
                       onChange={(c) =>
-                        updateSelected({ stroke: c, paintFirst: "stroke" })
+                        applyTextPatch({ stroke: c, paintFirst: "stroke" })
                       }
                     />
                   </div>
@@ -2404,7 +2776,7 @@ export default function Editor({
                     max={30}
                     step={1}
                     onChange={(n) =>
-                      updateSelected({
+                      applyTextPatch({
                         strokeWidth: n,
                         stroke: strokeColor,
                         paintFirst: "stroke",
@@ -2619,6 +2991,14 @@ export default function Editor({
           currentKey={bgmKey}
           onChanged={setBgmKey}
           onClose={() => setBgmModalOpen(false)}
+        />
+      )}
+
+      {thumbOpen && (
+        <ThumbnailModal
+          coverPage={pages[0]}
+          pageW={pageW}
+          onClose={() => setThumbOpen(false)}
         />
       )}
     </div>

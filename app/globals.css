@@ -851,9 +851,10 @@ body {
   inset: 0;
   display: grid;
   grid-template-columns: 220px 1fr 320px;
-  grid-template-rows: 56px 1fr;
+  grid-template-rows: 56px auto 1fr;
   grid-template-areas:
-    "top top top"
+    "top   top    top"
+    "pages tools  props"
     "pages canvas props";
   background:
     radial-gradient(circle at 50% 30%, rgba(255, 255, 255, 0.22), transparent 40%),
@@ -880,18 +881,33 @@ body {
   text-decoration: none;
   font-weight: 700;
   font-size: 13px;
+  white-space: nowrap;
 }
 
 .ed-home:hover {
   background: rgba(255, 255, 255, 0.16);
 }
 
+/* The body toolbar: a horizontal bar at the top of the canvas column holding
+   the creative tools + undo/redo. Scrolls horizontally if it doesn't all fit
+   (e.g. on mobile). Same on desktop and mobile. */
+.ed-toolbar {
+  grid-area: tools;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: linear-gradient(180deg, #2a1c11, #241710);
+  border-bottom: 1px solid rgba(255, 220, 160, 0.1);
+  overflow-x: auto;
+}
+.ed-toolbar > * {
+  flex-shrink: 0;
+}
+
 .ed-tools {
   display: flex;
   gap: 6px;
-  margin-left: 14px;
-  padding-left: 14px;
-  border-left: 1px solid rgba(255, 220, 160, 0.12);
 }
 
 .ed-tool {
@@ -906,6 +922,8 @@ body {
   font-weight: 600;
   cursor: pointer;
   font-size: 13px;
+  /* Never let a squeezed toolbar break a label mid-word ("동그\n라미"). */
+  white-space: nowrap;
 }
 
 /* Narration tool: highlights when the current page already has a voice file. */
@@ -936,6 +954,7 @@ body {
   font-weight: 600;
   font-size: 13px;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .ed-tool-select option {
@@ -971,6 +990,7 @@ body {
   font-size: 14px;
   cursor: pointer;
   box-shadow: 0 8px 18px -10px rgba(240, 111, 95, 0.7);
+  white-space: nowrap;
 }
 
 .ed-finish:disabled {
@@ -991,6 +1011,7 @@ body {
   font-weight: 700;
   font-size: 14px;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .ed-draft:hover:not(:disabled) {
@@ -1059,6 +1080,58 @@ body {
   margin-left: 0;
 }
 
+/* Step badge: a circle with the step number, shown on the 1~5 workflow buttons.
+   White bold number with a dark text-shadow + white ring so it stays readable
+   and pops on every button colour — kid-friendly and easy to follow 1→5. The
+   fill comes from the per-step --step-badge below. */
+.ed-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--step-badge, #0fb3a3);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  text-shadow: 0 1px 1.5px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.9);
+}
+
+/* Rainbow per-step colouring (1~5). Each workflow button gets its own hue with
+   white text; the badge uses a deeper shade of the same hue so the white number
+   stays readable. Kids can follow the steps by colour, 빨→주→초→파→보. */
+.ed-step {
+  background: var(--step-bg) !important;
+  color: #fff !important;
+  border-color: rgba(0, 0, 0, 0.14) !important;
+}
+.ed-step:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+.ed-step--1 {
+  --step-bg: #e2574c; /* 빨강 */
+  --step-badge: #b6342b;
+}
+.ed-step--2 {
+  --step-bg: #d2761e; /* 주황 */
+  --step-badge: #a85c12;
+}
+.ed-step--3 {
+  --step-bg: #2e9550; /* 초록 */
+  --step-badge: #1f6e3a;
+}
+.ed-step--4 {
+  --step-bg: #3b82d6; /* 파랑 */
+  --step-badge: #245ba8;
+}
+.ed-step--5 {
+  --step-bg: #8155d6; /* 보라 */
+  --step-badge: #5f37ab;
+}
+
 /* Mobile-only: open the page-list drawer (topbar) and close it (drawer head)
    + the dimmed backdrop behind the drawer. Hidden on desktop. */
 .ed-pagelist-toggle,
@@ -1074,6 +1147,7 @@ body {
   font-weight: 700;
   font-size: 13px;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 /* Highlight 편집하기 once something is selected — hints it's ready to edit. */
@@ -1778,59 +1852,44 @@ textarea.ed-input {
   font-size: 16px;
 }
 
-@media (max-width: 900px) {
+/* ≤1200px also covers tablets (incl. most iPads in landscape): the desktop
+   toolbar has too many tools to fit one fixed 56px row there, so it squeezed
+   buttons and broke their labels. Below this width we switch to the wrapped
+   layout (top row auto-grows, creative tools move to the bottom bar). */
+@media (max-width: 1200px) {
   .ed-shell {
     grid-template-columns: 1fr;
-    /* top row auto so the wrapped toolbar can grow to multiple rows. The page
-       list is now an off-canvas drawer, so it's dropped from the grid flow. */
-    grid-template-rows: auto 1fr 0;
+    /* top (header), then the body toolbar, then the canvas. The page list +
+       props are off-canvas drawers, dropped from the grid flow. */
+    grid-template-rows: auto auto 1fr 0;
     grid-template-areas:
       "top"
+      "tools"
       "canvas"
       "props";
   }
-  /* Toolbar wraps to as many rows as needed — every tool stays reachable
-     (no horizontal clipping) instead of being pushed off-screen. */
+  /* Keep the top bar on a single row; if the controls don't all fit it scrolls
+     horizontally instead of wrapping onto extra rows. (The creative tools and
+     undo/redo are fixed to the bottom bar, so only home/새책/페이지/편집 + the
+     save group live here.) */
   .ed-topbar {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    overflow-x: auto;
     height: auto;
     padding: 8px 10px;
     gap: 6px;
   }
+  .ed-topbar > * {
+    flex-shrink: 0;
+  }
   .ed-spacer {
     display: none;
   }
-  /* Creative tools move to a fixed bottom bar (thumb-reachable) so the top bar
-     stops wrapping into 4 cramped rows. Scrolls horizontally if needed. */
-  .ed-tools {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 25;
-    margin: 0;
-    /* extra left padding reserves room for the fixed undo/redo block */
-    padding: 8px 10px 8px 128px;
-    border-left: 0;
-    border-top: 1px solid rgba(255, 220, 160, 0.12);
-    background: linear-gradient(180deg, #3b271a, #2a1c11);
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    gap: 8px;
-  }
-  /* Undo/redo: a solid block pinned to the bottom-left corner so the scrolling
-     tool bar never shows through / overlaps it. */
-  .ed-undo-group {
-    position: fixed;
-    left: 0;
-    bottom: 0;
-    z-index: 27;
-    display: flex;
-    align-items: center;
-    gap: 6px;
+  /* The body toolbar already scrolls horizontally (its base rule), so on mobile
+     the tools + undo/redo just stay in it — no fixed bottom bar. */
+  .ed-toolbar {
     padding: 8px 10px;
-    background: linear-gradient(180deg, #3b271a, #2a1c11);
-    border-top: 1px solid rgba(255, 220, 160, 0.12);
+    gap: 8px;
   }
   /* "완성 → 책으로" shortens to "완성" so the save group fits the top row. */
   .ed-finish__suffix {
@@ -1839,10 +1898,6 @@ textarea.ed-input {
   .ed-tools .ed-tool,
   .ed-tools .ed-tool-select {
     flex-shrink: 0;
-  }
-  /* Keep the canvas clear of the fixed bottom tool bar. */
-  .ed-canvas-wrap {
-    padding-bottom: 62px;
   }
   .ed-tool,
   .ed-tool-select,
@@ -2095,7 +2150,17 @@ textarea.ed-input {
 /* ---------- Spread preview mode ---------- */
 
 .ed-canvas-wrap--spread {
-  gap: 4px;
+  /* No gap: the two pages of a spread form one continuous image, so a gap here
+     draws a white line straight through the artwork at the fold. */
+  gap: 0;
+}
+
+/* Flatten the inner page chrome in spread mode so the two halves meet with no
+   visible seam: no rounded corners (which leave white notches at the fold) and
+   no inset 1px border (a faint line). The book drop-shadow stays for depth. */
+.ed-canvas-wrap--spread .ed-canvas-frame {
+  border-radius: 0;
+  box-shadow: 0 30px 60px -20px rgba(0, 0, 0, 0.5);
 }
 
 .ed-canvas-frame--partner {
@@ -2114,20 +2179,8 @@ textarea.ed-input {
   filter: brightness(1.05);
 }
 
-.ed-canvas-frame--partner::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(
-    90deg,
-    rgba(0, 0, 0, 0.18) 0%,
-    rgba(0, 0, 0, 0) 8%,
-    rgba(0, 0, 0, 0) 92%,
-    rgba(0, 0, 0, 0.18) 100%
-  );
-  mix-blend-mode: multiply;
-}
+/* (Preview edge-darkening removed: with the fold gap gone, its inner edge
+   showed up as a dark line cutting through the continuous spread image.) */
 
 .ed-canvas-frame__placeholder {
   display: flex;
@@ -2234,9 +2287,8 @@ textarea.ed-input {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  margin-left: 14px;
-  padding-left: 14px;
-  border-left: 1px solid rgba(255, 220, 160, 0.12);
+  /* Sits at the far right of the body toolbar. */
+  margin-left: auto;
 }
 
 .ed-round-btn {
@@ -2490,7 +2542,7 @@ textarea.ed-input {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  max-width: 1100px;
+  max-width: none;
   margin: 0 auto 28px;
   padding-left: 56px;
 }
@@ -2545,13 +2597,13 @@ textarea.ed-input {
   flex-wrap: wrap;
   align-items: center;
   gap: 12px;
-  max-width: 1100px;
+  max-width: none;
   margin: 0 auto 24px;
 }
 
 .store-search {
   position: relative;
-  max-width: 1100px;
+  max-width: none;
   margin: 0 auto 22px;
 }
 
@@ -2586,10 +2638,24 @@ textarea.ed-input {
 
 .store-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: clamp(16px, 2.5vw, 26px);
-  max-width: 1100px;
+  /* 5 big cards per row on desktop (cards grow with the screen); steps down to
+     4 / 3 on narrower screens, and the mobile rule below takes over ≤720px. */
+  grid-template-columns: repeat(5, 1fr);
+  gap: clamp(18px, 2.2vw, 30px);
+  max-width: none;
   margin: 0 auto;
+}
+
+/* Non-overlapping ranges, so source order vs the ≤720px mobile rule is moot. */
+@media (max-width: 1280px) and (min-width: 981px) {
+  .store-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+@media (max-width: 980px) and (min-width: 721px) {
+  .store-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }
 
 .store-card {
@@ -3557,7 +3623,7 @@ textarea.ed-input {
 .admin-tabs {
   display: flex;
   gap: 8px;
-  max-width: 760px;
+  max-width: none;
   margin: 0 auto 18px;
 }
 
@@ -3624,7 +3690,7 @@ textarea.ed-input {
   list-style: none;
   margin: 0 auto;
   padding: 0;
-  max-width: 760px;
+  max-width: none;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -3836,7 +3902,7 @@ textarea.ed-input {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  max-width: 1100px;
+  max-width: none;
   margin: 0 auto 18px;
   padding: 0 16px;
 }
@@ -4086,7 +4152,7 @@ textarea.ed-input {
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
-  max-width: 1100px;
+  max-width: none;
   margin: 0 auto 16px;
   padding: 12px 16px;
   border-radius: 14px;
@@ -4564,4 +4630,337 @@ textarea.ed-input {
     flex-shrink: 0;
     width: 220px;
   }
+}
+
+/* ============ 썸네일 만들기 모달 ============ */
+.thumb-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.thumb-modal {
+  width: min(1100px, 96vw);
+  height: min(760px, 92vh);
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, #2c1d10, #1c130a);
+  color: #f5e9d7;
+  border: 1px solid rgba(255, 220, 160, 0.14);
+  border-radius: 16px;
+  box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.7);
+  overflow: hidden;
+}
+.thumb-modal__head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255, 220, 160, 0.1);
+}
+.thumb-modal__head strong {
+  font-size: 15px;
+}
+.thumb-ratios {
+  display: flex;
+  gap: 6px;
+}
+.thumb-ratio-btn {
+  padding: 6px 12px;
+  border: 1px solid rgba(255, 220, 160, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff5d7;
+  font-weight: 700;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.thumb-ratio-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+.thumb-ratio-btn.is-active {
+  background: var(--accent);
+  border-color: transparent;
+  color: #fff;
+}
+.thumb-close {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff5d7;
+  cursor: pointer;
+}
+.thumb-close:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+.thumb-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(255, 220, 160, 0.08);
+  overflow-x: auto;
+}
+.thumb-body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 260px;
+  min-height: 0;
+}
+.thumb-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow: hidden;
+  background: repeating-conic-gradient(
+      rgba(255, 255, 255, 0.025) 0% 25%,
+      transparent 0% 50%
+    )
+    0 0 / 24px 24px;
+}
+.thumb-frame {
+  position: relative;
+  /* No white fill: a fractional display scale leaves a sub-pixel gap at the
+     canvas's right/bottom edge, and a white frame background peeks through as a
+     thin white line. The canvas paints its own background, so keep this clear. */
+  background: transparent;
+  box-shadow: 0 24px 50px -18px rgba(0, 0, 0, 0.6);
+  border-radius: 4px;
+  overflow: hidden;
+}
+/* <canvas> is inline by default → a baseline gap can show as a thin edge line. */
+.thumb-frame canvas {
+  display: block;
+}
+.thumb-props {
+  border-left: 1px solid rgba(255, 220, 160, 0.1);
+  padding: 14px;
+  overflow-y: auto;
+  background: rgba(20, 14, 9, 0.5);
+}
+.thumb-hint {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: #d8c4a6;
+}
+.thumb-field {
+  margin-bottom: 16px;
+}
+.thumb-field .ed-props__label {
+  display: block;
+  margin-bottom: 7px;
+}
+.thumb-field__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 7px;
+}
+.thumb-field__head .ed-props__label {
+  margin-bottom: 0;
+}
+/* Segmented button group — equal-width pills for bold/align/fit/order. */
+.thumb-seg {
+  display: flex;
+  gap: 6px;
+}
+.thumb-seg > button {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 6px;
+  border: 1px solid rgba(255, 220, 160, 0.16);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff5d7;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.thumb-seg > button:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+.thumb-seg > button.is-on {
+  background: var(--accent);
+  border-color: transparent;
+  color: #fff;
+}
+/* Native color input → tidy full-width swatch. */
+.thumb-swatch {
+  width: 100%;
+  height: 34px;
+  padding: 2px;
+  border: 1px solid rgba(255, 220, 160, 0.18);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+}
+.thumb-swatch::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+.thumb-swatch::-webkit-color-swatch {
+  border: none;
+  border-radius: 6px;
+}
+.thumb-range {
+  width: 100%;
+  accent-color: var(--accent);
+}
+.thumb-del {
+  width: 100%;
+  margin-top: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px;
+  border: 0;
+  border-radius: 10px;
+  background: #c0392b;
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+.thumb-del:hover {
+  background: #a93226;
+}
+.thumb-modal__foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid rgba(255, 220, 160, 0.1);
+}
+@media (max-width: 720px) {
+  .thumb-modal {
+    height: 94vh;
+    width: 96vw;
+  }
+  .thumb-modal__head {
+    flex-wrap: wrap;
+  }
+  .thumb-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr auto;
+  }
+  .thumb-props {
+    border-left: 0;
+    border-top: 1px solid rgba(255, 220, 160, 0.1);
+    max-height: 38vh;
+  }
+}
+
+/* ===== 작가 소개 페이지 ===== */
+.author-hero {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  margin: 4px 0 2px;
+}
+.author-hero__avatar {
+  flex-shrink: 0;
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 34px;
+  font-weight: 800;
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  box-shadow: 0 10px 22px -10px rgba(240, 111, 95, 0.7);
+}
+.author-hero__info {
+  min-width: 0;
+}
+.author-hero__name {
+  margin: 0 0 5px;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--ink);
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.author-hero__biz {
+  font-size: 13px;
+  font-weight: 600;
+  color: #8a6f57;
+}
+.author-hero__intro {
+  margin: 0 0 9px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #6b5240;
+  white-space: pre-wrap;
+}
+.author-hero__stats {
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+  color: #8a6f57;
+}
+.author-hero__stats b {
+  color: var(--ink);
+  font-size: 15px;
+}
+.author-hero__likes {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.author-hero__likes svg {
+  color: var(--accent);
+}
+.author-sort {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0 4px;
+}
+.author-sort button {
+  padding: 7px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(68, 48, 37, 0.2);
+  background: #fff;
+  color: var(--ink);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+.author-sort button.is-active {
+  background: var(--accent);
+  border-color: transparent;
+  color: #fff;
+}
+
+/* Store card author → links to the author profile. */
+.store-card__authorlink {
+  color: inherit;
+  text-decoration: none;
+  font-weight: 700;
+}
+.store-card__authorlink:hover {
+  color: var(--accent);
+  text-decoration: underline;
 }

@@ -1,8 +1,23 @@
 "use client";
 
-import type { Author, AuthorApplyInput } from "./author-types";
+import type {
+  Author,
+  AuthorApplyInput,
+  PublicAuthor,
+} from "./author-types";
+import type { StoreBook } from "./store";
 
 /** Client access to the author API (Clerk session via cookie). */
+
+/** Public author profile + their approved books (most liked first). null when
+ *  the author doesn't exist or isn't approved. */
+export async function fetchAuthorProfile(
+  userId: string,
+): Promise<{ author: PublicAuthor; books: StoreBook[] } | null> {
+  const res = await fetch(`/api/authors/${userId}`, { cache: "no-store" });
+  if (!res.ok) return null;
+  return (await res.json()) as { author: PublicAuthor; books: StoreBook[] };
+}
 
 export async function fetchMyAuthor(): Promise<Author | null> {
   const res = await fetch("/api/authors/me", { cache: "no-store" });

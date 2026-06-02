@@ -31,8 +31,11 @@ type Props = {
   onChange: () => void;
   /** Active snap guides — empty array when nothing is being dragged. */
   onGuides: (guides: Guide[]) => void;
-  /** Page width (height is fixed at PAGE_H). Varies by 판형. */
+  /** Page width. Varies by 판형. */
   pageW?: number;
+  /** Page height (defaults to PAGE_H). Lets non-book canvases (e.g. the
+   *  thumbnail tool) use arbitrary aspect ratios. */
+  pageH?: number;
 };
 
 /** Snap threshold in canvas-pixel space — how close an edge has to get to a
@@ -40,7 +43,7 @@ type Props = {
 const SNAP_THRESHOLD = 14;
 
 export default forwardRef<FabricApi | null, Props>(function FabricCanvas(
-  { onReady, onSelection, onChange, onGuides, pageW = PAGE_W },
+  { onReady, onSelection, onChange, onGuides, pageW = PAGE_W, pageH = PAGE_H },
   ref,
 ) {
   const elRef = useRef<HTMLCanvasElement | null>(null);
@@ -59,7 +62,7 @@ export default forwardRef<FabricApi | null, Props>(function FabricCanvas(
 
       canvas = new fabric.Canvas(elRef.current, {
         width: pageW,
-        height: PAGE_H,
+        height: pageH,
         backgroundColor: "#ffffff",
         preserveObjectStacking: true,
       });
@@ -88,10 +91,10 @@ export default forwardRef<FabricApi | null, Props>(function FabricCanvas(
         ];
         const ys: number[] = [
           0,
-          PAGE_H / 4,
-          PAGE_H / 2,
-          (3 * PAGE_H) / 4,
-          PAGE_H,
+          pageH / 4,
+          pageH / 2,
+          (3 * pageH) / 4,
+          pageH,
         ];
         for (const o of canvas!.getObjects()) {
           if (o === skip) continue;
@@ -184,7 +187,7 @@ export default forwardRef<FabricApi | null, Props>(function FabricCanvas(
             }
           }
         }
-        if (r.height < PAGE_H - 0.5 && bestDyAbs <= SNAP_THRESHOLD) {
+        if (r.height < pageH - 0.5 && bestDyAbs <= SNAP_THRESHOLD) {
           target.set("top", target.top + dy);
           if (snappedYPos !== null) guides.push({ axis: "y", pos: snappedYPos });
         }

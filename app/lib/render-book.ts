@@ -78,6 +78,38 @@ export async function renderSnapshotToImages(
 }
 
 /**
+ * Render a single page (the cover) to a sharp data URL for the book's cover
+ * thumbnail. The editor caches page thumbs at 0.2× (≈160px) — fine for the tiny
+ * page list, but blurry blown up onto a store card. This redraws the page at a
+ * higher resolution (with its fonts) so the cover stays crisp, incl. on retina.
+ */
+export async function renderCoverThumb(
+  page: EditorPage | undefined,
+  pageW: number = PAGE_W,
+): Promise<string | undefined> {
+  if (!page?.data) return undefined;
+  const fabric = await import("fabric");
+  await ensurePageFonts([page]);
+  const offEl = document.createElement("canvas");
+  offEl.width = pageW;
+  offEl.height = PAGE_H;
+  const off = new fabric.StaticCanvas(offEl, {
+    width: pageW,
+    height: PAGE_H,
+    backgroundColor: "#ffffff",
+  });
+  try {
+    await off.loadFromJSON(page.data);
+    off.renderAll();
+    // ~0.7× (≈560px wide) JPEG: sharp on a ~250px card even at 2× DPR, while
+    // keeping the stored data URL small.
+    return off.toDataURL({ format: "jpeg", quality: 0.88, multiplier: 0.7 });
+  } finally {
+    off.dispose();
+  }
+}
+
+/**
  * Render a Fabric snapshot straight to flip-book images for the reader —
  * Fabric → image per page, skipping the PDF + pdf.js round-trip that
  * renderSnapshotToImages does (that's only needed when we also want a

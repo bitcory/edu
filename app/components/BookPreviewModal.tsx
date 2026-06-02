@@ -29,7 +29,9 @@ export default function BookPreviewModal({
 }: Props) {
   const { user } = useUser();
   const { isAdmin } = useIsAdmin();
-  const [likeCount, setLikeCount] = useState(0);
+  // Seed from the card's count so opening the modal doesn't flash 0 → real
+  // value before getBookSocial resolves; the effect below refines it.
+  const [likeCount, setLikeCount] = useState(book.likeCount ?? 0);
   const [liked, setLiked] = useState(false);
   const [comments, setComments] = useState<BookComment[]>([]);
   const [loading, setLoading] = useState(true);

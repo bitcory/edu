@@ -7,6 +7,7 @@ import {
   Mic,
   Music,
   Pencil,
+  RefreshCw,
   Store,
   Trash2,
   Upload,
@@ -38,7 +39,7 @@ import {
 } from "../lib/store";
 import { applyAuthor, fetchMyAuthor } from "../lib/author-store";
 import type { Author, AuthorApplyInput } from "../lib/author-types";
-import { openBookForReading } from "../lib/render-book";
+import { openBookForReading, renderCoverThumb } from "../lib/render-book";
 import { pickRandomPoolBgm } from "../lib/bgm";
 import { type RenderedPage } from "../lib/pdf-to-images";
 import { loadEditorState } from "../lib/editor-storage";
@@ -159,6 +160,51 @@ export default function LibraryPage() {
     [refresh],
   );
 
+  // Re-render every editor book's cover from its page 0 at full resolution and
+  // refresh the stored coverThumb. Fixes covers published when the thumb was a
+  // blurry 0.2×. coverThumb-only update → keeps the book's status (no re-approval).
+  const refreshAllCovers = useCallback(async () => {
+    const targets = (books ?? []).filter(
+      (b) => b.kind === "editor" && b.status !== "pending",
+    );
+    if (targets.length === 0) {
+      alert("표지를 갱신할 책이 없어요.");
+      return;
+    }
+    if (
+      !window.confirm(
+        `내 책 ${targets.length}권의 표지를 표지 페이지(0쪽)에서 고화질로 다시 만들까요?\n` +
+          "(직접 올린 표지가 있다면 0쪽 그림으로 바뀝니다. 공개 상태는 그대로 유지됩니다.)",
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    let ok = 0;
+    let fail = 0;
+    try {
+      for (const b of targets) {
+        try {
+          const full = (await getBook(b.id)) ?? b;
+          const cover = await renderCoverThumb(full.pages[0], full.pageW ?? 800);
+          if (!cover) {
+            fail += 1;
+            continue;
+          }
+          await updateBookInfo(b.id, { cover });
+          ok += 1;
+        } catch (err) {
+          console.error("표지 갱신 실패", b.id, err);
+          fail += 1;
+        }
+      }
+      refresh();
+      alert(`표지 ${ok}권 갱신 완료${fail ? `, ${fail}권 실패` : ""}.`);
+    } finally {
+      setBusy(false);
+    }
+  }, [books, refresh]);
+
   const saveInfo = useCallback(
     async (values: InfoValues) => {
       if (!editInfo) return;
@@ -205,7 +251,7 @@ export default function LibraryPage() {
     (b) => b.status === "draft" && b.kind === "editor",
   );
 
-  const openSubmit = useCallback(() => {
+  const openSubmit = useCallback(async () => {
     if (author?.status !== "approved") {
       setAuthorOpen(true);
       return;
@@ -222,17 +268,21 @@ export default function LibraryPage() {
       void pickDraft(drafts[0]);
       return;
     }
-    // No cloud drafts → fall back to the current localStorage working draft.
-    const saved = loadEditorState();
+    // No cloud drafts → fall back to the current local working draft.
+    const saved = await loadEditorState();
     if (!saved || saved.pages.length === 0) {
       alert("작업 중인 책이 없어요. 먼저 책을 만들어 주세요.");
       return;
     }
+    // Render a crisp cover from page 0 (its cached thumb is only 0.2×/blurry).
+    const cover =
+      (await renderCoverThumb(saved.pages[0], saved.pageW ?? 800)) ??
+      saved.pages[0]?.thumb;
     setPublishTarget({
       pages: saved.pages,
       pageW: saved.pageW ?? 800,
       layout: saved.layout ?? "spread",
-      initial: { author: author?.displayName, cover: saved.pages[0]?.thumb },
+      initial: { author: author?.displayName, cover },
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [author, books]);
@@ -245,6 +295,12 @@ export default function LibraryPage() {
       setBusy(true);
       try {
         const full = (await getBook(d.id)) ?? d;
+        // Keep a custom cover if one was set; otherwise render a crisp cover
+        // from page 0 rather than reusing its blurry 0.2× thumb.
+        const cover =
+          d.coverThumb ??
+          (await renderCoverThumb(full.pages[0], full.pageW ?? 800)) ??
+          full.pages[0]?.thumb;
         setPublishTarget({
           pages: full.pages,
           pageW: full.pageW ?? 800,
@@ -255,7 +311,7 @@ export default function LibraryPage() {
             author: d.author ?? author?.displayName,
             description: d.description,
             category: d.category,
-            cover: d.coverThumb ?? full.pages[0]?.thumb,
+            cover,
           },
         });
       } catch (err) {
@@ -343,6 +399,9 @@ export default function LibraryPage() {
         <Link href="/" className="home-btn" aria-label="처음으로" title="처음으로" />
         <h1 className="store-title">내 서재</h1>
         <div className="store-header__right">
+          <Link href="/edit" className="store-navlink">
+            <Pencil size={16} /> 책만들기
+          </Link>
           <Link href="/store" className="store-navlink">
             <Store size={16} /> 북스토어
           </Link>
@@ -372,7 +431,7 @@ export default function LibraryPage() {
           disabled={busy}
         >
           <Upload size={16} />{" "}
-          {isApproved ? "작업 중인 책 올리기" : "작가 등록하고 올리기"}
+          {isApproved ? "정식출판" : "작가 등록하고 올리기"}
         </button>
         <Link href="/edit" className="store-navlink">
           <Pencil size={16} /> 새 책 만들기
@@ -383,6 +442,15 @@ export default function LibraryPage() {
           onClick={() => setBgmOpen(true)}
         >
           <Music size={16} /> 공용 배경음악
+        </button>
+        <button
+          type="button"
+          className="store-navlink"
+          onClick={() => void refreshAllCovers()}
+          disabled={busy}
+          title="기존 책 표지를 0쪽에서 고화질로 다시 만듭니다 (공개 상태 유지)"
+        >
+          <RefreshCw size={16} /> 표지 화질 갱신
         </button>
       </div>
 

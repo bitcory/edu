@@ -43,6 +43,29 @@ export async function getAuthor(userId: string): Promise<Author | null> {
   return row ? rowToAuthor(row) : null;
 }
 
+/** Public profile (PII-free) for an APPROVED author — null otherwise. Safe to
+ *  return to anyone; never selects payout/PII columns. */
+export async function getPublicAuthor(
+  userId: string,
+): Promise<import("./author-types").PublicAuthor | null> {
+  await ensureSchema();
+  const res = await db.execute({
+    sql: `SELECT user_id, display_name, type, business_name, intro
+          FROM authors WHERE user_id = ? AND status = 'approved'`,
+    args: [userId],
+  });
+  const row = res.rows[0];
+  if (!row) return null;
+  return {
+    userId: String(row.user_id),
+    displayName: String(row.display_name),
+    type: String(row.type) as AuthorType,
+    businessName:
+      row.business_name == null ? undefined : String(row.business_name),
+    intro: row.intro == null ? undefined : String(row.intro),
+  };
+}
+
 export async function isApprovedAuthor(userId: string): Promise<boolean> {
   const a = await getAuthor(userId);
   return a?.status === "approved";

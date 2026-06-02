@@ -34,3 +34,13 @@ export type AuthorApplyInput = {
   businessName?: string;
   intro?: string;
 } & Partial<AuthorPayoutInfo>;
+
+// Public, PII-free author profile shown on the bookstore author page. Never
+// includes payout/PII fields (rrn, bank…). Only built for approved authors.
+export type PublicAuthor = {
+  userId: string;
+  displayName: string;
+  type: AuthorType;
+  businessName?: string;
+  intro?: string;
+};

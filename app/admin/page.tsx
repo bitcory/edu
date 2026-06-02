@@ -1,7 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { Check, Eye, Pencil, PencilRuler, RotateCcw, X } from "lucide-react";
+import {
+  BookOpen,
+  Check,
+  Eye,
+  Pencil,
+  PencilRuler,
+  RefreshCw,
+  RotateCcw,
+  Store,
+  X,
+} from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import BookViewer from "../components/BookViewer";
 import BookInfoModal, { type InfoValues } from "../components/BookInfoModal";
@@ -9,6 +19,7 @@ import UserChip from "../components/auth/UserChip";
 import { useIsAdmin } from "../components/auth/useIsAdmin";
 import {
   approveBook,
+  getBook,
   getBookAudioUrl,
   getNarrationUrls,
   listDraftBooks,
@@ -21,7 +32,7 @@ import {
 } from "../lib/store";
 import { approveAuthor, fetchAuthors, rejectAuthor } from "../lib/author-store";
 import type { Author, AuthorStatus } from "../lib/author-types";
-import { openBookForReading } from "../lib/render-book";
+import { openBookForReading, renderCoverThumb } from "../lib/render-book";
 import { type RenderedPage } from "../lib/pdf-to-images";
 import { formatPrice } from "../lib/format-price";
 import { pickRandomPoolBgm } from "../lib/bgm";
@@ -57,6 +68,19 @@ const EMPTY: Record<Tab, string> = {
   rejected: "거절된 책이 없어요.",
 };
 
+/** Natural pixel width of a data-URL image (0 on failure) — used to tell an
+ *  already-crisp cover from an old blurry 0.2× (≈160px) thumb. */
+function imageWidth(dataUrl: string): Promise<number> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(img.naturalWidth || 0);
+    img.onerror = () => resolve(0);
+    img.src = dataUrl;
+  });
+}
+// Covers at/above this width are treated as already high-res (skip re-render).
+const HIRES_MIN_WIDTH = 400;
+
 export default function AdminPage() {
   const { isAdmin } = useIsAdmin();
   const [section, setSection] = useState<Section>("books");
@@ -80,6 +104,64 @@ export default function AdminPage() {
   useEffect(() => {
     if (isAdmin) refresh();
   }, [isAdmin, refresh]);
+
+  // Bulk-regenerate selected books' covers from page 0 at high resolution.
+  // Admins may do this for any owner; coverThumb-only update keeps the book's
+  // status (no re-approval). Books already high-res are skipped automatically.
+  const refreshCovers = useCallback(
+    async (selected: StoreBook[]) => {
+      if (selected.length === 0) {
+        alert("선택한 책이 없어요.");
+        return;
+      }
+      setBusy(true);
+      let updated = 0;
+      let skipped = 0;
+      let fail = 0;
+      try {
+        for (const b of selected) {
+          try {
+            // Only editor books have an editable page 0 to render a cover from.
+            if (b.kind !== "editor") {
+              skipped += 1;
+              continue;
+            }
+            // Already crisp? skip without refetching the full snapshot.
+            if (
+              b.coverThumb &&
+              (await imageWidth(b.coverThumb)) >= HIRES_MIN_WIDTH
+            ) {
+              skipped += 1;
+              continue;
+            }
+            const full = (await getBook(b.id)) ?? b;
+            const cover = await renderCoverThumb(
+              full.pages[0],
+              full.pageW ?? 800,
+            );
+            if (!cover) {
+              fail += 1;
+              continue;
+            }
+            await updateBookInfo(b.id, { cover });
+            updated += 1;
+          } catch (err) {
+            console.error("표지 갱신 실패", b.id, err);
+            fail += 1;
+          }
+        }
+        refresh();
+        alert(
+          `표지 ${updated}권 갱신, 이미 고화질 ${skipped}권 건너뜀${
+            fail ? `, ${fail}권 실패` : ""
+          }.`,
+        );
+      } finally {
+        setBusy(false);
+      }
+    },
+    [refresh],
+  );
 
   const approveAuthorApp = useCallback(
     async (userId: string) => {
@@ -209,6 +291,12 @@ export default function AdminPage() {
         <Link href="/" className="home-btn" aria-label="처음으로" title="처음으로" />
         <h1 className="store-title">관리자</h1>
         <div className="store-header__right">
+          <Link href="/library" className="store-navlink">
+            <BookOpen size={16} /> 내 서재
+          </Link>
+          <Link href="/store" className="store-navlink">
+            <Store size={16} /> 북스토어
+          </Link>
           <UserChip />
         </div>
       </header>
@@ -249,6 +337,7 @@ export default function AdminPage() {
           onApprove={(id) => void approve(id)}
           onReject={(id) => void reject(id)}
           onEdit={(b) => setEditInfo(b)}
+          onRefreshCovers={(sel) => void refreshCovers(sel)}
         />
       )}
 
@@ -280,6 +369,7 @@ function BooksView({
   onApprove,
   onReject,
   onEdit,
+  onRefreshCovers,
 }: {
   tab: Tab;
   setTab: (t: Tab) => void;
@@ -289,7 +379,24 @@ function BooksView({
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
   onEdit: (b: StoreBook) => void;
+  onRefreshCovers: (selected: StoreBook[]) => void;
 }) {
+  // Cover-refresh selection (editor books only — PDFs have no page 0 to render).
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  useEffect(() => setSelected(new Set()), [tab, books]);
+  const selectableIds = (books ?? [])
+    .filter((b) => b.kind === "editor")
+    .map((b) => b.id);
+  const allSelected =
+    selectableIds.length > 0 && selectableIds.every((id) => selected.has(id));
+  const toggle = (id: string, on: boolean) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+
   return (
     <>
       <div className="admin-tabs">
@@ -305,6 +412,59 @@ function BooksView({
         ))}
       </div>
 
+      {selectableIds.length > 0 && (
+        <div
+          style={{
+            margin: "0 0 12px",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            flexWrap: "wrap",
+            padding: "8px 12px",
+            borderRadius: 12,
+            background: "rgba(255, 255, 255, 0.55)",
+            boxShadow: "inset 0 0 0 1px rgba(0, 0, 0, 0.05)",
+          }}
+        >
+          <label
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              fontWeight: 700,
+              fontSize: 13,
+              color: "#6a4a2b",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onChange={(e) =>
+                setSelected(e.target.checked ? new Set(selectableIds) : new Set())
+              }
+            />
+            전체 선택
+          </label>
+          <span style={{ color: "#b09a78", fontSize: 12 }}>
+            {selected.size > 0 ? `${selected.size}권 선택됨` : "표지를 다시 뽑을 책을 고르세요"}
+          </span>
+          <button
+            type="button"
+            className="admin-btn admin-btn--preview"
+            style={{ marginLeft: "auto" }}
+            disabled={busy || selected.size === 0}
+            onClick={() =>
+              onRefreshCovers(
+                (books ?? []).filter((b) => selected.has(b.id)),
+              )
+            }
+            title="선택한 책 표지를 0쪽에서 고화질로 다시 만듭니다 (이미 고화질인 건 건너뜀, 공개 상태 유지)"
+          >
+            <RefreshCw size={16} /> 표지 갱신
+          </button>
+        </div>
+      )}
+
       {books === null ? (
         <p className="store-empty">불러오는 중…</p>
       ) : books.length === 0 ? (
@@ -315,6 +475,15 @@ function BooksView({
         <ul className="admin-list">
           {books.map((b) => (
             <li key={b.id} className="admin-row">
+              {b.kind === "editor" && (
+                <input
+                  type="checkbox"
+                  checked={selected.has(b.id)}
+                  onChange={(e) => toggle(b.id, e.target.checked)}
+                  title="표지 갱신 대상으로 선택"
+                  style={{ alignSelf: "center", marginRight: 4 }}
+                />
+              )}
               <div className="admin-row__cover">
                 {b.coverThumb ? (
                   <img src={b.coverThumb} alt={b.title} />

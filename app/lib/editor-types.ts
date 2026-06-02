@@ -10,6 +10,14 @@ export type EditorPage = {
   data: object | null;
   /** Optional cached thumbnail data URL */
   thumb?: string;
+  /**
+   * Pages split from one continuous spread image (전체추가 on a wide scan)
+   * share this id so adjusting the image on one half keeps the other half
+   * aligned to the center seam.
+   */
+  spreadId?: string;
+  /** Which half of that spread this page shows. */
+  spreadSide?: "left" | "right";
 };
 
 export type EditorSnapshot = {

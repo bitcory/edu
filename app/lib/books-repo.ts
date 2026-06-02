@@ -134,6 +134,24 @@ export async function listBooks(
   return res.rows.map(rowToBook);
 }
 
+/** An author's PUBLIC (approved) books, most-liked first (then newest). Omits
+ *  the heavy pages blob — cards only need cover_thumb + metadata. */
+export async function listAuthorBooks(ownerId: string): Promise<StoreBook[]> {
+  await ensureSchema();
+  const res = await db.execute({
+    sql: `SELECT b.id, b.title, b.kind, b.author, b.description, b.category,
+                 b.price, b.page_w, b.layout, b.owner_id, b.owner_name,
+                 b.cover_thumb, b.status, b.submitted_at, b.reviewed_at,
+                 b.reject_reason, b.audio_key, b.page_count,
+                 (SELECT COUNT(*) FROM likes l WHERE l.book_id = b.id) AS like_count
+          FROM books b
+          WHERE b.owner_id = ? AND b.status = 'approved'
+          ORDER BY like_count DESC, COALESCE(b.reviewed_at, b.submitted_at) DESC`,
+    args: [ownerId],
+  });
+  return res.rows.map(rowToBook);
+}
+
 export async function getBookById(id: string): Promise<StoreBook | null> {
   await ensureSchema();
   const res = await db.execute({

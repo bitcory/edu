@@ -11,8 +11,20 @@ import SubmitBookModal, {
 import { renderSnapshotToImages } from "../lib/render-book";
 import { revokePages, type RenderedPage } from "../lib/pdf-to-images";
 import type { EditorPage } from "../lib/editor-types";
-import { loadEditorState } from "../lib/editor-storage";
-import { getBook, saveDraft, submitBook, updateBook } from "../lib/store";
+import {
+  loadDraftId,
+  loadEditorState,
+  saveDraftId,
+} from "../lib/editor-storage";
+import {
+  getBook,
+  getBookAudioUrl,
+  getNarrationUrls,
+  saveDraft,
+  submitBook,
+  updateBook,
+} from "../lib/store";
+import { pickRandomPoolBgm } from "../lib/bgm";
 import type { BookLayout } from "../lib/book-types";
 import { DEFAULT_TEMPLATE } from "../lib/templates";
 import { fetchMyAuthor } from "../lib/author-store";
@@ -33,6 +45,8 @@ type Mode =
       rendered: RenderedPage[];
       pdfUrl: string;
       pdfBytes: Uint8Array;
+      audioUrl?: string;
+      narrationUrls?: (string | null)[];
     };
 
 function EditPageInner() {
@@ -97,13 +111,19 @@ function EditPageInner() {
     let cancelled = false;
     if (!bookId) {
       setInitialPages(null);
+      // Re-link to the cloud draft this local working draft already maps to, so
+      // saving again updates that same draft (no duplicate) after a round-trip.
+      const savedDraftId = loadDraftId();
+      if (savedDraftId) setDraftId(savedDraftId);
       // New book: adopt 판형 from the working draft if present.
-      const saved = loadEditorState();
-      const w = saved?.pageW ?? DEFAULT_TEMPLATE.width;
-      setPageW(w);
-      setPrevPageW(w); // equal → no recenter on load
-      if (saved?.layout) setLayout(saved.layout);
-      setLoadingBook(false);
+      void loadEditorState().then((saved) => {
+        if (cancelled) return;
+        const w = saved?.pageW ?? DEFAULT_TEMPLATE.width;
+        setPageW(w);
+        setPrevPageW(w); // equal → no recenter on load
+        if (saved?.layout) setLayout(saved.layout);
+        setLoadingBook(false);
+      });
       return;
     }
     setLoadingBook(true);
@@ -149,8 +169,13 @@ function EditPageInner() {
         pageW: pw,
         layout: lyt,
       });
-      // Adopt the new draft's id so the next save updates the same row.
-      if (!targetId) setDraftId(book.id);
+      // Adopt the new draft's id so the next save updates the same row — both
+      // in this session (state) and across navigation/remounts (localStorage),
+      // so 편집기 ↔ 내서재 round-trips don't spawn a new draft each time.
+      if (!targetId) {
+        setDraftId(book.id);
+        saveDraftId(book.id);
+      }
     },
     [bookId, draftId],
   );
@@ -166,13 +191,36 @@ function EditPageInner() {
           "내가만든책.pdf",
           pw,
         );
-        setMode({ kind: "preview", pages, rendered, pdfUrl, pdfBytes });
+        // Reflect the book's music + per-page narration in the preview, exactly
+        // as a reader will hear it. These live server-side under the book id, so
+        // they're only available once the book has been 임시저장'd. The book's
+        // own bgm wins; otherwise a shared-pool track plays (same as the reader).
+        const id = bookId ?? draftId;
+        let audioUrl: string | undefined;
+        let narrationUrls: (string | null)[] | undefined;
+        if (id) {
+          audioUrl = (await getBookAudioUrl(id)) ?? undefined;
+          const nUrls = await getNarrationUrls(id);
+          narrationUrls = nUrls.some(Boolean) ? nUrls : undefined;
+        }
+        if (!audioUrl) audioUrl = await pickRandomPoolBgm();
+        setMode({
+          kind: "preview",
+          pages,
+          rendered,
+          pdfUrl,
+          pdfBytes,
+          audioUrl,
+          narrationUrls,
+        });
       } catch (err) {
-      console.error(err);
-      alert("PDF로 만드는 중 문제가 생겼어요: " + (err as Error).message);
-      setMode({ kind: "edit" });
-    }
-  }, []);
+        console.error(err);
+        alert("PDF로 만드는 중 문제가 생겼어요: " + (err as Error).message);
+        setMode({ kind: "edit" });
+      }
+    },
+    [bookId, draftId],
+  );
 
   const handleSubmitToStore = useCallback(
     async (pages: EditorPage[], values: SubmitValues) => {
@@ -246,6 +294,8 @@ function EditPageInner() {
           <BookViewer
             pages={mode.rendered}
             singlePage={layout === "single"}
+            audioUrl={mode.audioUrl}
+            narrationUrls={mode.narrationUrls}
             onClose={() => setMode({ kind: "edit" })}
           />
           <div className="ed-preview-actions">
