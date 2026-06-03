@@ -176,10 +176,13 @@ export async function insertBook(
   input: SubmitInput,
   owner: { id: string; name: string },
   status: BookStatus = initialEditorStatus(),
+  // Recreate with a specific id (e.g. 임시저장 self-heal when the local draft id
+  // is missing from the DB) so the editor's stored draftId stays consistent.
+  desiredId?: string,
 ): Promise<StoreBook> {
   await ensureSchema();
   const book: StoreBook = {
-    id: newId(),
+    id: desiredId || newId(),
     title: input.title.trim() || "제목 없는 책",
     kind: "editor",
     author: input.author?.trim() || owner.name,

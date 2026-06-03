@@ -794,6 +794,20 @@ export default function Editor({
             | undefined
         )?.isEditing;
       if (editing) return;
+      // Delete / Backspace → remove the selected object(s). Skipped above while
+      // typing in an input/textarea or editing a text object on the canvas.
+      if (e.key === "Delete" || e.key === "Backspace") {
+        const c = apiRef.current?.canvas;
+        const objs = c?.getActiveObjects?.() ?? [];
+        if (c && objs.length) {
+          e.preventDefault();
+          objs.forEach((o) => c.remove(o));
+          c.discardActiveObject();
+          c.requestRenderAll();
+          setSelected(null);
+        }
+        return;
+      }
       const meta = e.metaKey || e.ctrlKey;
       if (!meta) return;
       const k = e.key.toLowerCase();
@@ -2560,7 +2574,7 @@ export default function Editor({
               <label className="ed-props__label">내용</label>
               <textarea
                 className="ed-input"
-                rows={3}
+                rows={5}
                 value={(selected as unknown as { text: string }).text ?? ""}
                 onChange={(e) => updateSelected({ text: e.target.value })}
               />

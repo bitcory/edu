@@ -1751,7 +1751,7 @@ textarea.ed-input {
   display: block;
   width: 100%;
   resize: vertical;
-  min-height: 72px;
+  min-height: 120px;
   line-height: 1.5;
 }
 
@@ -3206,6 +3206,302 @@ textarea.ed-input {
   max-height: 92vh;
   padding: 20px;
 }
+
+/* 매칭편집: full-width grid of page cards, each its own audio drop target. */
+.narr-match {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 20px;
+  overflow: hidden;
+}
+.narr-match__hint {
+  font-size: 13px;
+  color: #cbb89f;
+  line-height: 1.5;
+}
+.narr-match__hint b {
+  color: #ffd9a3;
+}
+.narr-match__grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-right: 4px;
+}
+.narr-match__spread {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.narr-match__cell {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 2px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+}
+.narr-match__cell--gap {
+  background: transparent;
+  border-color: transparent;
+}
+.narr-match__cell.has-audio {
+  border-color: rgba(47, 185, 143, 0.5);
+  background: rgba(47, 185, 143, 0.08);
+}
+.narr-match__cell.is-drag {
+  border-color: var(--accent, #ff9b6f);
+  background: rgba(255, 155, 111, 0.16);
+}
+.narr-match__cell-img {
+  position: relative;
+  width: 100%;
+  height: 150px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+.narr-match__cell-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.narr-match__cell-label {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: rgba(31, 17, 9, 0.78);
+  color: #ffd9a3;
+  font-size: 11px;
+  font-weight: 800;
+}
+.narr-match__badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #2fb98f;
+  font-size: 13px;
+}
+.narr-match__drop {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px;
+  border: 1.5px dashed rgba(255, 220, 160, 0.4);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.03);
+  color: #e9dcc6;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+.narr-match__drop:hover {
+  border-color: var(--accent, #ff9b6f);
+  background: rgba(255, 155, 111, 0.12);
+}
+.narr-match__audio {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.narr-match__player {
+  width: 100%;
+  height: 34px;
+}
+.narr-match__audio-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.narr-match__state {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: #cbb89f;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.narr-match__chg {
+  flex-shrink: 0;
+  padding: 5px 10px;
+  border: 1px solid rgba(255, 220, 160, 0.3);
+  border-radius: 999px;
+  background: transparent;
+  color: #ffd9a3;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.narr-match__chg:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.narr-pool {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  align-content: start;
+  flex: 1 1 auto;
+  min-height: 120px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.narr-pool__item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid #ece0cd;
+  border-radius: 10px;
+  background: #fdfaf4;
+  cursor: pointer;
+  min-width: 0;
+}
+.narr-pool__item:hover {
+  border-color: #d8b48a;
+  background: #fff6e9;
+}
+.narr-pool__item.is-assigned {
+  border-color: #1f9e7f;
+  background: rgba(47, 185, 143, 0.12);
+}
+.narr-pool__item.is-on {
+  border-color: #1f9e7f;
+  box-shadow: 0 0 0 2px rgba(47, 185, 143, 0.35);
+}
+.narr-pool__top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.narr-pool__tag {
+  flex-shrink: 0;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: rgba(192, 96, 58, 0.14);
+  color: #c0603a;
+  font-weight: 800;
+  font-size: 12px;
+}
+.narr-pool__item.is-assigned .narr-pool__tag {
+  background: rgba(31, 158, 127, 0.18);
+  color: #1f7f66;
+}
+.narr-pool__name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: #4a3322;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.narr-pool__player {
+  width: 100%;
+  height: 34px;
+}
+
+.narr-ed__tabs {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 14px;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.22);
+}
+.narr-ed__tab {
+  padding: 6px 16px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #e9dcc6;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+.narr-ed__tab.is-on {
+  background: linear-gradient(180deg, #ff9b6f, #f06f5f);
+  color: #fff;
+}
+
+.narr-ed__match {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+.narr-ed__match-cur {
+  font-size: 14px;
+  color: #f5e9d8;
+}
+.narr-ed__match-cur b {
+  color: #ffd9a3;
+}
+.narr-ed__matchlist {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-height: 120px;
+  overflow-y: auto;
+}
+.narr-ed__matchrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid #ece0cd;
+  border-radius: 10px;
+  background: #fdfaf4;
+  cursor: pointer;
+}
+.narr-ed__matchrow:hover {
+  border-color: #d8b48a;
+  background: #fff6e9;
+}
+.narr-ed__matchrow.is-on {
+  border-color: #1f9e7f;
+  background: rgba(47, 185, 143, 0.14);
+}
+.narr-ed__matchrow-no {
+  flex-shrink: 0;
+  min-width: 52px;
+  font-weight: 800;
+  font-size: 13px;
+  color: #c0603a;
+}
+.narr-ed__matchrow-state {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: #5a4836;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Keep every row inside the card on narrow screens (no clipped buttons). */
 .narr-ed__seg .icon-btn {
   width: 28px;
@@ -3313,15 +3609,12 @@ textarea.ed-input {
    list is editable. */
 .ed-cmodal--narr {
   width: min(1240px, 96vw);
-  height: min(94vh, 960px);
+  height: min(88vh, 900px);
 }
 
 /* Bigger page thumbnails in the narration modal — easier to recognize. */
 .ed-cmodal--narr .ed-cmodal__list {
-  width: 380px;
-}
-.ed-cmodal--narr .ed-cmodal__cell-img {
-  height: 158px;
+  width: 460px;
 }
 
 /* ---- 배경음악 (book music) modal ---- */
@@ -4323,7 +4616,9 @@ textarea.ed-input {
 .ed-preview-actions {
   position: fixed;
   top: 14px;
-  right: 14px;
+  /* Clear the BookViewer music button (48px circle at right:16px) so the
+     action buttons sit to its left instead of covering it. */
+  right: 76px;
   z-index: 10;
   display: inline-flex;
   gap: 10px;
@@ -4339,6 +4634,7 @@ textarea.ed-input {
   font-weight: 800;
   font-size: 14px;
   text-decoration: none;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -4433,14 +4729,14 @@ textarea.ed-input {
 }
 
 .ed-cmodal__list {
-  width: 280px;
+  width: 360px;
   flex-shrink: 0;
   overflow-y: auto;
-  padding: 10px;
+  padding: 14px 12px;
   border-right: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
 }
 
 /* A spread row: the two pages butted together so the pair reads as one
@@ -4485,7 +4781,7 @@ textarea.ed-input {
 
 .ed-cmodal__cell-img {
   width: 100%;
-  height: 116px;
+  aspect-ratio: 4 / 5;
   border-radius: 5px;
   overflow: hidden;
   background: #fff;

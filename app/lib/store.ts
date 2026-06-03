@@ -302,6 +302,11 @@ export async function uploadNarration(
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ index }),
   });
+  if (res.status === 404) {
+    throw new Error(
+      "책이 아직 저장되지 않았어요. 상단의 '임시저장'을 한 번 누른 뒤 다시 시도해 주세요.",
+    );
+  }
   if (!res.ok) {
     throw new Error(await errorMessage(res, "나레이션 등록에 실패했어요."));
   }

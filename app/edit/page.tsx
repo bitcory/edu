@@ -317,7 +317,7 @@ function EditPageInner() {
               ) : (
                 <Upload size={16} />
               )}
-              {bookId ? "북스토어에 다시 올리기" : "북스토어에 올리기"}
+              {bookId ? "정식출판" : "북스토어에 올리기"}
             </button>
           </div>
           {submitOpen && (

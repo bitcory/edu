@@ -7,7 +7,7 @@ import {
   detectSpeechRegions,
   encodeSlicesToMp3,
 } from "../../lib/narration-audio";
-import { uploadNarration } from "../../lib/store";
+import { getNarrationUrls, uploadNarration } from "../../lib/store";
 import { orderedCells, type SpreadRow } from "./ContentTextModal";
 
 type Props = {
@@ -46,6 +46,20 @@ export default function NarrationEditorModal({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const cells = orderedCells(spreads); // content pages in order
+
+  // 매칭편집(default): upload audio files into a pool on the right, then select
+  // a page and click a pooled audio to attach it. 통편집: one audio split into
+  // segments matched to pages (the original flow).
+  const [mode, setMode] = useState<"match" | "whole">("match");
+  type PoolItem = { id: string; file: File; url: string; name: string };
+  const [pool, setPool] = useState<PoolItem[]>([]);
+  // pageId → pool item id (a page holds at most one audio).
+  const [pageToPool, setPageToPool] = useState<Record<string, string>>({});
+  // Pages that already have a saved narration on the server (badge only).
+  const [savedPages, setSavedPages] = useState<Set<string>>(new Set());
+  const matchInputRef = useRef<HTMLInputElement | null>(null);
+  const poolUrlsRef = useRef<string[]>([]);
+  const [saving, setSaving] = useState(false);
 
   const [file, setFile] = useState<File | null>(null);
   const fileName = file?.name ?? null;
@@ -255,7 +269,6 @@ export default function NarrationEditorModal({
 
   // Click a segment → attach it to (or detach it from) the active page.
   const toggleSegAssign = (segId: string) => {
-    console.log("[seg-click] segId", segId, "activePage", activePage);
     if (!activePage) {
       alert("먼저 왼쪽에서 페이지를 선택하세요.");
       return;
@@ -268,6 +281,128 @@ export default function NarrationEditorModal({
       }
       return { ...prev, [segId]: activePage };
     });
+  };
+
+  // --- 매칭편집: audio pool + click-to-assign ---
+  // Seed which pages already have a saved narration (badge only).
+  useEffect(() => {
+    let cancelled = false;
+    void getNarrationUrls(bookId).then((urls) => {
+      if (cancelled) return;
+      const s = new Set<string>();
+      for (const c of cells) if (urls[c.index]) s.add(c.id);
+      setSavedPages(s);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookId]);
+
+  // Revoke pooled object URLs on unmount.
+  useEffect(
+    () => () => {
+      for (const u of poolUrlsRef.current) URL.revokeObjectURL(u);
+    },
+    [],
+  );
+
+  const isAudioFile = (f: File) =>
+    f.type.startsWith("audio/") || /\.(mp3|m4a|wav|ogg|aac)$/i.test(f.name);
+
+  // Add picked files to the audio pool on the right.
+  const addToPool = (files: FileList | File[]) => {
+    const items: PoolItem[] = [];
+    for (const f of Array.from(files)) {
+      if (!isAudioFile(f)) continue;
+      const url = URL.createObjectURL(f);
+      poolUrlsRef.current.push(url);
+      items.push({
+        id: Math.random().toString(36).slice(2, 10),
+        file: f,
+        url,
+        name: f.name,
+      });
+    }
+    if (items.length === 0) {
+      alert("음성 파일(MP3 등)만 올릴 수 있어요.");
+      return;
+    }
+    setPool((prev) => [...prev, ...items]);
+    // Auto-assign each newly uploaded audio to the next free LEFT (odd) page
+    // in order — 1쪽, 3쪽, 5쪽… — since a spread's scene lives on its left half.
+    setPageToPool((prev) => {
+      const next = { ...prev };
+      const leftCells = cells.filter((c) => !c.isRight);
+      let ci = 0;
+      for (const it of items) {
+        while (ci < leftCells.length && next[leftCells[ci].id]) ci++;
+        if (ci >= leftCells.length) break;
+        next[leftCells[ci].id] = it.id;
+        ci++;
+      }
+      return next;
+    });
+  };
+
+  // Click a pooled audio → attach it to the active page (toggle off if same).
+  const assignPoolToActive = (poolId: string) => {
+    if (!activePage) {
+      alert("먼저 왼쪽에서 페이지를 선택하세요.");
+      return;
+    }
+    setPageToPool((prev) => {
+      if (prev[activePage] === poolId) {
+        const n = { ...prev };
+        delete n[activePage];
+        return n;
+      }
+      return { ...prev, [activePage]: poolId };
+    });
+  };
+
+  const removeFromPool = (poolId: string) => {
+    setPageToPool((prev) => {
+      const n = { ...prev };
+      for (const k of Object.keys(n)) if (n[k] === poolId) delete n[k];
+      return n;
+    });
+    setPool((prev) => prev.filter((p) => p.id !== poolId));
+  };
+
+  // Save every page that has a pooled audio assigned to it.
+  const applyMatch = async () => {
+    const targets = cells
+      .map((c) => {
+        const poolId = pageToPool[c.id];
+        const item = pool.find((p) => p.id === poolId);
+        return item ? { cell: c, file: item.file } : null;
+      })
+      .filter((t): t is { cell: (typeof cells)[number]; file: File } => !!t);
+    if (targets.length === 0) {
+      alert("매칭된 음성이 없어요. 페이지를 고르고 음성을 눌러 주세요.");
+      return;
+    }
+    setSaving(true);
+    setProgress({ cur: 0, total: targets.length });
+    const applied: number[] = [];
+    try {
+      for (let i = 0; i < targets.length; i++) {
+        const { cell, file } = targets[i];
+        await uploadNarration(bookId, cell.index, file);
+        applied.push(cell.index);
+        setSavedPages((prev) => new Set(prev).add(cell.id));
+        setProgress({ cur: i + 1, total: targets.length });
+      }
+      onApplied(applied);
+      alert(`${applied.length}개 페이지에 나레이션을 넣었어요!`);
+      onClose();
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setSaving(false);
+      setProgress(null);
+    }
   };
 
   const apply = async () => {
@@ -307,11 +442,34 @@ export default function NarrationEditorModal({
     }
   };
 
+  // 통편집 page cell (click to target, shows segment count).
   const renderCell = (cell: (typeof cells)[number] | null) => {
     if (!cell)
       return <span className="ed-cmodal__cell ed-cmodal__cell--gap" />;
     const isActive = activePage === cell.id;
     const count = segsForPage(cell.id).length;
+    let posText: string;
+    let badge: string | null = null;
+    if (mode === "match") {
+      const assigned = pool.find((p) => p.id === pageToPool[cell.id]);
+      if (assigned) {
+        posText = `🎵 ${assigned.name}`;
+        badge = "🎙";
+      } else if (savedPages.has(cell.id)) {
+        posText = "🎙 음성 있음";
+        badge = "🎙";
+      } else {
+        posText = isActive ? "음성을 누르세요" : "비어있음";
+      }
+    } else {
+      posText =
+        count > 0
+          ? `구간 ${count}개 🎙`
+          : isActive
+            ? "현재 페이지"
+            : "비어있음";
+      if (count > 0) badge = String(count);
+    }
     return (
       <button
         type="button"
@@ -328,15 +486,9 @@ export default function NarrationEditorModal({
         </span>
         <span className="ed-cmodal__cell-meta">
           <span className="ed-cmodal__cell-label">{cell.label}</span>
-          <span className="ed-cmodal__cell-pos">
-            {count > 0
-              ? `구간 ${count}개 🎙`
-              : isActive
-                ? "현재 페이지"
-                : "비어있음"}
-          </span>
+          <span className="ed-cmodal__cell-pos">{posText}</span>
         </span>
-        {count > 0 && <span className="ed-cmodal__order">{count}</span>}
+        {badge && <span className="ed-cmodal__order">{badge}</span>}
       </button>
     );
   };
@@ -349,6 +501,22 @@ export default function NarrationEditorModal({
       >
         <div className="ed-cmodal__head">
           <span>🎙 나레이션 편집</span>
+          <div className="narr-ed__tabs">
+            <button
+              type="button"
+              className={`narr-ed__tab${mode === "match" ? " is-on" : ""}`}
+              onClick={() => setMode("match")}
+            >
+              매칭편집
+            </button>
+            <button
+              type="button"
+              className={`narr-ed__tab${mode === "whole" ? " is-on" : ""}`}
+              onClick={() => setMode("whole")}
+            >
+              통편집
+            </button>
+          </div>
           <button
             type="button"
             className="ed-cmodal__x"
@@ -367,7 +535,7 @@ export default function NarrationEditorModal({
           </div>
         ) : (
           <div className="ed-cmodal__body">
-            {/* Left: page grid — click a page to make it the target */}
+            {/* Left: page grid (both modes) — click a page to target it. */}
             <div className="ed-cmodal__list">
               {spreads.map((s) => (
                 <div className="ed-cmodal__spread" key={s.key}>
@@ -377,7 +545,100 @@ export default function NarrationEditorModal({
               ))}
             </div>
 
-            {/* Right: audio waveform + segments */}
+            {/* Right (매칭편집): upload audio into a pool, click to attach. */}
+            {mode === "match" && (
+              <div className="ed-cmodal__detail">
+                <div className="ed-cmodal__detail-head">
+                  <strong>음성 업로드</strong>
+                  <span className="ed-cmodal__hint">
+                    음성을 올린 뒤 <b>왼쪽에서 페이지를 고르고</b> 아래 음성을
+                    누르면 그 페이지의 나레이션이 됩니다. 현재 페이지:{" "}
+                    <b>
+                      {activePage
+                        ? cells.find((c) => c.id === activePage)?.label ?? "—"
+                        : "없음"}
+                    </b>
+                  </span>
+                </div>
+
+                <input
+                  ref={matchInputRef}
+                  type="file"
+                  accept="audio/*,.mp3"
+                  multiple
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    if (e.target.files?.length) addToPool(e.target.files);
+                    e.target.value = "";
+                  }}
+                />
+                <button
+                  type="button"
+                  className="narr-ed__drop"
+                  onClick={() => matchInputRef.current?.click()}
+                >
+                  <Upload size={20} /> 음성 파일 올리기 (여러 개 가능)
+                </button>
+
+                <div className="narr-pool">
+                  {pool.length === 0 ? (
+                    <p className="ed-cmodal__hint">
+                      아직 올린 음성이 없어요. 위에서 음성을 올려 주세요.
+                    </p>
+                  ) : (
+                    pool.map((it) => {
+                      const assignedCell = cells.find(
+                        (c) => pageToPool[c.id] === it.id,
+                      );
+                      const onActive =
+                        !!activePage && pageToPool[activePage] === it.id;
+                      return (
+                        <div
+                          key={it.id}
+                          className={`narr-pool__item${
+                            onActive ? " is-on" : ""
+                          }${assignedCell ? " is-assigned" : ""}`}
+                          role="button"
+                          onClick={() => assignPoolToActive(it.id)}
+                          title="현재 페이지에 넣기/빼기"
+                        >
+                          <div className="narr-pool__top">
+                            <span className="narr-pool__tag">
+                              {assignedCell ? assignedCell.label : "미배정"}
+                            </span>
+                            <span className="narr-pool__name" title={it.name}>
+                              {it.name}
+                            </span>
+                            <button
+                              type="button"
+                              className="icon-btn icon-btn--delete"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeFromPool(it.id);
+                              }}
+                              title="음성 삭제"
+                              aria-label="삭제"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                          <audio
+                            src={it.url}
+                            controls
+                            preload="none"
+                            className="narr-pool__player"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Right (통편집): one audio waveform split into page segments. */}
+            {mode === "whole" && (
             <div className="ed-cmodal__detail">
               <div className="ed-cmodal__detail-head">
                 <strong>음성 → 구간</strong>
@@ -535,31 +796,61 @@ export default function NarrationEditorModal({
                 </>
               )}
             </div>
+            )}
           </div>
         )}
 
         <div className="ed-cmodal__foot">
-          <span className="ed-cmodal__count">
-            구간 {segs.length}개 · 배정 {filledPages.length}쪽
-          </span>
-          <button
-            type="button"
-            className="ed-cmodal__btn ed-cmodal__btn--ghost"
-            onClick={onClose}
-            disabled={!!progress}
-          >
-            취소
-          </button>
-          <button
-            type="button"
-            className="ed-cmodal__btn ed-cmodal__btn--primary"
-            onClick={() => void apply()}
-            disabled={!ready || filledPages.length === 0 || !!progress}
-          >
-            {progress
-              ? `인코딩 중 ${progress.cur}/${progress.total}…`
-              : "페이지에 넣기"}
-          </button>
+          {mode === "match" ? (
+            <>
+              <span className="ed-cmodal__count">
+                올린 음성 {pool.length}개 · 매칭됨{" "}
+                {Object.keys(pageToPool).length}쪽
+              </span>
+              <button
+                type="button"
+                className="ed-cmodal__btn ed-cmodal__btn--ghost"
+                onClick={onClose}
+                disabled={saving}
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                className="ed-cmodal__btn ed-cmodal__btn--primary"
+                onClick={() => void applyMatch()}
+                disabled={saving || Object.keys(pageToPool).length === 0}
+              >
+                {progress
+                  ? `저장 중 ${progress.cur}/${progress.total}…`
+                  : "페이지에 넣기"}
+              </button>
+            </>
+          ) : (
+            <>
+              <span className="ed-cmodal__count">
+                구간 {segs.length}개 · 배정 {filledPages.length}쪽
+              </span>
+              <button
+                type="button"
+                className="ed-cmodal__btn ed-cmodal__btn--ghost"
+                onClick={onClose}
+                disabled={!!progress}
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                className="ed-cmodal__btn ed-cmodal__btn--primary"
+                onClick={() => void apply()}
+                disabled={!ready || filledPages.length === 0 || !!progress}
+              >
+                {progress
+                  ? `인코딩 중 ${progress.cur}/${progress.total}…`
+                  : "페이지에 넣기"}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -28,29 +28,48 @@ export async function POST(req: NextRequest) {
 
   if (id) {
     const existing = await getBookById(id);
-    if (!existing) return Response.json({ error: "not found" }, { status: 404 });
-    if (existing.ownerId !== user.id) {
-      return Response.json({ error: "forbidden" }, { status: 403 });
-    }
-    if (existing.status === "pending") {
-      return Response.json(
-        { error: "승인 대기 중에는 저장할 수 없어요." },
-        { status: 409 },
+    if (existing) {
+      if (existing.ownerId !== user.id) {
+        return Response.json({ error: "forbidden" }, { status: 403 });
+      }
+      if (existing.status === "pending") {
+        return Response.json(
+          { error: "승인 대기 중에는 저장할 수 없어요." },
+          { status: 409 },
+        );
+      }
+      const book = await updateBookSnapshot(
+        id,
+        {
+          pages,
+          title: body.title,
+          description: body.description,
+          price: body.price,
+          pageW: body.pageW,
+          layout: body.layout,
+        },
+        existing.status, // keep current state — never auto-publish on 임시저장
       );
+      return Response.json({ book });
     }
-    const book = await updateBookSnapshot(
-      id,
+    // The editor holds a draft id that isn't in the DB (e.g. the row was
+    // deleted, or the DB was reset). Recreate it WITH THAT id instead of 404'ing
+    // so the editor's saved draftId stays valid and narration/bgm keep working.
+    const recreated = await insertBook(
       {
-        pages,
-        title: body.title,
+        title: body.title ?? "",
+        author: body.author,
         description: body.description,
         price: body.price,
         pageW: body.pageW,
         layout: body.layout,
+        pages,
       },
-      existing.status, // keep current state — never auto-publish on 임시저장
+      { id: user.id, name: user.name },
+      "draft",
+      id,
     );
-    return Response.json({ book });
+    return Response.json({ book: recreated }, { status: 201 });
   }
 
   const book = await insertBook(
