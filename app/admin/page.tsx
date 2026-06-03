@@ -2,14 +2,21 @@
 
 import Link from "next/link";
 import {
+  BookCheck,
   BookOpen,
+  Ban,
   Check,
+  CircleDollarSign,
+  Clock3,
   Eye,
+  FilePenLine,
+  Globe2,
   Pencil,
   PencilRuler,
   RefreshCw,
   RotateCcw,
   Store,
+  UserCheck,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
@@ -304,26 +311,32 @@ export default function AdminPage() {
         </div>
       </header>
 
-      <div className="admin-tabs">
+      <div className="admin-tabs admin-tabs--primary">
         <button
           type="button"
           className={`admin-tab${section === "books" ? " is-active" : ""}`}
+          aria-pressed={section === "books"}
           onClick={() => setSection("books")}
         >
+          <BookCheck size={16} aria-hidden="true" />
           책 승인
         </button>
         <button
           type="button"
           className={`admin-tab${section === "authors" ? " is-active" : ""}`}
+          aria-pressed={section === "authors"}
           onClick={() => setSection("authors")}
         >
+          <UserCheck size={16} aria-hidden="true" />
           작가 승인
         </button>
         <button
           type="button"
           className={`admin-tab${section === "settlement" ? " is-active" : ""}`}
+          aria-pressed={section === "settlement"}
           onClick={() => setSection("settlement")}
         >
+          <CircleDollarSign size={16} aria-hidden="true" />
           정산
         </button>
       </div>
@@ -396,8 +409,35 @@ function BooksView({
   // Cover-refresh selection (editor books only — PDFs have no page 0 to render).
   const [selected, setSelected] = useState<Set<string>>(new Set());
   useEffect(() => setSelected(new Set()), [tab, books]);
+
+  // Which books already have a high-res cover (refresh is a no-op for these).
+  // Measured async from each cover thumbnail's natural width.
+  const [hiResIds, setHiResIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    let cancelled = false;
+    const withCover = (books ?? []).filter(
+      (b) => b.kind === "editor" && b.coverThumb,
+    );
+    // Promise.all([]) settles asynchronously, so the empty case also clears via
+    // the .then (no synchronous setState in the effect body).
+    Promise.all(
+      withCover.map(async (b) => ({
+        id: b.id,
+        hi: (await imageWidth(b.coverThumb as string)) >= HIRES_MIN_WIDTH,
+      })),
+    ).then((results) => {
+      if (cancelled) return;
+      setHiResIds(new Set(results.filter((r) => r.hi).map((r) => r.id)));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [books]);
+
+  // Only books that actually need a refresh (editor books without a hi-res
+  // cover) are selectable; already-crisp ones show a "갱신됨" badge instead.
   const selectableIds = (books ?? [])
-    .filter((b) => b.kind === "editor")
+    .filter((b) => b.kind === "editor" && !hiResIds.has(b.id))
     .map((b) => b.id);
   const allSelected =
     selectableIds.length > 0 && selectableIds.every((id) => selected.has(id));
@@ -411,14 +451,19 @@ function BooksView({
 
   return (
     <>
-      <div className="admin-tabs">
+      <div className="admin-tabs admin-tabs--filters">
         {TABS.map((t) => (
           <button
             key={t.key}
             type="button"
-            className={`admin-tab${tab === t.key ? " is-active" : ""}`}
+            className={`admin-tab admin-tab--${t.key}${tab === t.key ? " is-active" : ""}`}
+            aria-pressed={tab === t.key}
             onClick={() => setTab(t.key)}
           >
+            {t.key === "pending" && <Clock3 size={14} aria-hidden="true" />}
+            {t.key === "approved" && <Globe2 size={14} aria-hidden="true" />}
+            {t.key === "drafts" && <FilePenLine size={14} aria-hidden="true" />}
+            {t.key === "rejected" && <Ban size={14} aria-hidden="true" />}
             {t.label}
           </button>
         ))}
@@ -487,15 +532,30 @@ function BooksView({
         <ul className="admin-list">
           {books.map((b) => (
             <li key={b.id} className="admin-row">
-              {b.kind === "editor" && (
-                <input
-                  type="checkbox"
-                  checked={selected.has(b.id)}
-                  onChange={(e) => toggle(b.id, e.target.checked)}
-                  title="표지 갱신 대상으로 선택"
-                  style={{ alignSelf: "center", marginRight: 4 }}
-                />
-              )}
+              {b.kind === "editor" &&
+                (hiResIds.has(b.id) ? (
+                  <span
+                    title="이미 고화질 표지예요 (갱신할 필요 없음)"
+                    style={{
+                      alignSelf: "center",
+                      marginRight: 4,
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: "#3a8f5a",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    ✓ 갱신됨
+                  </span>
+                ) : (
+                  <input
+                    type="checkbox"
+                    checked={selected.has(b.id)}
+                    onChange={(e) => toggle(b.id, e.target.checked)}
+                    title="표지 갱신 대상으로 선택"
+                    style={{ alignSelf: "center", marginRight: 4 }}
+                  />
+                ))}
               <div className="admin-row__cover">
                 {b.coverThumb ? (
                   <img src={b.coverThumb} alt={b.title} />
@@ -642,14 +702,18 @@ function AuthorsView({
 }) {
   return (
     <>
-      <div className="admin-tabs">
+      <div className="admin-tabs admin-tabs--filters">
         {AUTHOR_TABS.map((t) => (
           <button
             key={t.key}
             type="button"
-            className={`admin-tab${tab === t.key ? " is-active" : ""}`}
+            className={`admin-tab admin-tab--${t.key}${tab === t.key ? " is-active" : ""}`}
+            aria-pressed={tab === t.key}
             onClick={() => setTab(t.key)}
           >
+            {t.key === "pending" && <Clock3 size={14} aria-hidden="true" />}
+            {t.key === "approved" && <Check size={14} aria-hidden="true" />}
+            {t.key === "rejected" && <Ban size={14} aria-hidden="true" />}
             {t.label}
           </button>
         ))}
