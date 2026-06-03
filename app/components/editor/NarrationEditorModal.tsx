@@ -255,6 +255,7 @@ export default function NarrationEditorModal({
 
   // Click a segment → attach it to (or detach it from) the active page.
   const toggleSegAssign = (segId: string) => {
+    console.log("[seg-click] segId", segId, "activePage", activePage);
     if (!activePage) {
       alert("먼저 왼쪽에서 페이지를 선택하세요.");
       return;
@@ -331,7 +332,7 @@ export default function NarrationEditorModal({
             {count > 0
               ? `구간 ${count}개 🎙`
               : isActive
-                ? "현재 · 구간을 누르세요"
+                ? "현재 페이지"
                 : "비어있음"}
           </span>
         </span>

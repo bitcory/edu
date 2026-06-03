@@ -9,7 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { ArrowLeft, Music, Pause, Play, VolumeX } from "lucide-react";
+import { Music, Play, VolumeX } from "lucide-react";
 import type { RenderedPage } from "../lib/pdf-to-images";
 
 type FlipBookInstance = {
@@ -353,7 +353,6 @@ export default function BookViewer({
             alt=""
             aria-hidden="true"
           />
-          <ArrowLeft size={30} />
           <span>새 책 보기</span>
         </button>
       )}
@@ -364,7 +363,6 @@ export default function BookViewer({
         aria-label={autoPlaying ? "자동보기 정지" : "자동보기"}
         title={autoPlaying ? "자동보기 정지" : "자동보기"}
       >
-        {autoPlaying ? <Pause size={26} /> : <Play size={26} />}
         <span>{autoPlaying ? "정지" : "자동보기"}</span>
       </button>
       {autoOpen && (

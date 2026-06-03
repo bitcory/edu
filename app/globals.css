@@ -408,9 +408,8 @@ body {
 
 .bv-close {
   position: absolute;
-  top: 50%;
-  right: 14px;
-  transform: translateY(-50%);
+  top: 16px;
+  left: 16px;
   display: inline-flex;
   flex-direction: column;
   align-items: center;
@@ -433,7 +432,7 @@ body {
 
 .bv-close:hover {
   background: linear-gradient(180deg, #fffbe9, #ffd68b);
-  transform: translateY(-50%) scale(1.05);
+  transform: scale(1.05);
 }
 
 .bv-close::before {
@@ -450,12 +449,11 @@ body {
     linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 214, 139, 0.18));
 }
 
-/* 자동보기 button — same look as 새 책 보기, sitting just below it. */
+/* 자동보기 button — same look as 새 책 보기, pinned to the bottom-right. */
 .bv-auto {
   position: absolute;
-  top: calc(50% + 104px);
-  right: 14px;
-  transform: translateY(-50%);
+  bottom: 18px;
+  right: 16px;
   display: inline-flex;
   flex-direction: column;
   align-items: center;
@@ -481,7 +479,7 @@ body {
   background:
     url("/view-auto-book.png") center / cover no-repeat,
     linear-gradient(180deg, #fffbe9, #ffd68b);
-  transform: translateY(-50%) scale(1.05);
+  transform: scale(1.05);
 }
 .bv-auto.is-on {
   border-color: rgba(58, 126, 151, 0.68);
@@ -500,6 +498,21 @@ body {
 }
 .bv-auto:not(.is-on) svg {
   opacity: 0;
+}
+
+/* Legible white pill behind the button labels — the text was getting lost on
+   the busy bookshelf background. */
+.bv-close span,
+.bv-auto span {
+  display: inline-block;
+  padding: 2px 11px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.95);
+  color: #4a3322;
+  font-weight: 800;
+  white-space: nowrap;
+  filter: none;
+  box-shadow: 0 2px 7px rgba(92, 62, 35, 0.22);
 }
 
 .modal-card--narrow {
@@ -4435,6 +4448,9 @@ textarea.ed-input {
 .ed-cmodal__spread {
   display: flex;
   gap: 2px;
+  /* Top-align so the two page images always butt together even if one cell's
+     caption is taller — otherwise a wrapped caption shifted the pair. */
+  align-items: flex-start;
 }
 
 .ed-cmodal__cell {
@@ -4501,6 +4517,18 @@ textarea.ed-input {
   flex-direction: column;
   align-items: center;
   gap: 1px;
+  width: 100%;
+  min-width: 0;
+}
+
+/* Keep captions to a single line so every cell stays the same height and the
+   page images line up (a 2-line caption used to push its cell taller). */
+.ed-cmodal__cell-label,
+.ed-cmodal__cell-pos {
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .ed-cmodal__cell-label {
