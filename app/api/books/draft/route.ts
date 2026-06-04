@@ -47,6 +47,7 @@ export async function POST(req: NextRequest) {
           price: body.price,
           pageW: body.pageW,
           layout: body.layout,
+          storyText: body.storyText,
         },
         existing.status, // keep current state — never auto-publish on 임시저장
       );
@@ -64,6 +65,7 @@ export async function POST(req: NextRequest) {
         pageW: body.pageW,
         layout: body.layout,
         pages,
+        storyText: body.storyText,
       },
       { id: user.id, name: user.name },
       "draft",
@@ -81,6 +83,7 @@ export async function POST(req: NextRequest) {
       pageW: body.pageW,
       layout: body.layout,
       pages,
+      storyText: body.storyText,
     },
     { id: user.id, name: user.name },
     "draft",

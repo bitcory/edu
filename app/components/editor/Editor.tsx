@@ -304,6 +304,7 @@ type Props = {
     pages: EditorPage[],
     pageW: number,
     layout: BookLayout,
+    storyText: string,
   ) => Promise<void> | void;
   // 임시저장: persist the current pages as a private draft (cloud). May throw
   // on failure (the editor shows the message). Optional so the editor still
@@ -312,6 +313,7 @@ type Props = {
     pages: EditorPage[],
     pageW: number,
     layout: BookLayout,
+    storyText: string,
   ) => Promise<void> | void;
   exporting?: boolean;
   // When editing an existing bookstore book (/edit?book=<id>), seed from its
@@ -332,6 +334,8 @@ type Props = {
   initialNarration?: (string | null)[];
   // The book's current background-music R2 key (audioKey), if any.
   initialAudioKey?: string;
+  // The book's saved 내용추가 script, to refill the textarea on re-edit.
+  initialStoryText?: string;
 };
 
 export default function Editor({
@@ -346,6 +350,7 @@ export default function Editor({
   bookId,
   initialNarration,
   initialAudioKey,
+  initialStoryText,
 }: Props) {
   // Shadow PAGE_W with the per-book width so all the body coordinate math uses
   // the chosen 판형. Height stays PAGE_H. The parent remounts on 판형 change.
@@ -381,7 +386,9 @@ export default function Editor({
   // 내용 추가 모달: the whole story (blank-line-separated blocks) + the set of
   // selected page ids the blocks map onto, in page order.
   const [contentModalOpen, setContentModalOpen] = useState(false);
-  const [captionText, setCaptionText] = useState("");
+  // Seeded from the saved book (initialStoryText); for a local working draft it
+  // is restored from IndexedDB in the hydrate effect below.
+  const [captionText, setCaptionText] = useState(initialStoryText ?? "");
   const [selectedPages, setSelectedPages] = useState<string[]>([]);
   const [applyingCaptions, setApplyingCaptions] = useState(false);
   // "전체" toggle: when on, changing any text property (글꼴/글씨색/크기/두께/
@@ -571,6 +578,7 @@ export default function Editor({
         const idx = Math.min(saved.activeIndex, healed.length - 1);
         setPages(healed);
         setActiveIndex(idx);
+        if (typeof saved.storyText === "string") setCaptionText(saved.storyText);
         // If the canvas is already up (handleReady ran first, before this async
         // draft load, and may have seeded a blank default cover), reload it with
         // the restored active page so the saved content isn't left hidden. Only
@@ -599,10 +607,11 @@ export default function Editor({
         savedAt: Date.now(),
         pageW,
         layout,
+        storyText: captionText,
       });
     }, 500);
     return () => window.clearTimeout(id);
-  }, [pages, activeIndex, pageW, layout]);
+  }, [pages, activeIndex, pageW, layout, captionText]);
 
   // Snapshot the live Fabric canvas into pages[activeIndex] (debounced) so
   // edits within a single page are persisted too — not only structural
@@ -1063,7 +1072,9 @@ export default function Editor({
   }, [pages, layout]);
 
   // 내용 추가: open the modal. Snapshot the live active page first so the
-  // thumbnails are up to date, then start with everything cleared.
+  // thumbnails are up to date. Keep captionText as-is so a previously entered
+  // (and saved) script is shown again for further editing; only the page
+  // selection resets each open.
   const openContentModal = useCallback(() => {
     const api = apiRef.current;
     if (api) {
@@ -1074,7 +1085,6 @@ export default function Editor({
         prev.map((p, i) => (i === idx ? { ...p, data, thumb } : p)),
       );
     }
-    setCaptionText("");
     setSelectedPages([]);
     setContentModalOpen(true);
   }, []);
@@ -1126,6 +1136,14 @@ export default function Editor({
         const page = result[index];
         if (!page) continue;
         await api.load(page.data);
+        // Replace, don't stack: drop any auto-caption this page already has so
+        // re-applying (e.g. after reloading a saved script) doesn't pile text
+        // on top of text. Hand-typed text (no caption flag) is left alone.
+        for (const o of api.canvas
+          .getObjects()
+          .filter((o) => (o as { caption?: boolean }).caption)) {
+          api.canvas.remove(o);
+        }
         const t = new fabric.Textbox(text, {
           top: 80,
           width: PAGE_W - 160,
@@ -1139,6 +1157,8 @@ export default function Editor({
             ? { originX: "right" as const, left: PAGE_W - 80 }
             : { left: 80 }),
         });
+        // Tag as an auto-added caption so we can find/replace/clear it later.
+        (t as { caption?: boolean }).caption = true;
         api.canvas.add(t);
         api.canvas.requestRenderAll();
         const after = api.serialize();
@@ -1163,6 +1183,61 @@ export default function Editor({
     PAGE_W,
     recordPageEdit,
   ]);
+
+  // 기존 대사 지우기: remove every auto-added caption (the caption-flagged text)
+  // from all pages, leaving hand-typed text untouched. Lets the user wipe a
+  // previously applied script before re-applying a new one.
+  const clearAllCaptions = useCallback(async () => {
+    const api = apiRef.current;
+    if (!api?.canvas) return;
+    if (
+      !window.confirm(
+        "자동으로 넣은 대사를 모든 페이지에서 지울까요?\n(직접 입력한 글자는 그대로 남아요.)",
+      )
+    ) {
+      return;
+    }
+    setApplyingCaptions(true);
+    // Snapshot the live active page first so its unsaved edits aren't lost.
+    const curIdx = activeIndexRef.current;
+    const curData = api.serialize();
+    const curThumb = api.toPng(0.2);
+    const baseline = pages.map((p, i) =>
+      i === curIdx ? { ...p, data: curData, thumb: curThumb } : p,
+    );
+    bulkBuildingRef.current = true;
+    if (snapshotTimerRef.current !== null) {
+      window.clearTimeout(snapshotTimerRef.current);
+      snapshotTimerRef.current = null;
+    }
+    try {
+      const result = [...baseline];
+      let removed = 0;
+      for (let i = 0; i < result.length; i++) {
+        const page = result[i];
+        await api.load(page.data);
+        const caps = api.canvas
+          .getObjects()
+          .filter((o) => (o as { caption?: boolean }).caption);
+        if (caps.length === 0) continue;
+        for (const o of caps) api.canvas.remove(o);
+        removed += caps.length;
+        api.canvas.requestRenderAll();
+        const after = api.serialize();
+        recordPageEdit(page.id, page.data, after);
+        result[i] = { ...page, data: after, thumb: api.toPng(0.2) };
+      }
+      setPages(result);
+      setHistoryTick((t) => t + 1);
+      await api.load(result[curIdx]?.data ?? curData);
+      setSelected(null);
+      if (removed === 0) alert("지울 자동 대사가 없어요.");
+    } finally {
+      bulkBuildingRef.current = false;
+      setApplyingCaptions(false);
+      setContentModalOpen(false);
+    }
+  }, [pages, recordPageEdit]);
 
   // Apply a mutation to EVERY text object across all pages (the "전체" toggle).
   // Pages without text are skipped. The active page is reloaded and its
@@ -1894,8 +1969,8 @@ export default function Editor({
       i === activeIndex ? { ...p, data, thumb } : p,
     );
     setPages(finalPages);
-    await onFinish(finalPages, pageW, layout);
-  }, [pages, activeIndex, onFinish, pageW, layout]);
+    await onFinish(finalPages, pageW, layout, captionText);
+  }, [pages, activeIndex, onFinish, pageW, layout, captionText]);
 
   // 임시저장: snapshot the current page, then hand all pages to the parent to
   // persist as a cloud draft. Shows a transient "저장됨 ✓" on success.
@@ -1914,7 +1989,7 @@ export default function Editor({
     setPages(finalPages);
     setDraftState("saving");
     try {
-      await onSaveDraft(finalPages, pageW, layout);
+      await onSaveDraft(finalPages, pageW, layout, captionText);
       setDraftState("saved");
       window.setTimeout(() => setDraftState("idle"), 2000);
       return true;
@@ -1923,7 +1998,7 @@ export default function Editor({
       alert((err as Error).message);
       return false;
     }
-  }, [pages, activeIndex, onSaveDraft, pageW, layout]);
+  }, [pages, activeIndex, onSaveDraft, pageW, layout, captionText]);
 
   // 내서재로: 임시저장한 다음 내 서재로 이동. 저장이 실패하면(작업 유실 방지)
   // 이동하지 않는다.
@@ -2986,6 +3061,7 @@ export default function Editor({
           }
           onText={setCaptionText}
           onApply={() => void applyCaptions()}
+          onClearAll={() => void clearAllCaptions()}
           onClose={() => setContentModalOpen(false)}
         />
       )}

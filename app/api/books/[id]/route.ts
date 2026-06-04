@@ -93,6 +93,7 @@ export async function PATCH(
     pageW: body.pageW,
     layout: body.layout,
     coverThumb: body.coverThumb,
+    storyText: body.storyText,
   });
   return Response.json({ book });
 }

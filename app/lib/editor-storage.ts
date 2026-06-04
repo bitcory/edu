@@ -25,6 +25,7 @@ export type StoredState = {
   savedAt: number;
   pageW?: number; // 판형 가로폭 (없으면 기본 800)
   layout?: BookLayout;
+  storyText?: string; // 내용추가 원본 대사 (모달 textarea 복원용)
 };
 
 function isValidState(parsed: unknown): parsed is StoredState {

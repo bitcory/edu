@@ -95,6 +95,8 @@ export function ensureSchema(): Promise<void> {
         `ADD COLUMN IF NOT EXISTS page_count INTEGER`,
         // Per-page narration: JSON array of R2 keys (or null) per page index.
         `ADD COLUMN IF NOT EXISTS narration TEXT`,
+        // Raw 내용추가 script so re-edits can reload the textarea verbatim.
+        `ADD COLUMN IF NOT EXISTS story_text TEXT`,
       ]) {
         await db.execute(`ALTER TABLE books ${ddl}`);
       }

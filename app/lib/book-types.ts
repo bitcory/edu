@@ -35,6 +35,7 @@ export type StoreBook = {
   likeCount?: number; // populated by the store listing (좋아요 수)
   audioKey?: string; // R2 key of the background music (MP3), if any
   narration?: (string | null)[]; // R2 key per page index (null = no narration)
+  storyText?: string; // raw 내용추가 script, so re-edits reload the textarea
 };
 
 export type SubmitInput = {
@@ -47,6 +48,7 @@ export type SubmitInput = {
   layout: BookLayout;
   pages: EditorPage[];
   coverThumb?: string; // optional custom cover (else derived from pages[0])
+  storyText?: string; // raw 내용추가 script
 };
 
 export type BookScope = "store" | "mine" | "pending" | "rejected" | "drafts";

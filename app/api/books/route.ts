@@ -54,6 +54,7 @@ export async function POST(req: NextRequest) {
       layout: body.layout,
       pages,
       coverThumb: body.coverThumb,
+      storyText: body.storyText,
     },
     { id: user.id, name: user.name },
   );

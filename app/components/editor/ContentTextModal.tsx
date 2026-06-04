@@ -31,6 +31,8 @@ type Props = {
   onToggle: (pageId: string) => void;
   onText: (text: string) => void;
   onApply: () => void;
+  /** Remove every auto-added caption (caption-flagged text) from all pages. */
+  onClearAll: () => void;
   onClose: () => void;
 };
 
@@ -63,6 +65,7 @@ export default function ContentTextModal({
   onToggle,
   onText,
   onApply,
+  onClearAll,
   onClose,
 }: Props) {
   const sel = new Set(selected);
@@ -160,6 +163,15 @@ export default function ContentTextModal({
               selected.length !== blocks.length &&
               ` · ${Math.min(selected.length, blocks.length)}개만 적용됨`}
           </span>
+          <button
+            type="button"
+            className="ed-cmodal__btn ed-cmodal__btn--ghost"
+            onClick={onClearAll}
+            disabled={busy}
+            title="모든 페이지에서 자동으로 넣은 대사만 지웁니다 (직접 쓴 글자는 남음)"
+          >
+            기존 대사 지우기
+          </button>
           <button
             type="button"
             className="ed-cmodal__btn ed-cmodal__btn--ghost"

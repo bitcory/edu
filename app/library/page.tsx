@@ -72,6 +72,7 @@ export default function LibraryPage() {
     pageW: number;
     layout: StoreBook["layout"];
     draftId?: string;
+    storyText?: string;
     initial: Partial<SubmitValues>;
   } | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -282,6 +283,7 @@ export default function LibraryPage() {
       pages: saved.pages,
       pageW: saved.pageW ?? 800,
       layout: saved.layout ?? "spread",
+      storyText: saved.storyText,
       initial: { author: author?.displayName, cover },
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -306,6 +308,7 @@ export default function LibraryPage() {
           pageW: full.pageW ?? 800,
           layout: full.layout ?? "spread",
           draftId: d.id,
+          storyText: full.storyText,
           initial: {
             title: d.title && d.title !== "제목 없는 책" ? d.title : undefined,
             author: d.author ?? author?.displayName,
@@ -355,6 +358,7 @@ export default function LibraryPage() {
             pageW: publishTarget.pageW,
             layout: publishTarget.layout,
             coverThumb: values.cover,
+            storyText: publishTarget.storyText,
           });
         } else {
           await submitBook({
@@ -367,6 +371,7 @@ export default function LibraryPage() {
             layout: publishTarget.layout,
             pages: publishTarget.pages,
             coverThumb: values.cover,
+            storyText: publishTarget.storyText,
           });
         }
         alert("북스토어에 올렸어요!");

@@ -55,6 +55,9 @@ function EditPageInner() {
   const bookId = searchParams.get("book");
 
   const [initialPages, setInitialPages] = useState<EditorPage[] | null>(null);
+  // The book's saved 내용추가 script — seeded from the server on re-edit, kept in
+  // sync as the editor reports changes, and re-sent on save/publish.
+  const [storyText, setStoryText] = useState<string>("");
   const [loadingBook, setLoadingBook] = useState<boolean>(!!bookId);
   const [mode, setMode] = useState<Mode>({ kind: "edit" });
   const [submitting, setSubmitting] = useState(false);
@@ -139,6 +142,7 @@ function EditPageInner() {
         });
         setBookNarration(b.narration);
         setBookAudioKey(b.audioKey ?? undefined);
+        setStoryText(b.storyText ?? "");
         const w = b.pageW || DEFAULT_TEMPLATE.width;
         setPageW(w);
         setPrevPageW(w); // equal → no recenter on load
@@ -161,13 +165,15 @@ function EditPageInner() {
   }, [mode]);
 
   const handleSaveDraft = useCallback(
-    async (pages: EditorPage[], pw: number, lyt: BookLayout) => {
+    async (pages: EditorPage[], pw: number, lyt: BookLayout, story: string) => {
+      setStoryText(story);
       const targetId = bookId ?? draftId ?? undefined;
       const book = await saveDraft({
         id: targetId,
         pages,
         pageW: pw,
         layout: lyt,
+        storyText: story,
       });
       // Adopt the new draft's id so the next save updates the same row — both
       // in this session (state) and across navigation/remounts (localStorage),
@@ -181,9 +187,10 @@ function EditPageInner() {
   );
 
   const handleFinish = useCallback(
-    async (pages: EditorPage[], pw: number, lyt: BookLayout) => {
+    async (pages: EditorPage[], pw: number, lyt: BookLayout, story: string) => {
       setPageW(pw);
       setLayout(lyt);
+      setStoryText(story);
       setMode({ kind: "exporting" });
       try {
         const { rendered, pdfUrl, pdfBytes } = await renderSnapshotToImages(
@@ -237,6 +244,7 @@ function EditPageInner() {
             pageW,
             layout,
             coverThumb: values.cover,
+            storyText,
           });
         } else {
           await submitBook({
@@ -249,6 +257,7 @@ function EditPageInner() {
             layout,
             pages,
             coverThumb: values.cover,
+            storyText,
           });
         }
         alert("북스토어에 올렸어요! 슈퍼관리자 승인 후 모두에게 공개돼요.");
@@ -260,7 +269,7 @@ function EditPageInner() {
         setSubmitOpen(false);
       }
     },
-    [bookId, router, pageW, layout],
+    [bookId, router, pageW, layout, storyText],
   );
 
   if (loadingBook) {
@@ -284,6 +293,7 @@ function EditPageInner() {
           bookId={bookId ?? draftId ?? undefined}
           initialNarration={bookNarration}
           initialAudioKey={bookAudioKey}
+          initialStoryText={storyText}
         />
       </div>
       {mode.kind === "exporting" && (

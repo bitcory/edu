@@ -47,6 +47,7 @@ function rowToBook(row: Row): StoreBook {
       row.narration == null
         ? undefined
         : (JSON.parse(String(row.narration)) as (string | null)[]),
+    storyText: row.story_text == null ? undefined : String(row.story_text),
   };
 }
 
@@ -197,6 +198,7 @@ export async function insertBook(
     pageCount: input.pages.length,
     // Prefer an explicit cover (from the submit modal); else the first page.
     coverThumb: input.coverThumb || input.pages[0]?.thumb,
+    storyText: input.storyText?.trim() || undefined,
     status,
     submittedAt: Date.now(),
   };
@@ -206,8 +208,8 @@ export async function insertBook(
   book.snapshotKey = snapshotKey;
   await db.execute({
     sql: `INSERT INTO books
-            (id, title, author, description, category, price, page_w, layout, owner_id, owner_name, pages, snapshot_key, page_count, cover_thumb, status, submitted_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, ?)`,
+            (id, title, author, description, category, price, page_w, layout, owner_id, owner_name, pages, snapshot_key, page_count, cover_thumb, status, submitted_at, story_text)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, ?, ?)`,
     args: [
       book.id,
       book.title,
@@ -224,6 +226,7 @@ export async function insertBook(
       book.coverThumb ?? null,
       book.status,
       book.submittedAt,
+      book.storyText ?? null,
     ],
   });
   return book;
@@ -299,6 +302,7 @@ export async function updateBookSnapshot(
     pageW?: number;
     layout?: StoreBook["layout"];
     coverThumb?: string;
+    storyText?: string;
   },
   status: BookStatus = initialEditorStatus(),
 ): Promise<StoreBook | null> {
@@ -323,6 +327,10 @@ export async function updateBookSnapshot(
   const pageW = patch.pageW ?? existing.pageW;
   const layout = patch.layout ?? existing.layout;
   const coverThumb = patch.coverThumb || patch.pages[0]?.thumb || null;
+  const storyText =
+    patch.storyText !== undefined
+      ? patch.storyText.trim() || null
+      : (existing.storyText ?? null);
   const submittedAt = Date.now();
   // Overwrite the book's R2 snapshot (stable key) — DB pages stays '[]'.
   const snapshotKey = await saveSnapshot(id, JSON.stringify(patch.pages));
@@ -330,7 +338,7 @@ export async function updateBookSnapshot(
     sql: `UPDATE books
           SET pages = '[]', snapshot_key = ?, page_count = ?, cover_thumb = ?,
               title = ?, author = ?, description = ?, category = ?, price = ?,
-              page_w = ?, layout = ?,
+              page_w = ?, layout = ?, story_text = ?,
               status = ?, submitted_at = ?, reviewed_at = NULL, reject_reason = NULL
           WHERE id = ?`,
     args: [
@@ -344,6 +352,7 @@ export async function updateBookSnapshot(
       price,
       pageW,
       layout,
+      storyText,
       status,
       submittedAt,
       id,

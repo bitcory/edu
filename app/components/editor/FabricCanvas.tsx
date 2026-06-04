@@ -214,7 +214,11 @@ export default forwardRef<FabricApi | null, Props>(function FabricCanvas(
           await c.loadFromJSON(data);
           c.renderAll();
         },
-        serialize: () => canvasRef.current?.toJSON() ?? {},
+        // Include the custom `caption` flag so auto-added 내용추가 text stays
+        // identifiable across save/reload (lets 내용추가 replace/clear only its
+        // own text, not text the user typed by hand). fabric's toObject keeps
+        // listed props (pick) and _setOptions restores them on load.
+        serialize: () => canvasRef.current?.toObject(["caption"]) ?? {},
         toPng: (multiplier = 1) =>
           canvasRef.current?.toDataURL({
             format: "png",

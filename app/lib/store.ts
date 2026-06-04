@@ -85,6 +85,7 @@ export async function updateBook(
     pageW?: number;
     layout?: StoreBook["layout"];
     coverThumb?: string;
+    storyText?: string;
   },
 ): Promise<StoreBook> {
   const { pages, ...meta } = patch;
@@ -175,6 +176,7 @@ export async function saveDraft(input: {
   price?: number;
   pageW?: number;
   layout?: SubmitInput["layout"];
+  storyText?: string;
 }): Promise<StoreBook> {
   const { pages, ...meta } = input;
   const snap = await snapshotBody(pages);
