@@ -2,7 +2,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Pause, Play, Scissors, Trash2, Upload, Wand2, X } from "lucide-react";
+import { Check, Pause, Play, Scissors, Trash2, Upload, Wand2, X } from "lucide-react";
 import {
   detectSpeechRegions,
   encodeSlicesToMp3,
@@ -253,6 +253,30 @@ export default function NarrationEditorModal({
   const clearAll = () => {
     regionsRef.current?.clearRegions?.();
     setSegToPage({});
+    syncSegs();
+  };
+
+  // Auto-split the clip (if not split yet), then match each segment in time
+  // order to the next LEFT (odd) page — 1쪽, 3쪽, 5쪽… — since a spread's scene
+  // lives on its left half. One segment per odd page.
+  const splitToOddPages = () => {
+    const buf = bufferRef.current;
+    const regions = regionsRef.current;
+    if (!buf || !regions) return;
+    let regs = regions.getRegions?.() ?? [];
+    if (regs.length === 0) {
+      for (const r of detectSpeechRegions(buf)) {
+        regions.addRegion({ start: r.start, end: r.end, color: REGION_COLOR });
+      }
+      regs = regions.getRegions?.() ?? [];
+    }
+    const ordered = [...regs].sort((a: any, b: any) => a.start - b.start);
+    const leftCells = cells.filter((c) => !c.isRight);
+    const map: Record<string, string> = {};
+    for (let i = 0; i < ordered.length && i < leftCells.length; i++) {
+      map[ordered[i].id] = leftCells[i].id;
+    }
+    setSegToPage(map);
     syncSegs();
   };
 
@@ -719,6 +743,15 @@ export default function NarrationEditorModal({
                       disabled={!ready || segs.length === 0}
                     >
                       <Scissors size={15} /> 비우기
+                    </button>
+                    <button
+                      type="button"
+                      className="ed-cmodal__btn ed-cmodal__btn--ghost"
+                      onClick={splitToOddPages}
+                      disabled={!ready}
+                      title="자동 분할 후 1·3·5 홀수 페이지에 순서대로 매칭"
+                    >
+                      <Check size={15} /> 홀수쪽 매칭
                     </button>
                   </div>
 
