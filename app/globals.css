@@ -701,6 +701,32 @@ body {
   }
 }
 
+/* Phones / small tablets in LANDSCAPE (wide but short). Here the spread is
+   limited by height, and the desktop right-side bookshelf reserve (clamp 112–
+   140px) shoves it left, leaving a big empty right shelf. Trim the padding to
+   thin + symmetric so the book is centered and as large as the height allows.
+   The decorative shelf still frames the sides (a portrait spread can't fill a
+   very wide screen without cropping the art). */
+@media (min-width: 721px) and (orientation: landscape) and (max-height: 600px) {
+  .bv-shell {
+    padding: 6px 14px;
+  }
+
+  /* Oversized 88px circles eat the short screen — shrink them a touch so they
+     sit neatly in the side gaps and leave the book more room. */
+  .bv-close,
+  .bv-auto {
+    width: 72px;
+    height: 72px;
+    font-size: 11px;
+  }
+
+  .bv-music {
+    width: 42px;
+    height: 42px;
+  }
+}
+
 /* ---------- Landing screen ---------- */
 
 .landing-shell {
