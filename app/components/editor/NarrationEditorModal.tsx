@@ -165,7 +165,20 @@ export default function NarrationEditorModal({
       regions.on("region-removed", syncSegs);
       regions.on("region-clicked", (region: any, e: MouseEvent) => {
         e.stopPropagation();
-        region.play();
+        // Move the red line to exactly where you clicked inside the segment so
+        // "여기서 자르기" can split right at that point. (Clicking an empty part
+        // of the waveform already seeks via wavesurfer's default handling.)
+        const el = region.element as HTMLElement | undefined;
+        const dur = wsRef.current?.getDuration?.() ?? 0;
+        if (el && dur > 0) {
+          const rect = el.getBoundingClientRect();
+          const rel = Math.min(
+            1,
+            Math.max(0, (e.clientX - rect.left) / rect.width),
+          );
+          const t = region.start + rel * (region.end - region.start);
+          wsRef.current?.setTime?.(t);
+        }
       });
 
       const url = URL.createObjectURL(file);
