@@ -50,7 +50,7 @@ export default function NarrationEditorModal({
   // 매칭편집(default): upload audio files into a pool on the right, then select
   // a page and click a pooled audio to attach it. 통편집: one audio split into
   // segments matched to pages (the original flow).
-  const [mode, setMode] = useState<"match" | "whole">("match");
+  const [mode, setMode] = useState<"match" | "whole">("whole");
   type PoolItem = { id: string; file: File; url: string; name: string };
   const [pool, setPool] = useState<PoolItem[]>([]);
   // pageId → pool item id (a page holds at most one audio).
