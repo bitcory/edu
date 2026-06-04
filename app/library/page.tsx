@@ -450,7 +450,7 @@ export default function LibraryPage() {
         </button>
         <button
           type="button"
-          className="store-navlink"
+          className="store-navlink store-navlink--danger"
           onClick={() => void refreshAllCovers()}
           disabled={busy}
           title="기존 책 표지를 0쪽에서 고화질로 다시 만듭니다 (공개 상태 유지)"

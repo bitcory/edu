@@ -46,6 +46,7 @@ import FabricCanvas, {
 } from "./FabricCanvas";
 import ColorField from "./ColorField";
 import ThumbnailModal from "../ThumbnailModal";
+import CoverPromptModal from "./CoverPromptModal";
 import NarrationEditorModal from "./NarrationEditorModal";
 import BookMusicModal from "./BookMusicModal";
 import ContentTextModal, {
@@ -459,6 +460,8 @@ export default function Editor({
   // 썸네일 만들기: a mini-editor modal that seeds from the cover (page 0) and
   // exports a downloadable thumbnail at 16:9 / 9:16 / 1:1 / 판형.
   const [thumbOpen, setThumbOpen] = useState(false);
+  // 표지: copy a front/back cover image-generation prompt built from the script.
+  const [coverPromptOpen, setCoverPromptOpen] = useState(false);
 
   // Mark the given page indices as having narration (after the editor applies
   // segments). Keeps the 음성 tool's green dot in sync.
@@ -2103,6 +2106,15 @@ export default function Editor({
           <button
             type="button"
             className="ed-draft"
+            onClick={() => setCoverPromptOpen(true)}
+            title="앞/뒤 표지 이미지 생성 프롬프트(대본 포함) 복사하기"
+          >
+            <BookOpen size={16} />
+            <span className="ed-draft__label">표지</span>
+          </button>
+          <button
+            type="button"
+            className="ed-draft"
             onClick={() => setThumbOpen(true)}
             title="표지로 썸네일(16:9·9:16·1:1·판형) 만들기"
           >
@@ -3089,6 +3101,13 @@ export default function Editor({
           coverPage={pages[0]}
           pageW={pageW}
           onClose={() => setThumbOpen(false)}
+        />
+      )}
+
+      {coverPromptOpen && (
+        <CoverPromptModal
+          script={captionText}
+          onClose={() => setCoverPromptOpen(false)}
         />
       )}
     </div>
