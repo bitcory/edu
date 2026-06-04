@@ -68,6 +68,60 @@ export default forwardRef<FabricApi | null, Props>(function FabricCanvas(
       });
       canvasRef.current = canvas;
 
+      // Make the resize handles visible and easy to grab. The default Fabric
+      // corners are tiny transparent squares — hard to find, especially the
+      // middle one on a tall thin image.
+      const HANDLE_STYLE = {
+        transparentCorners: false,
+        cornerColor: "#1f9e7f",
+        cornerStrokeColor: "#ffffff",
+        cornerStyle: "circle" as const,
+        cornerSize: 12,
+        touchCornerSize: 44,
+        borderColor: "#1f9e7f",
+      };
+
+      // Stretch the side controls' HIT AREA to span (most of) the edge, so you
+      // can grab anywhere along the left/right line to resize horizontally (and
+      // top/bottom to resize vertically) instead of hunting for the tiny middle
+      // square. A margin is left at each end so the corner handles (tl/tr/bl/br)
+      // still win there for diagonal resize. Sizes are in screen px.
+      const sizeEdgeControls = (obj: FabricObject | null | undefined) => {
+        if (!obj || !obj.controls) return;
+        const zoom = canvas?.getZoom?.() ?? 1;
+        const cs = obj.cornerSize ?? 12;
+        const margin = obj.touchCornerSize ?? 44; // reserve the corners
+        const edgeY = Math.max(cs, obj.getScaledHeight() * zoom - margin * 2);
+        const edgeX = Math.max(cs, obj.getScaledWidth() * zoom - margin * 2);
+        const c = obj.controls as Record<
+          string,
+          { sizeX: number; sizeY: number; touchSizeX: number; touchSizeY: number }
+        >;
+        const setY = (ctrl?: { sizeY: number; touchSizeY: number }) => {
+          if (ctrl) {
+            ctrl.sizeY = edgeY;
+            ctrl.touchSizeY = edgeY;
+          }
+        };
+        const setX = (ctrl?: { sizeX: number; touchSizeX: number }) => {
+          if (ctrl) {
+            ctrl.sizeX = edgeX;
+            ctrl.touchSizeX = edgeX;
+          }
+        };
+        setY(c.ml);
+        setY(c.mr);
+        setX(c.mt);
+        setX(c.mb);
+        obj.setCoords();
+      };
+
+      const tuneObject = (obj: FabricObject | null | undefined) => {
+        if (!obj) return;
+        obj.set(HANDLE_STYLE);
+        sizeEdgeControls(obj);
+      };
+
       const emitSelection = () => {
         const active = canvas?.getActiveObject() ?? null;
         onSelection(active ?? null);
@@ -78,6 +132,21 @@ export default forwardRef<FabricApi | null, Props>(function FabricCanvas(
       canvas.on("object:modified", onChange);
       canvas.on("object:added", onChange);
       canvas.on("object:removed", onChange);
+
+      // Keep handles styled + edge hit-areas sized to each object.
+      canvas.on("object:added", (e) => tuneObject(e.target as FabricObject));
+      canvas.on("selection:created", () =>
+        sizeEdgeControls(canvas?.getActiveObject()),
+      );
+      canvas.on("selection:updated", () =>
+        sizeEdgeControls(canvas?.getActiveObject()),
+      );
+      canvas.on("object:scaling", (e) =>
+        sizeEdgeControls(e.target as FabricObject),
+      );
+      canvas.on("object:modified", (e) =>
+        sizeEdgeControls(e.target as FabricObject),
+      );
 
       // --- Snap-to-guides while moving ---
       const collectTargets = (skip: FabricObject) => {
@@ -212,6 +281,9 @@ export default forwardRef<FabricApi | null, Props>(function FabricCanvas(
             return;
           }
           await c.loadFromJSON(data);
+          // Loaded objects are fresh instances — restyle their handles and
+          // size the edge hit-areas so the whole-edge grab works after reload.
+          c.getObjects().forEach((o) => tuneObject(o));
           c.renderAll();
         },
         // Include the custom `caption` flag so auto-added 내용추가 text stays

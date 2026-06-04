@@ -103,23 +103,53 @@ export default function CoverPromptModal({ script, onClose }: Props) {
           )}
         </p>
 
-        <div className="cover-prompt__btns">
-          <button
-            type="button"
-            className="cover-prompt__btn"
-            onClick={() => void copy("front")}
-          >
-            {copied === "front" ? <Check size={18} /> : <CopyIcon size={18} />}
-            <span>{copied === "front" ? "앞표지 복사됨!" : "앞표지 프롬프트 복사"}</span>
-          </button>
-          <button
-            type="button"
-            className="cover-prompt__btn"
-            onClick={() => void copy("back")}
-          >
-            {copied === "back" ? <Check size={18} /> : <CopyIcon size={18} />}
-            <span>{copied === "back" ? "뒷표지 복사됨!" : "뒷표지 프롬프트 복사"}</span>
-          </button>
+        {/* Inline styles so the buttons stay legible even if globals.css is
+            cached/stale — JS hot-reloads reliably, CSS sometimes lags. */}
+        <div
+          className="cover-prompt__btns"
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 10,
+            marginTop: 8,
+          }}
+        >
+          {(["front", "back"] as const).map((which) => {
+            const isCopied = copied === which;
+            const label =
+              which === "front"
+                ? isCopied
+                  ? "앞표지 복사됨!"
+                  : "앞표지 프롬프트 복사"
+                : isCopied
+                  ? "뒷표지 복사됨!"
+                  : "뒷표지 프롬프트 복사";
+            return (
+              <button
+                key={which}
+                type="button"
+                className="cover-prompt__btn"
+                onClick={() => void copy(which)}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                  padding: "14px 16px",
+                  border: "none",
+                  borderRadius: 12,
+                  background: isCopied ? "#1f9e7f" : "#f06f5f",
+                  color: "#fff",
+                  fontWeight: 800,
+                  fontSize: 15,
+                  cursor: "pointer",
+                }}
+              >
+                {isCopied ? <Check size={18} /> : <CopyIcon size={18} />}
+                <span>{label}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>

@@ -561,17 +561,17 @@ export default function NarrationEditorModal({
           <div className="narr-ed__tabs">
             <button
               type="button"
-              className={`narr-ed__tab${mode === "match" ? " is-on" : ""}`}
-              onClick={() => setMode("match")}
-            >
-              매칭편집
-            </button>
-            <button
-              type="button"
               className={`narr-ed__tab${mode === "whole" ? " is-on" : ""}`}
               onClick={() => setMode("whole")}
             >
               통편집
+            </button>
+            <button
+              type="button"
+              className={`narr-ed__tab${mode === "match" ? " is-on" : ""}`}
+              onClick={() => setMode("match")}
+            >
+              매칭편집
             </button>
           </div>
           <button
