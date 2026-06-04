@@ -256,21 +256,41 @@ export default function NarrationEditorModal({
     syncSegs();
   };
 
-  // Auto-split the clip (if not split yet), then match each segment in time
-  // order to the next LEFT (odd) page — 1쪽, 3쪽, 5쪽… — since a spread's scene
-  // lives on its left half. One segment per odd page.
-  const splitToOddPages = () => {
-    const buf = bufferRef.current;
+  // Razor cut at the red playhead line: split the segment under the cursor in
+  // two at the current time. The first cut treats the whole clip as one
+  // segment. After cutting, every segment is matched in time order to the next
+  // LEFT (odd) page — 1쪽, 3쪽, 5쪽… — since a spread's scene lives on its left
+  // half. The user can still re-target a page and click a segment to change it.
+  const cutAtCursor = () => {
+    const ws = wsRef.current;
     const regions = regionsRef.current;
-    if (!buf || !regions) return;
+    const buf = bufferRef.current;
+    if (!ws || !regions || !buf) return;
+    const dur = buf.duration;
+    const t = ws.getCurrentTime?.() ?? 0;
+
     let regs = regions.getRegions?.() ?? [];
     if (regs.length === 0) {
-      for (const r of detectSpeechRegions(buf)) {
-        regions.addRegion({ start: r.start, end: r.end, color: REGION_COLOR });
-      }
+      // Nothing split yet → the whole clip is one segment to cut into.
+      regions.addRegion({ start: 0, end: dur, color: REGION_COLOR });
       regs = regions.getRegions?.() ?? [];
     }
-    const ordered = [...regs].sort((a: any, b: any) => a.start - b.start);
+    // The segment the red line currently sits inside (with a small margin so a
+    // cut right on an existing edge is a no-op rather than a zero-length seg).
+    const target = regs.find(
+      (r: any) => t > r.start + 0.05 && t < r.end - 0.05,
+    );
+    if (target) {
+      const { start, end } = target;
+      target.remove();
+      regions.addRegion({ start, end: t, color: REGION_COLOR });
+      regions.addRegion({ start: t, end, color: REGION_COLOR });
+    }
+
+    // Re-match every segment in time order to the odd (left) pages.
+    const ordered = [...(regions.getRegions?.() ?? [])].sort(
+      (a: any, b: any) => a.start - b.start,
+    );
     const leftCells = cells.filter((c) => !c.isRight);
     const map: Record<string, string> = {};
     for (let i = 0; i < ordered.length && i < leftCells.length; i++) {
@@ -667,10 +687,11 @@ export default function NarrationEditorModal({
               <div className="ed-cmodal__detail-head">
                 <strong>음성 → 구간</strong>
                 <span className="ed-cmodal__hint">
-                  음성을 올려 <b>자동 분할</b>하거나 파형을 드래그해 구간을
-                  만드세요. <b>왼쪽에서 페이지를 먼저 고르고</b> 아래 구간을
-                  누르면 그 페이지에 들어갑니다. 한 페이지에 여러 구간을 넣을 수
-                  있어요.
+                  재생하거나 파형을 클릭해 <b>빨간선</b>을 옮긴 뒤{" "}
+                  <b>여기서 자르기</b>를 누르면 그 자리에서 잘려 구간이 만들어지고
+                  1·3·5 홀수 페이지에 순서대로 매칭돼요. (파형을 드래그해 직접
+                  구간을 만들 수도 있어요.) <b>왼쪽에서 페이지를 고르고</b> 아래
+                  구간을 누르면 매칭을 바꿀 수 있어요.
                 </span>
               </div>
 
@@ -747,11 +768,11 @@ export default function NarrationEditorModal({
                     <button
                       type="button"
                       className="ed-cmodal__btn ed-cmodal__btn--ghost"
-                      onClick={splitToOddPages}
+                      onClick={cutAtCursor}
                       disabled={!ready}
-                      title="자동 분할 후 1·3·5 홀수 페이지에 순서대로 매칭"
+                      title="빨간선(재생 위치)에서 자르고 1·3·5 홀수 페이지에 순서대로 매칭"
                     >
-                      <Check size={15} /> 홀수쪽 매칭
+                      <Check size={15} /> 여기서 자르기
                     </button>
                   </div>
 
