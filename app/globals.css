@@ -331,6 +331,10 @@ body {
 .bv-shell {
   position: fixed;
   inset: 0;
+  /* Use the DYNAMIC viewport height so the mobile URL/address bar doesn't eat
+     into the book area (100vh includes that bar; 100dvh is the visible part). */
+  height: 100vh;
+  height: 100dvh;
   background:
     radial-gradient(circle at 50% 44%, rgba(255, 255, 255, 0.28), transparent 32%),
     linear-gradient(180deg, rgba(255, 247, 216, 0.1), rgba(95, 165, 162, 0.28)),
@@ -708,22 +712,26 @@ body {
    The decorative shelf still frames the sides (a portrait spread can't fill a
    very wide screen without cropping the art). */
 @media (min-width: 721px) and (orientation: landscape) and (max-height: 600px) {
+  /* Reserve side room so the spread is NARROWER than the screen — it must clear
+     the top-left "새 책 보기" and bottom-right "자동보기" corner buttons and not
+     run off the screen edges. Thin top/bottom keeps the book as tall (= big) as
+     the short landscape height allows. */
   .bv-shell {
-    padding: 6px 14px;
+    padding: 8px clamp(72px, 10vw, 100px);
   }
 
-  /* Oversized 88px circles eat the short screen — shrink them a touch so they
-     sit neatly in the side gaps and leave the book more room. */
+  /* Oversized 88px circles eat the short screen — shrink them so they sit in
+     the side gaps and don't cover the page. */
   .bv-close,
   .bv-auto {
-    width: 72px;
-    height: 72px;
-    font-size: 11px;
+    width: 64px;
+    height: 64px;
+    font-size: 10px;
   }
 
   .bv-music {
-    width: 42px;
-    height: 42px;
+    width: 40px;
+    height: 40px;
   }
 }
 

@@ -8,6 +8,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import { Music, Play, VolumeX } from "lucide-react";
 import type { RenderedPage } from "../lib/pdf-to-images";
@@ -291,6 +292,30 @@ export default function BookViewer({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Tap-to-flip (mobile + desktop). The library's own click-flip is disabled
+  // because it's unreliable on touch, so we detect a genuine tap — press then
+  // release with little movement — and flip toward the side that was tapped.
+  // A swipe (movement past the threshold) is left to the flipbook's drag.
+  const tapStartRef = useRef<{ x: number; y: number; t: number } | null>(null);
+  const onStagePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    tapStartRef.current = { x: e.clientX, y: e.clientY, t: e.timeStamp };
+  };
+  const onStagePointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const s = tapStartRef.current;
+    tapStartRef.current = null;
+    if (!s) return;
+    // Moved too far → a swipe/drag, not a tap. Let the flipbook handle it.
+    if (Math.abs(e.clientX - s.x) > 12 || Math.abs(e.clientY - s.y) > 12) return;
+    if (e.timeStamp - s.t > 500) return; // long press, not a tap
+    const api = bookRef.current?.pageFlip?.();
+    if (!api) return;
+    const rect = containerRef.current?.getBoundingClientRect();
+    const mid = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
+    // Tap the right half → next page, left half → previous.
+    if (e.clientX >= mid) api.flipNext();
+    else api.flipPrev();
+  };
+
   useEffect(() => {
     if (!containerRef.current) return;
     const el = containerRef.current;
@@ -394,7 +419,12 @@ export default function BookViewer({
           </button>
         </>
       )}
-      <div ref={containerRef} className="bv-stage">
+      <div
+        ref={containerRef}
+        className="bv-stage"
+        onPointerDownCapture={onStagePointerDown}
+        onPointerUpCapture={onStagePointerUp}
+      >
         <div className="bv-book-shadow" aria-hidden />
         {dims && pages.length > 0 && (
           <Suspense fallback={null}>
@@ -405,6 +435,10 @@ export default function BookViewer({
               size="fixed"
               showCover
               mobileScrollSupport={false}
+              // We drive tap-to-flip ourselves (see the stage pointer handlers)
+              // so it's reliable on mobile; the library's own click-flip is off
+              // to avoid a double flip. Swipe/drag still works.
+              disableFlipByClick
               maxShadowOpacity={0.4}
               drawShadow
               flippingTime={650}
@@ -416,9 +450,10 @@ export default function BookViewer({
                 currentPageRef.current = e.data;
                 // Leaving the front cover (page ≥ 1) starts the music.
                 if (e.data >= 1) startMusicOnce();
-                // Reaching the last page (back cover) ends the book → fade the
-                // music out so the loop doesn't keep playing.
-                if (e.data >= pages.length - 1) stopMusic();
+                // On a cover — the front cover (first page) or the back cover
+                // (last page) — fade the music out, since the story isn't being
+                // read there and the loop shouldn't keep playing.
+                if (e.data === 0 || e.data >= pages.length - 1) stopMusic();
                 // Play this page's narration (manual or auto).
                 playNarrationForPage(e.data);
                 // In auto mode, decide when to turn next from this page.
