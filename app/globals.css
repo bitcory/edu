@@ -4128,6 +4128,31 @@ textarea.ed-input {
     min-width: 0;
     padding-inline: 8px;
   }
+
+  .admin-row {
+    flex-wrap: wrap;
+    gap: 10px 12px;
+  }
+
+  .admin-row__meta {
+    flex: 1 1 0;
+  }
+
+  .admin-row__title {
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+  }
+
+  .admin-row__actions {
+    flex-basis: 100%;
+    gap: 6px;
+  }
+
+  .admin-row__actions .admin-btn {
+    flex: 1 1 calc(50% - 3px);
+    justify-content: center;
+    padding-inline: 10px;
+  }
 }
 
 .admin-row__reason {
