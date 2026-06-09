@@ -93,20 +93,33 @@ export default forwardRef<FabricApi | null, Props>(function FabricCanvas(
         const margin = obj.touchCornerSize ?? 44; // reserve the corners
         const edgeY = Math.max(cs, obj.getScaledHeight() * zoom - margin * 2);
         const edgeX = Math.max(cs, obj.getScaledWidth() * zoom - margin * 2);
-        const c = obj.controls as Record<
+        const c = obj.controls as unknown as Record<
           string,
-          { sizeX: number; sizeY: number; touchSizeX: number; touchSizeY: number }
+          {
+            sizeX: number;
+            sizeY: number;
+            touchSizeX: number;
+            touchSizeY: number;
+            render?: (...args: unknown[]) => void;
+          }
         >;
-        const setY = (ctrl?: { sizeY: number; touchSizeY: number }) => {
+        // Keep the wide grab area, but don't PAINT the stretched edge controls:
+        // a 12px filled bar along each side reads as a "thick middle, thin ends"
+        // border. Suppressing the render leaves a uniform thin selection line
+        // all around, with only the corner circles drawn.
+        const noRender = () => {};
+        const setY = (ctrl?: { sizeY: number; touchSizeY: number; render?: () => void }) => {
           if (ctrl) {
             ctrl.sizeY = edgeY;
             ctrl.touchSizeY = edgeY;
+            ctrl.render = noRender;
           }
         };
-        const setX = (ctrl?: { sizeX: number; touchSizeX: number }) => {
+        const setX = (ctrl?: { sizeX: number; touchSizeX: number; render?: () => void }) => {
           if (ctrl) {
             ctrl.sizeX = edgeX;
             ctrl.touchSizeX = edgeX;
+            ctrl.render = noRender;
           }
         };
         setY(c.ml);
