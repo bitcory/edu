@@ -36,6 +36,7 @@ import {
   SlidersHorizontal,
   Undo2,
   Square as SquareIcon,
+  Store,
   Trash2,
   Type as TypeIcon,
   X,
@@ -2011,6 +2012,12 @@ export default function Editor({
     if (ok) router.push("/library");
   }, [handleSaveDraft, router]);
 
+  // 북스토어로: 임시저장한 다음 북스토어로 이동. 저장이 실패하면 이동하지 않는다.
+  const handleSaveAndStore = useCallback(async () => {
+    const ok = await handleSaveDraft();
+    if (ok) router.push("/store");
+  }, [handleSaveDraft, router]);
+
   // Close the mobile properties drawer (keeps the canvas selection so the user
   // can reopen "편집하기" to keep editing the same object).
   const closeProps = useCallback(() => setPropsOpen(false), []);
@@ -2220,6 +2227,18 @@ export default function Editor({
             >
               <BookMarked size={16} />
               <span className="ed-draft__label">내서재</span>
+            </button>
+          )}
+          {onSaveDraft && (
+            <button
+              type="button"
+              className="ed-draft"
+              onClick={() => void handleSaveAndStore()}
+              disabled={exporting || draftState === "saving"}
+              title="임시저장한 뒤 북스토어로 이동"
+            >
+              <Store size={16} />
+              <span className="ed-draft__label">북스토어</span>
             </button>
           )}
           <button
