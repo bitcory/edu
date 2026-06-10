@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
   if (id) {
     const existing = await getBookById(id);
     if (existing) {
-      if (existing.ownerId !== user.id) {
+      if (existing.ownerId !== user.id && !user.isAdmin) {
         return Response.json({ error: "forbidden" }, { status: 403 });
       }
       if (existing.status === "pending") {
