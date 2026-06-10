@@ -132,28 +132,34 @@ function EditPageInner() {
     setLoadingBook(true);
     getBook(bookId).then((b) => {
       if (cancelled) return;
-      if (b) {
-        setInitialPages(b.pages);
-        setBookMeta({
-          title: b.title,
-          author: b.author,
-          description: b.description,
-          category: b.category,
-        });
-        setBookNarration(b.narration);
-        setBookAudioKey(b.audioKey ?? undefined);
-        setStoryText(b.storyText ?? "");
-        const w = b.pageW || DEFAULT_TEMPLATE.width;
-        setPageW(w);
-        setPrevPageW(w); // equal → no recenter on load
-        setLayout(b.layout || DEFAULT_TEMPLATE.layout);
+      // Failed load (network/R2 error) or empty hydrate must NOT fall through
+      // to a blank editor with bookId still set — saving from that state would
+      // overwrite the real book with empty pages (how a cover got erased once).
+      if (!b || b.pages.length === 0) {
+        alert("책을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.");
+        router.replace("/library");
+        return;
       }
+      setInitialPages(b.pages);
+      setBookMeta({
+        title: b.title,
+        author: b.author,
+        description: b.description,
+        category: b.category,
+      });
+      setBookNarration(b.narration);
+      setBookAudioKey(b.audioKey ?? undefined);
+      setStoryText(b.storyText ?? "");
+      const w = b.pageW || DEFAULT_TEMPLATE.width;
+      setPageW(w);
+      setPrevPageW(w); // equal → no recenter on load
+      setLayout(b.layout || DEFAULT_TEMPLATE.layout);
       setLoadingBook(false);
     });
     return () => {
       cancelled = true;
     };
-  }, [bookId]);
+  }, [bookId, router]);
 
   useEffect(() => {
     return () => {

@@ -326,7 +326,11 @@ export async function updateBookSnapshot(
     patch.price !== undefined ? normalizePrice(patch.price) : existing.price;
   const pageW = patch.pageW ?? existing.pageW;
   const layout = patch.layout ?? existing.layout;
-  const coverThumb = patch.coverThumb || patch.pages[0]?.thumb || null;
+  // Never erase an existing cover: a 임시저장 passes no coverThumb, and a page
+  // with no rendered thumb (e.g. a blank editor after a failed load) must not
+  // null out the stored one.
+  const coverThumb =
+    patch.coverThumb || patch.pages[0]?.thumb || existing.coverThumb || null;
   const storyText =
     patch.storyText !== undefined
       ? patch.storyText.trim() || null

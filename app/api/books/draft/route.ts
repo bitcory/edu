@@ -38,6 +38,14 @@ export async function POST(req: NextRequest) {
           { status: 409 },
         );
       }
+      // A book that already has content must never be overwritten by an empty
+      // save — that's a broken editor session (failed page load), not intent.
+      if (pages.length === 0 && (existing.pageCount ?? 0) > 0) {
+        return Response.json(
+          { error: "책 내용이 비어 있어 저장하지 않았어요. 페이지를 다시 불러온 뒤 저장해 주세요." },
+          { status: 409 },
+        );
+      }
       const book = await updateBookSnapshot(
         id,
         {
