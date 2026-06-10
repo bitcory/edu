@@ -604,6 +604,12 @@ export default function Editor({
   // has hydrated so the initial defaults don't overwrite a saved session.
   useEffect(() => {
     if (!hydratedRef.current) return;
+    // Editing an existing book (opened via ?book=) must NOT write into the shared
+    // "new book" working-draft slot. Otherwise that book's content leaks into the
+    // slot and the next brand-new editor session restores it, saving it as a
+    // stray "제목 없는 책" copy owned by whoever saved it. The hydrate effect above
+    // already skips the slot for existing books; this keeps the write symmetric.
+    if (initialPages && initialPages.length > 0) return;
     const id = window.setTimeout(() => {
       void saveEditorState({
         pages,
@@ -615,7 +621,7 @@ export default function Editor({
       });
     }, 500);
     return () => window.clearTimeout(id);
-  }, [pages, activeIndex, pageW, layout, captionText]);
+  }, [pages, activeIndex, pageW, layout, captionText, initialPages]);
 
   // Snapshot the live Fabric canvas into pages[activeIndex] (debounced) so
   // edits within a single page are persisted too — not only structural
