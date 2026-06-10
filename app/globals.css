@@ -598,7 +598,6 @@ body {
   justify-content: center;
   border: 1px solid rgba(115, 82, 44, 0.2);
   box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.45),
     inset 18px 0 24px rgba(132, 87, 40, 0.08),
     inset -12px 0 20px rgba(90, 52, 24, 0.08);
 }
