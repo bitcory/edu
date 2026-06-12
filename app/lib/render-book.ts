@@ -8,6 +8,7 @@ import {
   type RenderedPage,
 } from "./pdf-to-images";
 import type { StoreBook } from "./book-types";
+import { getBook } from "./store";
 import { ensureFont } from "./fonts";
 
 /** Load every font used across the pages (both normal + bold) before drawing,
@@ -187,12 +188,11 @@ export async function openBookForReading(book: StoreBook): Promise<OpenedBook> {
   }
   // Editor book: render the snapshot straight to images (no PDF round-trip).
   // The store list ships books WITHOUT the heavy `pages` blob (for speed), so
-  // hydrate it on open by fetching the full book record.
+  // hydrate it on open via getBook (downloads the snapshot directly from R2).
   let pages = book.pages;
   if (!pages || pages.length === 0) {
-    const res = await fetch(`/api/books/${book.id}`, { cache: "no-store" });
-    if (!res.ok) throw new Error("책 내용을 불러오지 못했어요.");
-    const { book: full } = (await res.json()) as { book: StoreBook };
+    const full = await getBook(book.id);
+    if (!full) throw new Error("책 내용을 불러오지 못했어요.");
     pages = full.pages;
   }
   const rendered = await renderSnapshotToPages(pages, book.pageW || PAGE_W);

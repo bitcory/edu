@@ -11,6 +11,7 @@ import {
   deleteNarration,
   deletePdf,
   deleteSnapshot,
+  presignSnapshotDownload,
   readSnapshotJson,
 } from "../../../lib/pdf-storage";
 import { resolvePagesFromBody } from "../../../lib/snapshot-body";
@@ -21,17 +22,25 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   ctx: { params: Promise<{ id: string }> },
 ) {
   const { id } = await ctx.params;
   const book = await getBookById(id);
   if (!book) return Response.json({ error: "not found" }, { status: 404 });
-  // Editor pages live in R2 now — hydrate them so callers (reader/editor) get
-  // the full snapshot just like before.
+  // Editor pages live in R2. Default: hand back a presigned URL so the browser
+  // downloads the multi-MB snapshot JSON straight from R2 (free egress) instead
+  // of streaming it through this function (billed Fast Origin Transfer).
+  // ?inline=1 keeps the old hydrated response as a fallback for clients whose
+  // direct R2 fetch is blocked (e.g. bucket CORS not configured).
   if (book.snapshotKey && book.pages.length === 0) {
-    const json = await readSnapshotJson(book.snapshotKey);
-    if (json) book.pages = JSON.parse(json) as EditorPage[];
+    if (req.nextUrl.searchParams.get("inline") === "1") {
+      const json = await readSnapshotJson(book.snapshotKey);
+      if (json) book.pages = JSON.parse(json) as EditorPage[];
+    } else {
+      const snapshotUrl = await presignSnapshotDownload(book.snapshotKey);
+      return Response.json({ book, snapshotUrl });
+    }
   }
   return Response.json({ book });
 }

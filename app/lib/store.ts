@@ -54,8 +54,27 @@ export async function listDraftBooks(): Promise<StoreBook[]> {
 export async function getBook(id: string): Promise<StoreBook | null> {
   const res = await fetch(`/api/books/${id}`, { cache: "no-store" });
   if (!res.ok) return null;
-  const data = (await res.json()) as { book: StoreBook };
-  return data.book ?? null;
+  const data = (await res.json()) as { book: StoreBook; snapshotUrl?: string };
+  const book = data.book ?? null;
+  // Editor pages come as a presigned R2 URL — download the heavy snapshot
+  // straight from R2 (free egress) instead of through the API route.
+  if (book && data.snapshotUrl && book.pages.length === 0) {
+    try {
+      const snap = await fetch(data.snapshotUrl);
+      if (!snap.ok) throw new Error(`snapshot ${snap.status}`);
+      book.pages = (await snap.json()) as StoreBook["pages"];
+    } catch {
+      // Direct R2 fetch blocked (likely bucket CORS) — fall back to the
+      // server inlining the snapshot like before.
+      const inline = await fetch(`/api/books/${id}?inline=1`, {
+        cache: "no-store",
+      });
+      if (!inline.ok) return null;
+      const d = (await inline.json()) as { book: StoreBook };
+      return d.book ?? null;
+    }
+  }
+  return book;
 }
 
 export async function submitBook(input: SubmitInput): Promise<StoreBook> {

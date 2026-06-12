@@ -107,6 +107,23 @@ export async function readSnapshotJson(key: string): Promise<string | null> {
   }
 }
 
+/** Presigned GET URL so the browser can fetch a book's snapshot JSON straight
+ * from R2 (free egress, no Vercel proxy). Requires bucket CORS to allow GET. */
+export async function presignSnapshotDownload(
+  key: string,
+  expiresInSeconds = 300,
+): Promise<string> {
+  if (!key.startsWith("snapshots/")) {
+    throw new Error("invalid snapshot key");
+  }
+  const { client, bucket } = r2();
+  return getSignedUrl(
+    client,
+    new GetObjectCommand({ Bucket: bucket, Key: key }),
+    { expiresIn: expiresInSeconds },
+  );
+}
+
 /** Best-effort cleanup of a temp snapshot object after it's stored in the DB. */
 export async function deleteSnapshot(key: string): Promise<void> {
   if (!key.startsWith("snapshots/")) return;
