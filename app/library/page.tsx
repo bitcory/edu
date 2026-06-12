@@ -7,7 +7,6 @@ import {
   Mic,
   Music,
   Pencil,
-  RefreshCw,
   Store,
   Trash2,
   Upload,
@@ -160,51 +159,6 @@ export default function LibraryPage() {
     },
     [refresh],
   );
-
-  // Re-render every editor book's cover from its page 0 at full resolution and
-  // refresh the stored coverThumb. Fixes covers published when the thumb was a
-  // blurry 0.2×. coverThumb-only update → keeps the book's status (no re-approval).
-  const refreshAllCovers = useCallback(async () => {
-    const targets = (books ?? []).filter(
-      (b) => b.kind === "editor" && b.status !== "pending",
-    );
-    if (targets.length === 0) {
-      alert("표지를 갱신할 책이 없어요.");
-      return;
-    }
-    if (
-      !window.confirm(
-        `내 책 ${targets.length}권의 표지를 표지 페이지(0쪽)에서 고화질로 다시 만들까요?\n` +
-          "(직접 올린 표지가 있다면 0쪽 그림으로 바뀝니다. 공개 상태는 그대로 유지됩니다.)",
-      )
-    ) {
-      return;
-    }
-    setBusy(true);
-    let ok = 0;
-    let fail = 0;
-    try {
-      for (const b of targets) {
-        try {
-          const full = (await getBook(b.id)) ?? b;
-          const cover = await renderCoverThumb(full.pages[0], full.pageW ?? 800);
-          if (!cover) {
-            fail += 1;
-            continue;
-          }
-          await updateBookInfo(b.id, { cover });
-          ok += 1;
-        } catch (err) {
-          console.error("표지 갱신 실패", b.id, err);
-          fail += 1;
-        }
-      }
-      refresh();
-      alert(`표지 ${ok}권 갱신 완료${fail ? `, ${fail}권 실패` : ""}.`);
-    } finally {
-      setBusy(false);
-    }
-  }, [books, refresh]);
 
   const saveInfo = useCallback(
     async (values: InfoValues) => {
@@ -447,15 +401,6 @@ export default function LibraryPage() {
           onClick={() => setBgmOpen(true)}
         >
           <Music size={16} /> 공용 배경음악
-        </button>
-        <button
-          type="button"
-          className="store-navlink store-navlink--danger"
-          onClick={() => void refreshAllCovers()}
-          disabled={busy}
-          title="기존 책 표지를 0쪽에서 고화질로 다시 만듭니다 (공개 상태 유지)"
-        >
-          <RefreshCw size={16} /> 표지 화질 갱신
         </button>
       </div>
 

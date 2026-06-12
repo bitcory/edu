@@ -8,7 +8,7 @@ import BookViewer from "../components/BookViewer";
 import SubmitBookModal, {
   type SubmitValues,
 } from "../components/SubmitBookModal";
-import { renderSnapshotToImages } from "../lib/render-book";
+import { renderCoverThumb, renderSnapshotToImages } from "../lib/render-book";
 import { revokePages, type RenderedPage } from "../lib/pdf-to-images";
 import type { EditorPage } from "../lib/editor-types";
 import {
@@ -62,6 +62,8 @@ function EditPageInner() {
   const [mode, setMode] = useState<Mode>({ kind: "edit" });
   const [submitting, setSubmitting] = useState(false);
   const [submitOpen, setSubmitOpen] = useState(false);
+  // Hi-res cover rendered when the submit modal opens (page 0 at 0.7×).
+  const [submitCover, setSubmitCover] = useState<string | undefined>(undefined);
   const [author, setAuthor] = useState<Author | null>(null);
   // Existing book's meta (title/category/…) to prefill the submit modal on re-edit.
   const [bookMeta, setBookMeta] = useState<{
@@ -98,7 +100,7 @@ function EditPageInner() {
     [pageW],
   );
 
-  const openStoreSubmit = useCallback(() => {
+  const openStoreSubmit = useCallback(async () => {
     // Admins (슈퍼관리자) can publish any book — including others' books opened
     // from the admin page — without their own author approval.
     if (!isAdmin && author?.status !== "approved") {
@@ -106,8 +108,15 @@ function EditPageInner() {
       router.push("/library");
       return;
     }
+    // Render a crisp cover from page 0 — its cached thumb is only 0.2×/blurry,
+    // and publishing it would bake a low-res cover into the store.
+    if (mode.kind === "preview") {
+      setSubmitCover(
+        (await renderCoverThumb(mode.pages[0], pageW)) ?? mode.pages[0]?.thumb,
+      );
+    }
     setSubmitOpen(true);
-  }, [author, router, isAdmin]);
+  }, [author, router, isAdmin, mode, pageW]);
 
   // Load an existing library book into the editor when ?book=<id> is present.
   useEffect(() => {
@@ -326,7 +335,7 @@ function EditPageInner() {
               type="button"
               className="ed-action ed-action--store"
               disabled={submitting}
-              onClick={openStoreSubmit}
+              onClick={() => void openStoreSubmit()}
             >
               {submitting ? (
                 <Loader2 size={16} className="ed-spin" />
@@ -345,7 +354,7 @@ function EditPageInner() {
                 author: bookMeta?.author ?? author?.displayName,
                 description: bookMeta?.description,
                 category: bookMeta?.category,
-                cover: mode.pages[0]?.thumb,
+                cover: submitCover ?? mode.pages[0]?.thumb,
               }}
               onCancel={() => setSubmitOpen(false)}
               onConfirm={(values) => void handleSubmitToStore(mode.pages, values)}
