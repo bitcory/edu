@@ -159,6 +159,61 @@ export async function saveSnapshot(
   return key;
 }
 
+/**
+ * Book cover images. Covers used to be base64 data URLs stored in the DB and
+ * inlined into every list response (~140KB × every book × every store visit,
+ * all billed Vercel origin transfer). Now the bytes live in R2 under a stable
+ * per-book key and responses carry a presigned GET URL instead.
+ */
+function coverKeyFor(bookId: string): string {
+  return `covers/${bookId}.jpg`;
+}
+
+/** Decode a base64 image data URL and store it as the book's cover.
+ * Returns the key, or null if the value isn't a data URL. */
+export async function saveCoverFromDataUrl(
+  bookId: string,
+  dataUrl: string,
+): Promise<string | null> {
+  const m = /^data:(image\/[\w.+-]+);base64,(.+)$/.exec(dataUrl);
+  if (!m) return null;
+  const { client, bucket } = r2();
+  const key = coverKeyFor(bookId);
+  await client.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: Buffer.from(m[2], "base64"),
+      ContentType: m[1],
+    }),
+  );
+  return key;
+}
+
+/** Presigned GET URL for a cover image. 1h: list pages render <img> tags that
+ * may be (re)loaded well after the fetch, so don't cut it too close. */
+export async function presignCoverDownload(
+  key: string,
+  expiresInSeconds = 3600,
+): Promise<string> {
+  const { client, bucket } = r2();
+  return getSignedUrl(
+    client,
+    new GetObjectCommand({ Bucket: bucket, Key: key }),
+    { expiresIn: expiresInSeconds },
+  );
+}
+
+export async function deleteCover(key: string): Promise<void> {
+  if (!key.startsWith("covers/")) return;
+  try {
+    const { client, bucket } = r2();
+    await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+  } catch {
+    /* ignore */
+  }
+}
+
 export async function savePdf(id: string, bytes: Uint8Array): Promise<void> {
   const { client, bucket } = r2();
   await client.send(

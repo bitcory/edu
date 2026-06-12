@@ -1,6 +1,10 @@
 import { db, ensureSchema, type Row } from "./db";
 import { normalizeCategory } from "./categories";
-import { bookSnapshotKey, saveSnapshot } from "./pdf-storage";
+import {
+  presignCoverDownload,
+  saveCoverFromDataUrl,
+  saveSnapshot,
+} from "./pdf-storage";
 import { initialEditorStatus, initialPdfStatus } from "./publish-policy";
 import type { EditorPage } from "./editor-types";
 import type {
@@ -36,6 +40,7 @@ function rowToBook(row: Row): StoreBook {
     snapshotKey: row.snapshot_key == null ? undefined : String(row.snapshot_key),
     pageCount: row.page_count == null ? undefined : Number(row.page_count),
     coverThumb: row.cover_thumb == null ? undefined : String(row.cover_thumb),
+    coverKey: row.cover_key == null ? undefined : String(row.cover_key),
     status: String(row.status) as BookStatus,
     submittedAt: Number(row.submitted_at),
     reviewedAt: row.reviewed_at == null ? undefined : Number(row.reviewed_at),
@@ -48,6 +53,42 @@ function rowToBook(row: Row): StoreBook {
         ? undefined
         : (JSON.parse(String(row.narration)) as (string | null)[]),
     storyText: row.story_text == null ? undefined : String(row.story_text),
+  };
+}
+
+/** Covers live in R2 (cover_key) — swap the key for a presigned URL so the
+ * client's <img src> keeps working unchanged. Legacy un-migrated books still
+ * carry an inline base64 cover_thumb and pass through as-is. */
+async function withCoverUrl(book: StoreBook): Promise<StoreBook> {
+  if (book.coverKey) {
+    book.coverThumb = await presignCoverDownload(book.coverKey);
+  }
+  return book;
+}
+
+function withCoverUrls(books: StoreBook[]): Promise<StoreBook[]> {
+  return Promise.all(books.map(withCoverUrl));
+}
+
+/** Resolve an incoming coverThumb value to what the row should store.
+ *  - data URL (new image from the client) → upload to R2, store the key.
+ *  - http(s) URL (the client echoing back a presigned cover) or absent → keep
+ *    whatever is stored now (key, or legacy inline base64).
+ */
+async function resolveCover(
+  bookId: string,
+  incoming: string | undefined,
+  existing?: StoreBook | null,
+): Promise<{ coverKey: string | null; coverThumb: string | null }> {
+  if (incoming?.startsWith("data:")) {
+    const key = await saveCoverFromDataUrl(bookId, incoming);
+    if (key) return { coverKey: key, coverThumb: null };
+  }
+  return {
+    coverKey: existing?.coverKey ?? null,
+    coverThumb: existing?.coverThumb?.startsWith("data:")
+      ? existing.coverThumb
+      : null,
   };
 }
 
@@ -88,7 +129,7 @@ export async function listBooks(
     const res = await db.execute({
       sql: `SELECT b.id, b.title, b.kind, b.author, b.description, b.category,
                    b.price, b.page_w, b.layout, b.owner_id, b.owner_name,
-                   b.cover_thumb, b.status, b.submitted_at, b.reviewed_at,
+                   b.cover_thumb, b.cover_key, b.status, b.submitted_at, b.reviewed_at,
                    b.reject_reason, b.audio_key, b.page_count,
                    (SELECT COUNT(*) FROM likes l WHERE l.book_id = b.id) AS like_count
             FROM books b
@@ -96,14 +137,14 @@ export async function listBooks(
             ORDER BY COALESCE(b.reviewed_at, b.submitted_at) DESC`,
       args: [],
     });
-    return res.rows.map(rowToBook);
+    return withCoverUrls(res.rows.map(rowToBook));
   }
   if (scope === "pending") {
     const res = await db.execute({
       sql: `SELECT * FROM books WHERE status = 'pending' ORDER BY submitted_at ASC`,
       args: [],
     });
-    return res.rows.map(rowToBook);
+    return withCoverUrls(res.rows.map(rowToBook));
   }
   if (scope === "rejected") {
     const res = await db.execute({
@@ -111,20 +152,20 @@ export async function listBooks(
             ORDER BY COALESCE(reviewed_at, submitted_at) DESC`,
       args: [],
     });
-    return res.rows.map(rowToBook);
+    return withCoverUrls(res.rows.map(rowToBook));
   }
   if (scope === "drafts") {
     // Admin view of EVERY user's 임시저장 books. Lite (omit the heavy pages
     // blob) — content is hydrated on open/edit via getBookById.
     const res = await db.execute({
       sql: `SELECT id, title, kind, author, description, category, price,
-                   page_w, layout, owner_id, owner_name, cover_thumb, status,
+                   page_w, layout, owner_id, owner_name, cover_thumb, cover_key, status,
                    submitted_at, reviewed_at, reject_reason, audio_key, page_count
             FROM books WHERE status = 'draft'
             ORDER BY submitted_at DESC`,
       args: [],
     });
-    return res.rows.map(rowToBook);
+    return withCoverUrls(res.rows.map(rowToBook));
   }
   // scope === "mine"
   if (!ownerId) return [];
@@ -132,7 +173,7 @@ export async function listBooks(
     sql: `SELECT * FROM books WHERE owner_id = ? ORDER BY submitted_at DESC`,
     args: [ownerId],
   });
-  return res.rows.map(rowToBook);
+  return withCoverUrls(res.rows.map(rowToBook));
 }
 
 /** An author's PUBLIC (approved) books, most-liked first (then newest). Omits
@@ -142,7 +183,7 @@ export async function listAuthorBooks(ownerId: string): Promise<StoreBook[]> {
   const res = await db.execute({
     sql: `SELECT b.id, b.title, b.kind, b.author, b.description, b.category,
                  b.price, b.page_w, b.layout, b.owner_id, b.owner_name,
-                 b.cover_thumb, b.status, b.submitted_at, b.reviewed_at,
+                 b.cover_thumb, b.cover_key, b.status, b.submitted_at, b.reviewed_at,
                  b.reject_reason, b.audio_key, b.page_count,
                  (SELECT COUNT(*) FROM likes l WHERE l.book_id = b.id) AS like_count
           FROM books b
@@ -150,7 +191,7 @@ export async function listAuthorBooks(ownerId: string): Promise<StoreBook[]> {
           ORDER BY like_count DESC, COALESCE(b.reviewed_at, b.submitted_at) DESC`,
     args: [ownerId],
   });
-  return res.rows.map(rowToBook);
+  return withCoverUrls(res.rows.map(rowToBook));
 }
 
 export async function getBookById(id: string): Promise<StoreBook | null> {
@@ -160,7 +201,7 @@ export async function getBookById(id: string): Promise<StoreBook | null> {
     args: [id],
   });
   const row = res.rows[0];
-  return row ? rowToBook(row) : null;
+  return row ? withCoverUrl(rowToBook(row)) : null;
 }
 
 function newId(): string {
@@ -206,10 +247,13 @@ export async function insertBook(
   // so repeated saves don't balloon Neon's history/storage.
   const snapshotKey = await saveSnapshot(book.id, JSON.stringify(book.pages));
   book.snapshotKey = snapshotKey;
+  // Cover image goes to R2 too — the row stores only the key.
+  const cover = await resolveCover(book.id, book.coverThumb);
+  book.coverKey = cover.coverKey ?? undefined;
   await db.execute({
     sql: `INSERT INTO books
-            (id, title, author, description, category, price, page_w, layout, owner_id, owner_name, pages, snapshot_key, page_count, cover_thumb, status, submitted_at, story_text)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, ?, ?)`,
+            (id, title, author, description, category, price, page_w, layout, owner_id, owner_name, pages, snapshot_key, page_count, cover_thumb, cover_key, status, submitted_at, story_text)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       book.id,
       book.title,
@@ -223,7 +267,8 @@ export async function insertBook(
       book.ownerName,
       snapshotKey,
       book.pageCount ?? 0,
-      book.coverThumb ?? null,
+      cover.coverThumb,
+      cover.coverKey,
       book.status,
       book.submittedAt,
       book.storyText ?? null,
@@ -264,10 +309,12 @@ export async function insertPdfBook(
     status: initialPdfStatus(),
     submittedAt: Date.now(),
   };
+  const cover = await resolveCover(book.id, book.coverThumb);
+  book.coverKey = cover.coverKey ?? undefined;
   await db.execute({
     sql: `INSERT INTO books
-            (id, title, kind, author, description, category, price, page_w, layout, owner_id, owner_name, pages, cover_thumb, status, submitted_at)
-          VALUES (?, ?, 'pdf', ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?)`,
+            (id, title, kind, author, description, category, price, page_w, layout, owner_id, owner_name, pages, cover_thumb, cover_key, status, submitted_at)
+          VALUES (?, ?, 'pdf', ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?)`,
     args: [
       book.id,
       book.title,
@@ -279,7 +326,8 @@ export async function insertPdfBook(
       book.layout,
       book.ownerId,
       book.ownerName,
-      book.coverThumb ?? null,
+      cover.coverThumb,
+      cover.coverKey,
       book.status,
       book.submittedAt,
     ],
@@ -328,9 +376,13 @@ export async function updateBookSnapshot(
   const layout = patch.layout ?? existing.layout;
   // Never erase an existing cover: a 임시저장 passes no coverThumb, and a page
   // with no rendered thumb (e.g. a blank editor after a failed load) must not
-  // null out the stored one.
-  const coverThumb =
-    patch.coverThumb || patch.pages[0]?.thumb || existing.coverThumb || null;
+  // null out the stored one. resolveCover keeps the stored key when the
+  // incoming value isn't a fresh data URL (e.g. an echoed presigned URL).
+  const cover = await resolveCover(
+    id,
+    patch.coverThumb || patch.pages[0]?.thumb,
+    existing,
+  );
   const storyText =
     patch.storyText !== undefined
       ? patch.storyText.trim() || null
@@ -340,7 +392,7 @@ export async function updateBookSnapshot(
   const snapshotKey = await saveSnapshot(id, JSON.stringify(patch.pages));
   await db.execute({
     sql: `UPDATE books
-          SET pages = '[]', snapshot_key = ?, page_count = ?, cover_thumb = ?,
+          SET pages = '[]', snapshot_key = ?, page_count = ?, cover_thumb = ?, cover_key = ?,
               title = ?, author = ?, description = ?, category = ?, price = ?,
               page_w = ?, layout = ?, story_text = ?,
               status = ?, submitted_at = ?, reviewed_at = NULL, reject_reason = NULL
@@ -348,7 +400,8 @@ export async function updateBookSnapshot(
     args: [
       snapshotKey,
       patch.pages.length,
-      coverThumb,
+      cover.coverThumb,
+      cover.coverKey,
       title,
       author,
       description,
@@ -396,13 +449,19 @@ export async function updateBookMeta(
     patch.category !== undefined
       ? normalizeCategory(patch.category)
       : (existing.category ?? null);
-  const coverThumb =
-    patch.coverThumb !== undefined
-      ? patch.coverThumb || null
-      : (existing.coverThumb ?? null);
+  const cover = await resolveCover(id, patch.coverThumb, existing);
   await db.execute({
-    sql: `UPDATE books SET title = ?, author = ?, price = ?, description = ?, category = ?, cover_thumb = ? WHERE id = ?`,
-    args: [title, author, price, description, category, coverThumb, id],
+    sql: `UPDATE books SET title = ?, author = ?, price = ?, description = ?, category = ?, cover_thumb = ?, cover_key = ? WHERE id = ?`,
+    args: [
+      title,
+      author,
+      price,
+      description,
+      category,
+      cover.coverThumb,
+      cover.coverKey,
+      id,
+    ],
   });
   return getBookById(id);
 }

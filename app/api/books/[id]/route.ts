@@ -8,6 +8,7 @@ import {
 import { isApprovedAuthor } from "../../../lib/authors-repo";
 import { OPEN_PUBLISH } from "../../../lib/publish-policy";
 import {
+  deleteCover,
   deleteNarration,
   deletePdf,
   deleteSnapshot,
@@ -123,6 +124,7 @@ export async function DELETE(
 
   if (existing.kind === "pdf") await deletePdf(id);
   if (existing.snapshotKey) await deleteSnapshot(existing.snapshotKey);
+  if (existing.coverKey) await deleteCover(existing.coverKey);
   for (const k of existing.narration ?? []) {
     if (k) await deleteNarration(k);
   }

@@ -97,6 +97,9 @@ export function ensureSchema(): Promise<void> {
         `ADD COLUMN IF NOT EXISTS narration TEXT`,
         // Raw 내용추가 script so re-edits can reload the textarea verbatim.
         `ADD COLUMN IF NOT EXISTS story_text TEXT`,
+        // Cover image now lives in R2 (covers/<id>.jpg); cover_thumb (inline
+        // base64) is legacy — kept until migrated, then NULL.
+        `ADD COLUMN IF NOT EXISTS cover_key TEXT`,
       ]) {
         await db.execute(`ALTER TABLE books ${ddl}`);
       }

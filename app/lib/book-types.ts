@@ -26,7 +26,8 @@ export type StoreBook = {
   pages: EditorPage[]; // Fabric snapshot — empty unless hydrated from R2
   snapshotKey?: string; // R2 key holding the full pages JSON (editor books)
   pageCount?: number; // page count (kept on the row so lists needn't load pages)
-  coverThumb?: string; // pages[0].thumb (already a 20% PNG data URL)
+  coverThumb?: string; // presigned R2 URL on reads (legacy books: data URL)
+  coverKey?: string; // R2 key of the cover image (covers/<id>.jpg)
   pdfUrl?: string; // filled by the future server (R2); undefined for now
   status: BookStatus;
   submittedAt: number;
