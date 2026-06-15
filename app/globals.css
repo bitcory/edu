@@ -645,6 +645,41 @@ body {
     linear-gradient(135deg, #351917, #130b08);
 }
 
+/* ---- 웹툰형: 세로 스크롤 뷰 ---- */
+/* A single continuous column of full-width 9:16 panels, stacked with zero gap
+   so the tops/bottoms read as one strip. Replaces the flipbook stage entirely
+   for layout === "webtoon". */
+.bv-webtoon {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+.bv-webtoon__strip {
+  /* width is set inline (Ctrl+wheel zoom); falls back to a comfy default */
+  width: 680px;
+  max-width: 100%;
+  margin: 0 auto;
+  /* belt-and-suspenders against any inline-image whitespace gap */
+  font-size: 0;
+  line-height: 0;
+  background: #000;
+  box-shadow: 0 0 48px rgba(0, 0, 0, 0.45);
+}
+
+.bv-webtoon__img {
+  display: block;
+  width: 100%;
+  height: auto;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
 @media (max-width: 720px) {
   .upload-card {
     max-width: min(96vw, 620px);

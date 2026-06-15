@@ -87,6 +87,8 @@ type Props = {
   onClose?: () => void;
   /** 단면: always show one page at a time (no 2-up spread). */
   singlePage?: boolean;
+  /** 웹툰: vertical scroll of full-width images instead of a flipbook. */
+  webtoon?: boolean;
   /** Background music to play softly while reading. */
   audioUrl?: string;
   /** Per-page narration URLs (aligned to page index; null where none). */
@@ -97,6 +99,7 @@ export default function BookViewer({
   pages,
   onClose,
   singlePage,
+  webtoon,
   audioUrl,
   narrationUrls,
 }: Props) {
@@ -110,7 +113,12 @@ export default function BookViewer({
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const bookRef = useRef<FlipBookInstance | null>(null);
+  // 웹툰: scroll container + per-panel refs for the visible-page observer.
+  const webtoonRootRef = useRef<HTMLDivElement | null>(null);
+  const panelRefs = useRef<(HTMLImageElement | null)[]>([]);
   const [dims, setDims] = useState<{ w: number; h: number } | null>(null);
+  // 웹툰 column width (px). Bigger default on desktop; Ctrl+wheel zooms it.
+  const [webtoonW, setWebtoonW] = useState(680);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const narrationRef = useRef<HTMLAudioElement | null>(null);
   const [musicOn, setMusicOn] = useState(false);
@@ -347,6 +355,54 @@ export default function BookViewer({
     };
   }, [aspect, singlePage]);
 
+  // 웹툰: drive narration/music from scroll. An IntersectionObserver with a
+  // center band (rootMargin -50%/-50%) reports the single panel crossing the
+  // viewport's vertical middle as the "current page" — the scroll equivalent of
+  // the flipbook's onFlip. Music start needs a user gesture, so the scroll
+  // handlers on the container also kick it off (the ref-guard makes both safe).
+  useEffect(() => {
+    if (!webtoon) return;
+    const root = webtoonRootRef.current;
+    if (!root) return;
+    const els = panelRefs.current.filter(Boolean) as HTMLImageElement[];
+    if (!els.length) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (!e.isIntersecting) continue;
+          const i = Number((e.target as HTMLElement).dataset.index);
+          if (Number.isNaN(i) || i === currentPageRef.current) continue;
+          currentPageRef.current = i;
+          if (i >= 1) startMusicOnce();
+          if (i === 0 || i >= pages.length - 1) stopMusic();
+          playNarrationForPage(i);
+        }
+      },
+      { root, rootMargin: "-50% 0px -50% 0px", threshold: 0 },
+    );
+    els.forEach((el) => obs.observe(el));
+    return () => obs.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [webtoon, pages.length]);
+
+  // 웹툰: Ctrl/⌘ + wheel zooms the column width. A native listener with
+  // { passive: false } is required — React's onWheel can't preventDefault the
+  // browser's own ctrl+wheel page zoom.
+  useEffect(() => {
+    if (!webtoon) return;
+    const root = webtoonRootRef.current;
+    if (!root) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      setWebtoonW((w) =>
+        Math.round(Math.min(1200, Math.max(360, w - e.deltaY))),
+      );
+    };
+    root.addEventListener("wheel", onWheel, { passive: false });
+    return () => root.removeEventListener("wheel", onWheel);
+  }, [webtoon]);
+
   const pageEls = useMemo(
     () =>
       pages.map((p, i) => (
@@ -381,15 +437,17 @@ export default function BookViewer({
           <span>새 책 보기</span>
         </button>
       )}
-      <button
-        type="button"
-        className={`bv-auto${autoPlaying ? " is-on" : ""}`}
-        onClick={() => (autoPlaying ? setAutoPlaying(false) : setAutoOpen(true))}
-        aria-label={autoPlaying ? "자동보기 정지" : "자동보기"}
-        title={autoPlaying ? "자동보기 정지" : "자동보기"}
-      >
-        <span>{autoPlaying ? "정지" : "자동보기"}</span>
-      </button>
+      {!webtoon && (
+        <button
+          type="button"
+          className={`bv-auto${autoPlaying ? " is-on" : ""}`}
+          onClick={() => (autoPlaying ? setAutoPlaying(false) : setAutoOpen(true))}
+          aria-label={autoPlaying ? "자동보기 정지" : "자동보기"}
+          title={autoPlaying ? "자동보기 정지" : "자동보기"}
+        >
+          <span>{autoPlaying ? "정지" : "자동보기"}</span>
+        </button>
+      )}
       {autoOpen && (
         <AutoPlayModal
           initial={autoSeconds}
@@ -419,6 +477,36 @@ export default function BookViewer({
           </button>
         </>
       )}
+      {webtoon ? (
+        <div
+          ref={webtoonRootRef}
+          className="bv-webtoon"
+          onScroll={startMusicOnce}
+          onWheel={startMusicOnce}
+          onTouchStart={startMusicOnce}
+        >
+          <div
+            className="bv-webtoon__strip"
+            style={{ width: webtoonW, maxWidth: "100%" }}
+          >
+            {pages.map((p, i) => (
+              <img
+                key={p.url}
+                ref={(el) => {
+                  panelRefs.current[i] = el;
+                }}
+                data-index={i}
+                className="bv-webtoon__img"
+                src={p.url}
+                alt={`page ${i + 1}`}
+                draggable={false}
+                decoding="async"
+                loading={i < 2 ? "eager" : "lazy"}
+              />
+            ))}
+          </div>
+        </div>
+      ) : (
       <div
         ref={containerRef}
         className="bv-stage"
@@ -465,6 +553,7 @@ export default function BookViewer({
           </Suspense>
         )}
       </div>
+      )}
     </div>
   );
 }

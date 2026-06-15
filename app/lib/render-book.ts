@@ -45,6 +45,7 @@ export async function renderSnapshotToImages(
   pages: EditorPage[],
   fileName = "book.pdf",
   pageW: number = PAGE_W,
+  pngMultiplier = 1,
 ): Promise<RenderedBook> {
   const fabric = await import("fabric");
   await ensurePageFonts(pages);
@@ -66,7 +67,7 @@ export async function renderSnapshotToImages(
       off.backgroundColor = "#ffffff";
       off.renderAll();
     }
-    pngs.push(off.toDataURL({ format: "png", multiplier: 1 }));
+    pngs.push(off.toDataURL({ format: "png", multiplier: pngMultiplier }));
   }
   off.dispose();
 
@@ -119,6 +120,7 @@ export async function renderCoverThumb(
 export async function renderSnapshotToPages(
   pages: EditorPage[],
   pageW: number = PAGE_W,
+  multiplier = 1.5,
 ): Promise<RenderedPage[]> {
   const fabric = await import("fabric");
   await ensurePageFonts(pages);
@@ -140,9 +142,15 @@ export async function renderSnapshotToPages(
       off.backgroundColor = "#ffffff";
       off.renderAll();
     }
-    // 1.5× for crisp text/lines; pages have a white bg so JPEG is fine.
-    const url = off.toDataURL({ format: "jpeg", quality: 0.92, multiplier: 1.5 });
-    out.push({ url, width: pageW, height: PAGE_H });
+    // Caller picks the multiplier (1.5× default for crisp text/lines; webtoon
+    // pages are narrow — only ~563px — so they're rendered higher-res so they
+    // stay sharp when enlarged/zoomed on a big screen). White bg → JPEG is fine.
+    const url = off.toDataURL({ format: "jpeg", quality: 0.92, multiplier });
+    out.push({
+      url,
+      width: Math.round(pageW * multiplier),
+      height: Math.round(PAGE_H * multiplier),
+    });
   }
   off.dispose();
   return out;
@@ -195,6 +203,13 @@ export async function openBookForReading(book: StoreBook): Promise<OpenedBook> {
     if (!full) throw new Error("책 내용을 불러오지 못했어요.");
     pages = full.pages;
   }
-  const rendered = await renderSnapshotToPages(pages, book.pageW || PAGE_W);
+  // Webtoon panels are narrow (9:16) — render them higher-res so they stay
+  // crisp when shown larger / zoomed on desktop.
+  const multiplier = book.layout === "webtoon" ? 2.2 : 1.5;
+  const rendered = await renderSnapshotToPages(
+    pages,
+    book.pageW || PAGE_W,
+    multiplier,
+  );
   return { rendered, revoke: () => revokePages(rendered) };
 }

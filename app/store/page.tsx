@@ -24,6 +24,7 @@ type Reader = {
   pages: RenderedPage[];
   revoke: () => void;
   single: boolean;
+  webtoon: boolean;
   audioUrl?: string;
   narrationUrls?: (string | null)[];
 };
@@ -82,6 +83,7 @@ export default function StorePage() {
         pages: rendered,
         revoke,
         single: book.layout === "single",
+        webtoon: book.layout === "webtoon",
         audioUrl,
         narrationUrls: nUrls.some(Boolean) ? nUrls : undefined,
       });
@@ -100,6 +102,7 @@ export default function StorePage() {
       <BookViewer
         pages={reader.pages}
         singlePage={reader.single}
+        webtoon={reader.webtoon}
         audioUrl={reader.audioUrl}
         narrationUrls={reader.narrationUrls}
         onClose={() => setReader(null)}

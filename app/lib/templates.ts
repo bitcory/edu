@@ -18,6 +18,7 @@ export const TEMPLATES: BookTemplate[] = [
   { id: "square", label: "정사각형", width: PAGE_H, layout: "single" },
   { id: "a4", label: "A4 세로", width: Math.round(PAGE_H * (210 / 297)), layout: "spread" },
   { id: "landscape", label: "가로형", width: Math.round(PAGE_H * (4 / 3)), layout: "single" },
+  { id: "webtoon", label: "웹툰형", width: Math.round(PAGE_H * (9 / 16)), layout: "webtoon" },
 ];
 
 export const DEFAULT_TEMPLATE = TEMPLATES[0];

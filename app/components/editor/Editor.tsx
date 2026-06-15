@@ -403,14 +403,15 @@ export default function Editor({
   // Compute the partner page that should sit next to the active one in
   // spread mode. Cover and unpaired tail pages have no partner.
   const partnerIndex = useMemo<number | null>(() => {
-    if (!spreadMode) return null;
+    // 웹툰형은 세로 스크롤 — 좌·우 펼침면 미리보기가 없다.
+    if (!spreadMode || layout === "webtoon") return null;
     if (activeIndex === 0) return null;
     if (activeIndex % 2 === 1) {
       const next = activeIndex + 1;
       return next < pages.length ? next : null;
     }
     return activeIndex - 1;
-  }, [spreadMode, activeIndex, pages.length]);
+  }, [spreadMode, layout, activeIndex, pages.length]);
 
   const apiRef = useRef<FabricApi | null>(null);
   // The active page's thumbnail — scrolled into view when it changes (e.g. on
@@ -1343,7 +1344,8 @@ export default function Editor({
     // Downscale very large images on import so each one doesn't bloat the
     // canvas state (and the undo history × each snapshot × auto-save). Cap
     // at 2× the page dimensions — more than enough for a continuous spread.
-    const MAX_DIM = Math.max(PAGE_W, PAGE_H) * 2;
+    // Webtoon panels are narrow but read large/zoomed, so keep a bit more.
+    const MAX_DIM = Math.max(PAGE_W, PAGE_H) * (layout === "webtoon" ? 2.4 : 2);
     const url = await downscaleImageDataUrl(rawUrl, MAX_DIM);
     const img = await fabric.FabricImage.fromURL(url, {
       crossOrigin: "anonymous",
@@ -1362,7 +1364,7 @@ export default function Editor({
     api.canvas.add(img);
     api.canvas.setActiveObject(img);
     api.canvas.requestRenderAll();
-  }, []);
+  }, [layout]);
 
   const addShape = useCallback(
     async (kind: "rect" | "circle") => {
@@ -1479,7 +1481,7 @@ export default function Editor({
         snapshotTimerRef.current = null;
       }
 
-      const MAX_DIM = Math.max(PAGE_W, PAGE_H) * 2;
+      const MAX_DIM = Math.max(PAGE_W, PAGE_H) * (layout === "webtoon" ? 2.4 : 2);
       const built: EditorPage[] = [];
       let failed = 0;
       try {
@@ -1508,6 +1510,30 @@ export default function Editor({
             const iw = img.width ?? PAGE_W;
             const scale = PAGE_H / ih;
             const scaledW = iw * scale;
+
+            // 웹툰형: one image = one full page (no left/right spread split).
+            // The page is already 9:16, so fill the height and center the image
+            // horizontally on its single page.
+            if (layout === "webtoon") {
+              img.set({
+                scaleX: scale,
+                scaleY: scale,
+                angle: 0,
+                left: (PAGE_W - scaledW) / 2,
+                top: 0,
+              });
+              await api.load(null);
+              api.canvas.add(img);
+              api.canvas.requestRenderAll();
+              built.push({
+                id: Math.random().toString(36).slice(2, 10),
+                kind: "content",
+                data: api.serialize(),
+                thumb: api.toPng(0.2),
+              });
+              continue;
+            }
+
             const isWide = scaledW > PAGE_W + 1;
             const leftPageLeft = isWide ? 0 : (PAGE_W * 2 - scaledW) / 2;
             img.set({
@@ -1589,7 +1615,7 @@ export default function Editor({
         bulkBuildingRef.current = false;
       }
     },
-    [pages, PAGE_W],
+    [pages, PAGE_W, layout],
   );
 
   const removePage = useCallback(
@@ -2328,14 +2354,16 @@ export default function Editor({
               </option>
             ))}
           </select>
-          <button
-            type="button"
-            className={`ed-tool${spreadMode ? " is-active" : ""}`}
-            onClick={() => setSpreadMode((v) => !v)}
-            title="펼침면 미리보기 (좌·우 페이지를 같이 보기)"
-          >
-            <Columns2 size={16} /> {spreadMode ? "한 페이지" : "스프레드"}
-          </button>
+          {layout !== "webtoon" && (
+            <button
+              type="button"
+              className={`ed-tool${spreadMode ? " is-active" : ""}`}
+              onClick={() => setSpreadMode((v) => !v)}
+              title="펼침면 미리보기 (좌·우 페이지를 같이 보기)"
+            >
+              <Columns2 size={16} /> {spreadMode ? "한 페이지" : "스프레드"}
+            </button>
+          )}
         </div>
         <div className="ed-undo-group">
           <button

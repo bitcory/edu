@@ -212,6 +212,9 @@ function EditPageInner() {
           pages,
           "내가만든책.pdf",
           pw,
+          // Webtoon panels are narrow (9:16) — embed hi-res PNGs so the preview
+          // (and PDF) stay crisp instead of upscaling a 563px page.
+          lyt === "webtoon" ? 2.2 : 1,
         );
         // Reflect the book's music + per-page narration in the preview, exactly
         // as a reader will hear it. These live server-side under the book id, so
@@ -319,6 +322,7 @@ function EditPageInner() {
           <BookViewer
             pages={mode.rendered}
             singlePage={layout === "single"}
+            webtoon={layout === "webtoon"}
             audioUrl={mode.audioUrl}
             narrationUrls={mode.narrationUrls}
             onClose={() => setMode({ kind: "edit" })}

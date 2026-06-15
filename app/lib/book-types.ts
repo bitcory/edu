@@ -8,8 +8,8 @@ export type BookStatus = "draft" | "pending" | "approved" | "rejected";
 // "editor" = Fabric snapshot (pages). "pdf" = uploaded PDF stored on disk/R2.
 export type BookKind = "editor" | "pdf";
 
-// Reading layout: 양면(펼침) vs 단면(한 쪽씩).
-export type BookLayout = "spread" | "single";
+// Reading layout: 양면(펼침) vs 단면(한 쪽씩) vs 웹툰(세로 스크롤).
+export type BookLayout = "spread" | "single" | "webtoon";
 
 export type StoreBook = {
   id: string;
