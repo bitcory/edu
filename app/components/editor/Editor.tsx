@@ -2036,19 +2036,16 @@ export default function Editor({
     }
   }, [pages, activeIndex, onSaveDraft, pageW, layout, captionText]);
 
-  // 내서재로: 임시저장한 다음 내 서재로 이동. 저장이 실패하면(작업 유실 방지)
-  // 이동하지 않는다.
+  // 내서재로: 임시저장 없이 바로 이동. (마지막 임시저장 이후의 변경은 저장되지 않음.)
   const router = useRouter();
-  const handleSaveAndLibrary = useCallback(async () => {
-    const ok = await handleSaveDraft();
-    if (ok) router.push("/library");
-  }, [handleSaveDraft, router]);
+  const handleSaveAndLibrary = useCallback(() => {
+    router.push("/library");
+  }, [router]);
 
-  // 북스토어로: 임시저장한 다음 북스토어로 이동. 저장이 실패하면 이동하지 않는다.
-  const handleSaveAndStore = useCallback(async () => {
-    const ok = await handleSaveDraft();
-    if (ok) router.push("/store");
-  }, [handleSaveDraft, router]);
+  // 북스토어로: 임시저장 없이 바로 이동.
+  const handleSaveAndStore = useCallback(() => {
+    router.push("/store");
+  }, [router]);
 
   // Close the mobile properties drawer (keeps the canvas selection so the user
   // can reopen "편집하기" to keep editing the same object).
@@ -2253,9 +2250,9 @@ export default function Editor({
             <button
               type="button"
               className="ed-draft"
-              onClick={() => void handleSaveAndLibrary()}
+              onClick={() => handleSaveAndLibrary()}
               disabled={exporting || draftState === "saving"}
-              title="임시저장한 뒤 내 서재로 이동"
+              title="내 서재로 이동"
             >
               <BookMarked size={16} />
               <span className="ed-draft__label">내서재</span>
@@ -2265,9 +2262,9 @@ export default function Editor({
             <button
               type="button"
               className="ed-draft"
-              onClick={() => void handleSaveAndStore()}
+              onClick={() => handleSaveAndStore()}
               disabled={exporting || draftState === "saving"}
-              title="임시저장한 뒤 북스토어로 이동"
+              title="북스토어로 이동"
             >
               <Store size={16} />
               <span className="ed-draft__label">북스토어</span>
