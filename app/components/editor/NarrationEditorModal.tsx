@@ -8,12 +8,17 @@ import {
   encodeSlicesToMp3,
 } from "../../lib/narration-audio";
 import { getNarrationUrls, uploadNarration } from "../../lib/store";
+import type { BookLayout } from "../../lib/book-types";
 import { orderedCells, type SpreadRow } from "./ContentTextModal";
 
 type Props = {
   bookId: string;
   /** Same page-grid the 내용추가 modal uses (content pages, cover excluded). */
   spreads: SpreadRow[];
+  /** Reading layout. Webtoon has no left/right halves, so the sequential
+   *  auto-matching (built for 그림책 spreads) is skipped — every scene is
+   *  matched by hand instead. */
+  layout: BookLayout;
   onClose: () => void;
   onApplied: (pageIndices: number[]) => void;
 };
@@ -31,9 +36,11 @@ const REGION_COLOR = "rgba(240, 111, 95, 0.22)";
 export default function NarrationEditorModal({
   bookId,
   spreads,
+  layout,
   onClose,
   onApplied,
 }: Props) {
+  const isWebtoon = layout === "webtoon";
   const containerRef = useRef<HTMLDivElement | null>(null);
   const waveWrapRef = useRef<HTMLDivElement | null>(null);
   // Horizontal zoom (px per second). minZoomRef = the "fit to container" level.
@@ -300,16 +307,20 @@ export default function NarrationEditorModal({
       regions.addRegion({ start: t, end, color: REGION_COLOR });
     }
 
-    // Re-match every segment in time order to the odd (left) pages.
-    const ordered = [...(regions.getRegions?.() ?? [])].sort(
-      (a: any, b: any) => a.start - b.start,
-    );
-    const leftCells = cells.filter((c) => !c.isRight);
-    const map: Record<string, string> = {};
-    for (let i = 0; i < ordered.length && i < leftCells.length; i++) {
-      map[ordered[i].id] = leftCells[i].id;
+    // 그림책: re-match every segment in time order to the odd (left) pages.
+    // 웹툰: keep whatever the user assigned by hand — don't clobber it with a
+    // sequential map. New segments just stay unassigned until matched.
+    if (!isWebtoon) {
+      const ordered = [...(regions.getRegions?.() ?? [])].sort(
+        (a: any, b: any) => a.start - b.start,
+      );
+      const leftCells = cells.filter((c) => !c.isRight);
+      const map: Record<string, string> = {};
+      for (let i = 0; i < ordered.length && i < leftCells.length; i++) {
+        map[ordered[i].id] = leftCells[i].id;
+      }
+      setSegToPage(map);
     }
-    setSegToPage(map);
     syncSegs();
   };
 
@@ -386,8 +397,12 @@ export default function NarrationEditorModal({
       return;
     }
     setPool((prev) => [...prev, ...items]);
-    // Auto-assign each newly uploaded audio to the next free LEFT (odd) page
-    // in order — 1쪽, 3쪽, 5쪽… — since a spread's scene lives on its left half.
+    // 그림책(spread/single): auto-assign each newly uploaded audio to the next
+    // free LEFT (odd) page in order — 1쪽, 3쪽, 5쪽… — since a spread's scene
+    // lives on its left half. 웹툰: no left/right halves and scene order rarely
+    // matches file order, so we skip auto-assign and let the user match each
+    // scene by hand.
+    if (isWebtoon) return;
     setPageToPool((prev) => {
       const next = { ...prev };
       const leftCells = cells.filter((c) => !c.isRight);

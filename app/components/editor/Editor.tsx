@@ -3135,6 +3135,7 @@ export default function Editor({
         <NarrationEditorModal
           bookId={bookId}
           spreads={captionSpreads}
+          layout={layout}
           onApplied={markNarrationPages}
           onClose={() => setNarrEditorOpen(false)}
         />
