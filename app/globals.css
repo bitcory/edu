@@ -3634,6 +3634,29 @@ textarea.ed-input {
   border-color: #c08a4a;
   background: #fff6e9;
 }
+.narr-ed__del-saved {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  margin-top: 8px;
+  padding: 6px 10px;
+  border: 1px solid #e6b9ad;
+  border-radius: 8px;
+  background: #fcefec;
+  color: #b4503c;
+  font-weight: 700;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.narr-ed__del-saved:hover {
+  border-color: #d98c7c;
+  background: #fbe4df;
+}
+.narr-ed__del-saved:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
 .narr-ed__file {
   display: flex;
   align-items: center;

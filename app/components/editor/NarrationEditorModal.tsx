@@ -7,7 +7,7 @@ import {
   detectSpeechRegions,
   encodeSlicesToMp3,
 } from "../../lib/narration-audio";
-import { getNarrationUrls, uploadNarration } from "../../lib/store";
+import { getNarrationUrls, removeNarration, uploadNarration } from "../../lib/store";
 import type { BookLayout } from "../../lib/book-types";
 import { orderedCells, type SpreadRow } from "./ContentTextModal";
 
@@ -442,6 +442,32 @@ export default function NarrationEditorModal({
     setPool((prev) => prev.filter((p) => p.id !== poolId));
   };
 
+  // Delete the narration already saved on a page (server-side). Clears both the
+  // saved badge and any pending pool assignment for that page.
+  const deleteSavedNarration = async (cell: (typeof cells)[number]) => {
+    if (saving) return;
+    if (!confirm(`${cell.label}의 기존 나레이션을 지울까요?`)) return;
+    setSaving(true);
+    try {
+      await removeNarration(bookId, cell.index);
+      setSavedPages((prev) => {
+        const n = new Set(prev);
+        n.delete(cell.id);
+        return n;
+      });
+      setPageToPool((prev) => {
+        if (!prev[cell.id]) return prev;
+        const n = { ...prev };
+        delete n[cell.id];
+        return n;
+      });
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // Save every page that has a pooled audio assigned to it.
   const applyMatch = async () => {
     const targets = cells
@@ -631,6 +657,19 @@ export default function NarrationEditorModal({
                         : "없음"}
                     </b>
                   </span>
+                  {activePage && savedPages.has(activePage) && (
+                    <button
+                      type="button"
+                      className="narr-ed__del-saved"
+                      disabled={saving}
+                      onClick={() => {
+                        const cell = cells.find((c) => c.id === activePage);
+                        if (cell) void deleteSavedNarration(cell);
+                      }}
+                    >
+                      <Trash2 size={14} /> 이 페이지의 기존 나레이션 지우기
+                    </button>
+                  )}
                 </div>
 
                 <input
