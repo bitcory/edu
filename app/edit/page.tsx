@@ -251,8 +251,15 @@ function EditPageInner() {
     async (pages: EditorPage[], values: SubmitValues) => {
       setSubmitting(true);
       try {
-        if (bookId) {
-          await updateBook(bookId, {
+        // Publish IN PLACE whenever a server row already exists for this work —
+        // either an existing book opened with ?book= (bookId) or the cloud draft
+        // this session was 임시저장'd into (draftId). Using that same id means any
+        // narration/bgm already uploaded under it carries straight over to the
+        // published book, and no orphan 비공개 draft is left behind. Only a book
+        // that has never been saved server-side creates a brand-new row.
+        const targetId = bookId ?? draftId;
+        if (targetId) {
+          await updateBook(targetId, {
             pages,
             title: values.title,
             author: values.author,
@@ -287,7 +294,7 @@ function EditPageInner() {
         setSubmitOpen(false);
       }
     },
-    [bookId, router, pageW, layout, storyText],
+    [bookId, draftId, router, pageW, layout, storyText],
   );
 
   if (loadingBook) {
