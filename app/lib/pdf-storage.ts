@@ -214,6 +214,47 @@ export async function deleteCover(key: string): Promise<void> {
   }
 }
 
+/** Store a generated/uploaded story image (data URL) under story/<uuid>.<ext>.
+ * Returns the R2 key, or null if the value isn't a base64 image data URL. */
+export async function saveStoryImageFromDataUrl(dataUrl: string): Promise<string | null> {
+  const m = /^data:(image\/[\w.+-]+);base64,(.+)$/.exec(dataUrl);
+  if (!m) return null;
+  const ext = (m[1].split("/")[1] || "png").split("+")[0];
+  const { client, bucket } = r2();
+  const key = `story/${globalThis.crypto.randomUUID()}.${ext}`;
+  await client.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: Buffer.from(m[2], "base64"),
+      ContentType: m[1],
+    }),
+  );
+  return key;
+}
+
+/** Presigned GET URL for a story image (story/ prefix only). Pass downloadName
+ * to force a browser download via Content-Disposition (no CORS needed). */
+export async function presignStoryDownload(
+  key: string,
+  expiresInSeconds = 3600,
+  downloadName?: string,
+): Promise<string> {
+  if (!key.startsWith("story/")) throw new Error("invalid story key");
+  const { client, bucket } = r2();
+  return getSignedUrl(
+    client,
+    new GetObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      ...(downloadName
+        ? { ResponseContentDisposition: `attachment; filename="${downloadName}"` }
+        : {}),
+    }),
+    { expiresIn: expiresInSeconds },
+  );
+}
+
 export async function savePdf(id: string, bytes: Uint8Array): Promise<void> {
   const { client, bucket } = r2();
   await client.send(

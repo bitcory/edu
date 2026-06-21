@@ -10,13 +10,18 @@
  * yet — this runs standalone.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Library, UsersRound, Clapperboard,
   Menu, FileInput, FolderOpen, X, BookOpen, ArrowLeft, Ruler,
   ExternalLink, MessageSquare, AudioLines, Music, Workflow, ScrollText, Wand2,
+  ImagePlus, Sparkles, Square, Download,
 } from "lucide-react";
+import {
+  generateViaApi, generateViaChatGpt, isExtensionReady,
+  type Aspect, type Engine, type GenHandle,
+} from "./imagegen";
 
 const SAMPLE_URL = "/picbook/sample_library.json";
 const CACHE_KEY = "toolb_step8_picbook_v1";
@@ -30,6 +35,7 @@ type StoryChar = {
   role?: string;
   id_point?: string;
   prompt_en?: string;
+  imageKey?: string; // R2 key of the generated/uploaded character image
   [k: string]: unknown;
 };
 type StoryCut = {
@@ -158,6 +164,10 @@ function normalizeBook(b: StoryBook): StoryBook {
   };
 }
 
+function charKeyOf(bookIdx: number, c: StoryChar, idx: number): string {
+  return `${bookIdx}:${c.id ?? idx}`;
+}
+
 function normalizeLib(obj: StoryLib | StoryBook | null): StoryLib | null {
   if (!obj) return null;
   const lib: StoryLib = (obj as StoryLib).books
@@ -182,6 +192,8 @@ export default function StoryPage() {
   const [scriptPreview, setScriptPreview] = useState("");
   const [scriptParsed, setScriptParsed] = useState("");
   const [toastMsg, setToastMsg] = useState("");
+  // Per-character image display URLs, keyed by `${bookIdx}:${charId}`.
+  const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
   const modalFileRef = useRef<HTMLInputElement | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -226,6 +238,73 @@ export default function StoryPage() {
     (book?.characters || []).forEach((c) => { if (c.id) m[c.id] = c; });
     return m;
   }, [book]);
+
+  // Upload a generated/uploaded image to R2, show it for THIS character only,
+  // and persist its key on the character in the lib (localStorage).
+  const handleCharImage = useCallback(async (activeIdx: number, dataUrl: string) => {
+    const cc = lib?.books?.[bookIdx]?.characters?.[activeIdx];
+    if (!cc) return;
+    const ck = charKeyOf(bookIdx, cc, activeIdx);
+    setImageUrls((m) => ({ ...m, [ck]: dataUrl })); // optimistic (instant)
+    try {
+      const r = await fetch("/api/story/save-image", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ dataUrl }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d.key) return; // keep the optimistic data URL on failure
+      setImageUrls((m) => ({ ...m, [ck]: d.url || dataUrl }));
+      setLib((prev) => {
+        if (!prev?.books) return prev;
+        const books = [...prev.books];
+        const bk = books[bookIdx];
+        if (!bk) return prev;
+        const characters = [...(bk.characters || [])];
+        const target = characters[activeIdx];
+        if (!target) return prev;
+        characters[activeIdx] = { ...target, imageKey: d.key };
+        books[bookIdx] = { ...bk, characters };
+        const next = { ...prev, books };
+        try { localStorage.setItem(CACHE_KEY, JSON.stringify(next)); } catch {}
+        return next;
+      });
+    } catch {
+      /* keep optimistic data URL */
+    }
+  }, [lib, bookIdx]);
+
+  // Refresh presigned display URLs for any stored character image keys.
+  useEffect(() => {
+    const keys: string[] = [];
+    const keyByCk: Record<string, string> = {};
+    (lib?.books || []).forEach((b, bi) =>
+      (b.characters || []).forEach((c, ci) => {
+        if (typeof c.imageKey === "string" && c.imageKey) {
+          keys.push(c.imageKey);
+          keyByCk[charKeyOf(bi, c, ci)] = c.imageKey;
+        }
+      }),
+    );
+    if (!keys.length) return;
+    let alive = true;
+    fetch("/api/story/image-urls", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ keys }),
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        if (!alive || !d?.urls) return;
+        setImageUrls((m) => {
+          const next = { ...m };
+          for (const ck in keyByCk) { const u = d.urls[keyByCk[ck]]; if (u) next[ck] = u; }
+          return next;
+        });
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [lib]);
 
   function loadLib(obj: StoryLib | StoryBook) {
     const norm = normalizeLib(obj);
@@ -566,7 +645,11 @@ export default function StoryPage() {
                   </div>
                   {currentChar && (
                     <CharPanel
+                      key={charKeyOf(bookIdx, currentChar, activeChar)}
                       char={currentChar}
+                      imageUrl={imageUrls[charKeyOf(bookIdx, currentChar, activeChar)]}
+                      imageKey={typeof currentChar.imageKey === "string" ? currentChar.imageKey : undefined}
+                      onGenerated={(dataUrl) => handleCharImage(activeChar, dataUrl)}
                       appearCuts={cuts.filter((cut) => (cut.ref || []).includes(currentChar.id || "")).map((cut) => cut.no)}
                       onCopy={(t) => copyText(t)}
                       buildPromptFor={(base) => buildPrompt(book, base, "char")}
@@ -903,12 +986,81 @@ export default function StoryPage() {
   );
 }
 
-function CharPanel({ char, appearCuts, onCopy, buildPromptFor }: {
+// API/ChatGPT 엔진 토글 — 지금은 ChatGPT(확장)만 사용하므로 숨김.
+// 나중에 Path A(API)를 다시 쓰려면 true 로 바꾸면 토글이 다시 나타난다.
+const SHOW_ENGINE_TOGGLE = false;
+
+function CharPanel({ char, imageUrl, imageKey, onGenerated, appearCuts, onCopy, buildPromptFor }: {
   char: StoryChar;
+  imageUrl?: string;
+  imageKey?: string;
+  onGenerated: (dataUrl: string) => void;
   appearCuts: (number | string | undefined)[];
   onCopy: (t: string) => void;
   buildPromptFor: (base: string) => string;
 }) {
+  const [generating, setGenerating] = useState(false);
+  const [statusMsg, setStatusMsg] = useState("");
+  const [engine, setEngine] = useState<Engine>("chatgpt");
+  const [extReady, setExtReady] = useState(false);
+  const [lightbox, setLightbox] = useState(false);
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const handleRef = useRef<GenHandle | null>(null);
+
+  const ASPECT: Aspect = "16:9";
+  const fileName = (char.name_ko || char.id || "character").toString();
+  // Download href: presigned R2 attachment when saved; data URL falls back to direct download.
+  const downloadHref = imageKey
+    ? `/api/story/download?key=${encodeURIComponent(imageKey)}&name=${encodeURIComponent(fileName)}`
+    : imageUrl;
+
+  // Detect the ChatGPT helper extension so its engine option can be enabled.
+  useEffect(() => {
+    let alive = true;
+    isExtensionReady().then((r) => { if (alive) setExtReady(r); });
+    return () => { alive = false; };
+  }, []);
+
+  // Esc closes the image lightbox.
+  useEffect(() => {
+    if (!lightbox) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setLightbox(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [lightbox]);
+
+  function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => onGenerated(String(reader.result)); // → R2 + persist on this character
+    reader.readAsDataURL(f);
+    e.target.value = "";
+  }
+
+  function startGenerate() {
+    if (generating) return;
+    const prompt = buildPromptFor(char.prompt_en || "");
+    if (!prompt.trim()) { setStatusMsg("프롬프트가 비어 있어요."); return; }
+    setGenerating(true);
+    setStatusMsg(engine === "chatgpt" ? "ChatGPT 준비 중…" : "이미지 생성 중…");
+    const handle = engine === "chatgpt"
+      ? generateViaChatGpt({ prompt, aspect: ASPECT, onProgress: setStatusMsg })
+      : generateViaApi({ prompt, aspect: ASPECT });
+    handleRef.current = handle;
+    handle.promise
+      .then((dataUrl) => { onGenerated(dataUrl); setStatusMsg(""); })
+      .catch((err: unknown) => { setStatusMsg((err as Error)?.message || "생성 실패"); })
+      .finally(() => { setGenerating(false); handleRef.current = null; });
+  }
+
+  function stopGenerate() {
+    handleRef.current?.cancel();
+    handleRef.current = null;
+    setGenerating(false);
+    setStatusMsg("정지됨");
+  }
+
   return (
     <div className="story-char-panel" key={char.id}>
       <div className="story-cp-head">
@@ -934,18 +1086,130 @@ function CharPanel({ char, appearCuts, onCopy, buildPromptFor }: {
           {escapeId(char.id)}
         </button>
       </div>
-      <div className="story-prompt">{buildPromptFor(char.prompt_en || "")}</div>
-      <div className="story-actions">
-        <button
-          type="button"
-          className="story-mini"
-          title="본문 + character_add + 네거티브를 합쳐 복사"
-          onClick={() => onCopy(buildPromptFor(char.prompt_en || ""))}
-        >
-          프롬프트 복사
-        </button>
+
+      <div className="story-cp-row">
+        {/* LEFT 60% — prompt */}
+        <div className="story-cp-left">
+          <div className="story-prompt">{buildPromptFor(char.prompt_en || "")}</div>
+          <div className="story-actions">
+            <button
+              type="button"
+              className="story-mini"
+              title="본문 + character_add + 네거티브를 합쳐 복사"
+              onClick={() => onCopy(buildPromptFor(char.prompt_en || ""))}
+            >
+              프롬프트 복사
+            </button>
+          </div>
+        </div>
+
+        {/* RIGHT 40% — image */}
+        <div className="story-cp-imgcol">
+          <div className="story-img-stage">
+            {imageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={imageUrl}
+                alt="캐릭터 이미지"
+                className="story-img-preview"
+                role="button"
+                title="클릭해서 크게 보기"
+                onClick={() => setLightbox(true)}
+              />
+            ) : (
+              <div className="story-img-empty">
+                <ImagePlus size={28} />
+                <span>이미지를 업로드하거나<br />생성해 주세요</span>
+              </div>
+            )}
+            {generating && (
+              <div className="story-img-progress">{statusMsg || "생성 중…"}</div>
+            )}
+            <button
+              type="button"
+              className="story-img-upload"
+              onClick={() => fileRef.current?.click()}
+            >
+              <ImagePlus size={14} /> 이미지 업로드
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              hidden
+              onChange={onPickFile}
+            />
+          </div>
+
+          {SHOW_ENGINE_TOGGLE && (
+            <div className="story-img-engine" role="tablist" aria-label="이미지 생성 엔진">
+              <button
+                type="button"
+                className={`story-eng${engine === "api" ? " active" : ""}`}
+                onClick={() => setEngine("api")}
+              >
+                API
+              </button>
+              <button
+                type="button"
+                className={`story-eng${engine === "chatgpt" ? " active" : ""}`}
+                onClick={() => setEngine("chatgpt")}
+                title={extReady ? "ChatGPT 확장으로 생성" : "확장 미설치 — 설치 후 사용 가능"}
+              >
+                ChatGPT{extReady ? "" : " (미설치)"}
+              </button>
+            </div>
+          )}
+
+          <div className="story-img-actions">
+            <button
+              type="button"
+              className="story-mini"
+              onClick={startGenerate}
+              disabled={generating || (engine === "chatgpt" && !extReady)}
+            >
+              <Sparkles size={14} /> {generating ? "생성 중…" : "이미지 생성"}
+            </button>
+            <button
+              type="button"
+              className="story-mini story-mini--ghost"
+              onClick={stopGenerate}
+              disabled={!generating}
+            >
+              <Square size={13} /> 정지
+            </button>
+          </div>
+          {statusMsg && !generating && (
+            <div className="story-img-msg">{statusMsg}</div>
+          )}
+        </div>
       </div>
+
       <div className="story-cp-appear">등장 컷: <b>{appearCuts.length ? appearCuts.join(", ") : "없음"}</b></div>
+
+      {lightbox && imageUrl && (
+        <div
+          className="story-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          onClick={(e) => { if ((e.target as HTMLElement).classList.contains("story-modal-backdrop")) setLightbox(false); }}
+        >
+          <div className="story-lightbox">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={imageUrl} alt={fileName} className="story-lightbox__img" />
+            <div className="story-lightbox__bar">
+              {downloadHref && (
+                <a className="story-btn story-btn--apply" href={downloadHref} download={`${fileName}.png`}>
+                  <Download size={16} /> 다운로드
+                </a>
+              )}
+              <button type="button" className="story-btn" onClick={() => setLightbox(false)}>
+                <X size={16} /> 닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

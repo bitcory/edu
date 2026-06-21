@@ -6168,6 +6168,181 @@ textarea.ed-input {
 .story-root .story-cp-appear { font-size: 0.85rem; color: var(--st-ink-soft); margin-top: 14px; }
 .story-root .story-cp-appear b { color: var(--st-accent); }
 
+/* character panel: prompt (60%) ↔ image (40%) in one row */
+.story-root .story-cp-row {
+  display: flex;
+  gap: 14px;
+  align-items: stretch;
+  margin-top: 4px;
+}
+.story-root .story-cp-left {
+  flex: 0 0 calc(60% - 7px);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.story-root .story-cp-left .story-prompt { flex: 1; margin-bottom: 0; }
+.story-root .story-cp-imgcol {
+  flex: 0 0 calc(40% - 7px);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.story-root .story-img-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 1.5px dashed var(--st-line);
+  border-radius: 12px;
+  background: #fdf6e6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.story-root .story-img-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  cursor: zoom-in;
+}
+
+/* image lightbox (click preview → enlarged) */
+.story-lightbox {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+  width: min(88vw, 620px);
+  max-height: 88vh;
+}
+.story-lightbox__img {
+  max-width: 100%;
+  /* leave room for the download/close bar so it's always visible */
+  max-height: 68vh;
+  object-fit: contain;
+  border-radius: 14px;
+  background: #fffdf7;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.4);
+}
+.story-lightbox__bar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.story-lightbox__bar .story-btn {
+  font-family: var(--font-main);
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  border-radius: 999px;
+  padding: 8px 18px;
+  background: #fffdf7;
+  color: var(--ink);
+  border: 1.5px solid #ecd9b8;
+  box-shadow: 0 3px 0 rgba(120, 84, 40, 0.16);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+}
+.story-lightbox__bar .story-btn--apply {
+  background: var(--accent-2);
+  border-color: #e7a93a;
+  color: #4a3410;
+}
+.story-root .story-img-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--st-ink-soft);
+  font-size: 0.85rem;
+  text-align: center;
+  line-height: 1.45;
+  padding: 16px;
+}
+.story-root .story-img-upload {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  color: var(--st-ink);
+  background: rgba(255, 253, 247, 0.92);
+  border: 1.3px solid var(--st-line);
+  border-radius: 999px;
+  padding: 4px 11px;
+  box-shadow: 0 2px 0 var(--st-shadow);
+  transition: transform 0.12s;
+}
+.story-root .story-img-upload:hover { transform: translateY(-1px); }
+.story-root .story-img-actions { display: flex; gap: 8px; }
+.story-root .story-img-actions .story-mini { flex: 1; justify-content: center; }
+.story-root .story-mini:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; transform: none; }
+
+/* generation progress overlay on the 16:9 stage */
+.story-root .story-img-progress {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(68, 48, 37, 0.82);
+  color: #fff9ea;
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.35;
+}
+
+/* engine toggle (API / ChatGPT) */
+.story-root .story-img-engine {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  background: #fdf6e6;
+  border: 1.3px solid var(--st-line);
+  border-radius: 999px;
+}
+.story-root .story-eng {
+  flex: 1;
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: var(--st-ink-soft);
+  border-radius: 999px;
+  padding: 4px 8px;
+  transition: background 0.15s, color 0.15s;
+}
+.story-root .story-eng.active { background: var(--st-accent); color: #fff; }
+
+.story-root .story-img-msg {
+  font-size: 0.76rem;
+  color: var(--st-ink-soft);
+  text-align: center;
+  line-height: 1.4;
+}
+
+@media (max-width: 640px) {
+  .story-root .story-cp-row { flex-direction: column; }
+  .story-root .story-cp-left,
+  .story-root .story-cp-imgcol { flex: 1 1 auto; }
+  .story-root .story-img-stage { min-height: 180px; }
+}
+
 .story-root .story-prompt {
   font-family: ui-monospace, "JetBrains Mono", monospace;
   font-size: 0.82rem;
