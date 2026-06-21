@@ -3164,6 +3164,16 @@ textarea.ed-input {
   color: #e1604c;
 }
 
+.store-card__stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 700;
+  font-size: 13px;
+  color: #8a7a66;
+  margin-left: auto;
+}
+
 .store-card__reason {
   margin: 0;
   font-size: 12px;

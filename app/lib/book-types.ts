@@ -34,6 +34,7 @@ export type StoreBook = {
   reviewedAt?: number;
   rejectReason?: string;
   likeCount?: number; // populated by the store listing (좋아요 수)
+  viewCount?: number; // 조회수 (book opens)
   audioKey?: string; // R2 key of the background music (MP3), if any
   narration?: (string | null)[]; // R2 key per page index (null = no narration)
   storyText?: string; // raw 내용추가 script, so re-edits reload the textarea

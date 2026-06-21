@@ -222,6 +222,9 @@ export default function StorePage() {
               </div>
               <div className="store-card__meta">
                 <span className="store-card__price">{formatPrice(b.price)}</span>
+                <span className="store-card__stat" title="조회수">
+                  <Eye size={14} /> {b.viewCount ?? 0}
+                </span>
                 <span className="store-card__likes">
                   <Heart size={14} fill="currentColor" /> {b.likeCount ?? 0}
                 </span>

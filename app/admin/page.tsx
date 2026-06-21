@@ -25,6 +25,7 @@ import UserChip from "../components/auth/UserChip";
 import { useIsAdmin } from "../components/auth/useIsAdmin";
 import {
   approveBook,
+  getBook,
   getBookAudioUrl,
   getNarrationUrls,
   getSettlement,
@@ -40,7 +41,7 @@ import {
 } from "../lib/store";
 import { approveAuthor, fetchAuthors, rejectAuthor } from "../lib/author-store";
 import type { Author, AuthorStatus } from "../lib/author-types";
-import { openBookForReading } from "../lib/render-book";
+import { openBookForReading, renderCoverThumb } from "../lib/render-book";
 import { type RenderedPage } from "../lib/pdf-to-images";
 import { formatPrice } from "../lib/format-price";
 import { pickRandomPoolBgm } from "../lib/bgm";
@@ -175,6 +176,34 @@ export default function AdminPage() {
     [refresh],
   );
 
+  // 표지 화질개선: re-render the cover from page 0 at 560px and re-upload.
+  // (Editor books only — PDF books have no Fabric page data.)
+  const refreshCover = useCallback(
+    async (b: StoreBook) => {
+      if (b.kind !== "editor") {
+        alert("표지 화질개선은 에디터로 만든 책만 지원해요 (PDF 책 제외).");
+        return;
+      }
+      setBusy(true);
+      try {
+        const full = await getBook(b.id);
+        const cover = await renderCoverThumb(full?.pages?.[0], full?.pageW ?? 800);
+        if (!cover) {
+          alert("표지를 렌더하지 못했어요 (표지 페이지 데이터가 없습니다).");
+          return;
+        }
+        await updateBookInfo(b.id, { cover });
+        refresh();
+        alert("표지를 560px로 다시 생성했어요.");
+      } catch (err) {
+        alert("표지 화질개선 실패: " + ((err as Error)?.message || ""));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [refresh],
+  );
+
   const saveInfo = useCallback(
     async (values: InfoValues) => {
       if (!editInfo) return;
@@ -292,6 +321,7 @@ export default function AdminPage() {
           onApprove={(id) => void approve(id)}
           onReject={(id) => void reject(id)}
           onEdit={(b) => setEditInfo(b)}
+          onRefreshCover={(b) => void refreshCover(b)}
         />
       )}
 
@@ -323,6 +353,7 @@ function BooksView({
   onApprove,
   onReject,
   onEdit,
+  onRefreshCover,
 }: {
   tab: Tab;
   setTab: (t: Tab) => void;
@@ -332,6 +363,7 @@ function BooksView({
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
   onEdit: (b: StoreBook) => void;
+  onRefreshCover: (b: StoreBook) => void;
 }) {
   return (
     <>
@@ -413,6 +445,17 @@ function BooksView({
                   >
                     <PencilRuler size={16} /> 책 편집
                   </Link>
+                )}
+                {b.kind === "editor" && (
+                  <button
+                    type="button"
+                    className="admin-btn admin-btn--preview"
+                    onClick={() => onRefreshCover(b)}
+                    disabled={busy}
+                    title="표지를 560px로 다시 렌더해 화질 개선"
+                  >
+                    <RotateCcw size={16} /> 표지개선
+                  </button>
                 )}
 
                 {tab === "pending" && (
