@@ -856,7 +856,7 @@ function SettlementView() {
       ) : (
         <>
           <p style={sSummary}>
-            총 읽힘(월) <strong>{total}</strong>회 · 누적 조회수{" "}
+            월 조회수({period}) <strong>{total}</strong>회 · 누적 조회수{" "}
             <strong>{data.totalAllReads}</strong>회 · 작가 실지급 합계{" "}
             <strong style={{ color: "#c75b46" }}>{won(totNet)}</strong>{" "}
             <span style={{ color: "#b09a78" }}>
@@ -869,7 +869,7 @@ function SettlementView() {
               <thead>
                 <tr>
                   <th style={sTh}>작가</th>
-                  <th style={sTh}>읽힘(월)</th>
+                  <th style={sTh}>월 조회수 ({period})</th>
                   <th style={sTh}>누적 조회수</th>
                   <th style={sTh}>비율</th>
                   <th style={sTh}>작가 비율(%)</th>
@@ -974,7 +974,7 @@ function SettlementView() {
           </div>
           <p style={sNote}>
             계산: 총매출 → 부가세(10%) 분리 → 결제수수료 공제 = 분배 풀. 작가
-            정산액 = 풀 × (작가 읽힘 ÷ 전체 읽힘) × (작가 비율 ÷ 100). 실지급액 =
+            정산액 = 풀 × (작가 월 조회수 ÷ 전체 월 조회수) × (작가 비율 ÷ 100). 실지급액 =
             정산액 − 원천징수 3.3%. 비율은 작가별로 조정·저장 즉시 반영(기본 80%).
             ※ 세무 처리는 플랫폼 과세유형에 따라 다르니 회계사 확인 권장.
           </p>
