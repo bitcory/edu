@@ -111,9 +111,9 @@ function EditPageInner() {
     // Render a crisp cover from page 0 — its cached thumb is only 0.2×/blurry,
     // and publishing it would bake a low-res cover into the store.
     if (mode.kind === "preview") {
-      setSubmitCover(
-        (await renderCoverThumb(mode.pages[0], pageW)) ?? mode.pages[0]?.thumb,
-      );
+      // Crisp render only — never the cached 0.2× thumb (would bake a low-res
+      // cover into the store).
+      setSubmitCover(await renderCoverThumb(mode.pages[0], pageW));
     }
     setSubmitOpen(true);
   }, [author, router, isAdmin, mode, pageW]);

@@ -231,10 +231,10 @@ export default function LibraryPage() {
       alert("작업 중인 책이 없어요. 먼저 책을 만들어 주세요.");
       return;
     }
-    // Render a crisp cover from page 0 (its cached thumb is only 0.2×/blurry).
-    const cover =
-      (await renderCoverThumb(saved.pages[0], saved.pageW ?? 800)) ??
-      saved.pages[0]?.thumb;
+    // Render a crisp cover from page 0. Never fall back to its cached 0.2×
+    // thumb — that bakes a blurry ~160px cover into the store. If the render
+    // fails, ship no cover (the publish modal lets the author pick one).
+    const cover = await renderCoverThumb(saved.pages[0], saved.pageW ?? 800);
     setPublishTarget({
       pages: saved.pages,
       pageW: saved.pageW ?? 800,
@@ -254,11 +254,10 @@ export default function LibraryPage() {
       try {
         const full = (await getBook(d.id)) ?? d;
         // Keep a custom cover if one was set; otherwise render a crisp cover
-        // from page 0 rather than reusing its blurry 0.2× thumb.
+        // from page 0. Never reuse its blurry 0.2× thumb as the cover.
         const cover =
           d.coverThumb ??
-          (await renderCoverThumb(full.pages[0], full.pageW ?? 800)) ??
-          full.pages[0]?.thumb;
+          (await renderCoverThumb(full.pages[0], full.pageW ?? 800));
         setPublishTarget({
           pages: full.pages,
           pageW: full.pageW ?? 800,
