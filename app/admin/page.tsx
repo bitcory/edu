@@ -706,6 +706,20 @@ const sTd: CSSProperties = {
   color: "#3a2a1d",
   borderTop: "1px solid rgba(120,90,60,0.1)",
 };
+const sBookTh: CSSProperties = {
+  textAlign: "right",
+  padding: "6px 16px",
+  fontSize: 11,
+  fontWeight: 700,
+  color: "#a08a72",
+};
+const sBookTd: CSSProperties = {
+  textAlign: "right",
+  padding: "6px 16px",
+  fontSize: 13,
+  color: "#5a4636",
+  borderTop: "1px solid rgba(120,90,60,0.08)",
+};
 const sShare: CSSProperties = {
   width: 60,
   padding: "7px 8px",
@@ -944,24 +958,51 @@ function SettlementView() {
                     </tr>
                     {isOpen && (
                       <tr>
-                        <td colSpan={9} style={{ ...sTd, background: "#fbf6ec" }}>
-                          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                            {a.books.length === 0 ? (
-                              <span style={{ color: "#b09a78" }}>읽힌 책이 없어요.</span>
-                            ) : (
-                              a.books.map((bk) => (
-                                <div
-                                  key={bk.bookId}
-                                  style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13 }}
-                                >
-                                  <span>{bk.title || bk.bookId}</span>
-                                  <span style={{ color: "#8a7a66", whiteSpace: "nowrap" }}>
-                                    월 {bk.reads} · 누적 {bk.totalReads}
-                                  </span>
-                                </div>
-                              ))
-                            )}
-                          </div>
+                        <td colSpan={9} style={{ padding: 0, background: "#fbf6ec" }}>
+                          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                            <thead>
+                              <tr>
+                                <th style={sBookTh}>책</th>
+                                <th style={sBookTh}>읽힘(월)</th>
+                                <th style={sBookTh}>누적</th>
+                                <th style={sBookTh}>비율(책별)</th>
+                                <th style={sBookTh}>정산액(세전)</th>
+                                <th style={sBookTh}>원천징수</th>
+                                <th style={sBookTh}>실지급액</th>
+                                <th style={sBookTh}>플랫폼 몫</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {a.books.length === 0 ? (
+                                <tr>
+                                  <td colSpan={8} style={{ ...sBookTd, textAlign: "left", color: "#b09a78" }}>
+                                    읽힌 책이 없어요.
+                                  </td>
+                                </tr>
+                              ) : (
+                                a.books.map((bk) => {
+                                  const bShare = total > 0 ? bk.reads / total : 0;
+                                  const bSlice = pool * bShare;
+                                  const bAg = bSlice * (a.share / 100);
+                                  const bWh = bAg * WITHHOLDING;
+                                  const bNet = bAg - bWh;
+                                  const bPlat = bSlice - bAg;
+                                  return (
+                                    <tr key={bk.bookId}>
+                                      <td style={{ ...sBookTd, textAlign: "left" }}>{bk.title || bk.bookId}</td>
+                                      <td style={sBookTd}>{bk.reads}</td>
+                                      <td style={sBookTd}>{bk.totalReads}</td>
+                                      <td style={sBookTd}>{(bShare * 100).toFixed(1)}%</td>
+                                      <td style={sBookTd}>{won(bAg)}</td>
+                                      <td style={sBookTd}>−{won(bWh)}</td>
+                                      <td style={{ ...sBookTd, fontWeight: 700 }}>{won(bNet)}</td>
+                                      <td style={sBookTd}>{won(bPlat)}</td>
+                                    </tr>
+                                  );
+                                })
+                              )}
+                            </tbody>
+                          </table>
                         </td>
                       </tr>
                     )}
