@@ -18,10 +18,14 @@ import {
   ExternalLink, MessageSquare, AudioLines, Music, Workflow, ScrollText, Wand2,
   ImagePlus, Sparkles, Square, Download,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import {
   generateViaApi, generateViaChatGpt, isExtensionReady,
   type Aspect, type Engine, type GenHandle,
 } from "./imagegen";
+import { buildBookPages } from "./handoff";
+import { saveDraft } from "../lib/store";
+import { PAGE_W } from "../lib/editor-types";
 
 const SAMPLE_URL = "/picbook/sample_library.json";
 const CACHE_KEY = "toolb_step8_picbook_v1";
@@ -198,6 +202,8 @@ function normalizeLib(obj: StoryLib | StoryBook | null): StoryLib | null {
 }
 
 export default function StoryPage() {
+  const router = useRouter();
+  const [sendBusy, setSendBusy] = useState(false);
   const [lib, setLib] = useState<StoryLib | null>(null);
   const [bookIdx, setBookIdx] = useState(0);
   const [section, setSection] = useState<"chars" | "cuts">("chars");
@@ -666,6 +672,50 @@ export default function StoryPage() {
     }
   }
 
+  // 책만들기로 보내기 — front cover → cover page, cuts → content (1쪽~),
+  // back cover → last page. Reuses the editor's "전체추가" page structure.
+  async function sendToEditor() {
+    if (sendBusy) return;
+    const bk = lib?.books?.[bookIdx];
+    if (!bk) return;
+    const frontKey = (bk.covers || []).find((c) => c.type === "front")?.imageKey;
+    const backKey = (bk.covers || []).find((c) => c.type === "back")?.imageKey;
+    const cutKeys = (bk.cuts || [])
+      .map((c) => (typeof c.imageKey === "string" ? c.imageKey : ""))
+      .filter(Boolean);
+    if (!cutKeys.length && !frontKey) {
+      showToast("먼저 이미지를 생성하세요");
+      return;
+    }
+    setSendBusy(true);
+    showToast("책만들기로 보내는 중…");
+    try {
+      const allKeys = [frontKey, ...cutKeys, backKey].filter(Boolean) as string[];
+      const r = await fetch("/api/story/image-data", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ keys: allKeys }),
+      });
+      const d = await r.json().catch(() => ({}));
+      const map: Record<string, string> = d.dataUrls || {};
+      const front = frontKey ? map[frontKey] : undefined;
+      const back = backKey ? map[backKey] : undefined;
+      const cuts = cutKeys.map((k) => map[k]).filter(Boolean) as string[];
+      const pages = await buildBookPages({ front, cuts, back, layout: "spread" });
+      const book = await saveDraft({
+        pages,
+        pageW: PAGE_W,
+        layout: "spread",
+        title: bk.meta?.title,
+        storyText: scriptParsed || undefined,
+      });
+      router.push(`/edit?book=${book.id}`);
+    } catch (e) {
+      showToast("보내기 실패: " + ((e as Error)?.message || ""));
+      setSendBusy(false);
+    }
+  }
+
   function loadLib(obj: StoryLib | StoryBook) {
     const norm = normalizeLib(obj);
     if (!norm) return;
@@ -805,6 +855,15 @@ export default function StoryPage() {
           </button>
           <button type="button" className="story-btn" onClick={() => setJsonModalOpen(true)}>
             JSON 불러오기
+          </button>
+          <button
+            type="button"
+            className="story-btn story-btn--apply"
+            onClick={sendToEditor}
+            disabled={sendBusy || !book}
+            title="생성된 이미지로 책만들기 페이지를 자동 구성 (앞표지·본문·뒷표지)"
+          >
+            <BookOpen size={16} /> {sendBusy ? "보내는 중…" : "책만들기로 보내기"}
           </button>
         </div>
       </header>
