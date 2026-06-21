@@ -6098,6 +6098,14 @@ textarea.ed-input {
   flex: none;
 }
 .story-root .story-sec-action { margin-left: auto; }
+.story-root .story-sec-actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.story-root .story-bulk-status {
+  margin: 2px 0 10px;
+  padding-left: 36px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--st-accent);
+}
 .story-root .story-sec-sub { color: var(--st-ink-soft); font-size: 0.92rem; margin-bottom: 16px; padding-left: 36px; }
 
 .story-root .story-char-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 14px; padding-left: 36px; }

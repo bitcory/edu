@@ -233,6 +233,20 @@ export async function saveStoryImageFromDataUrl(dataUrl: string): Promise<string
   return key;
 }
 
+/** Read a story image's raw bytes from R2 (for server-side ZIP packaging). */
+export async function readStoryImage(key: string): Promise<Buffer | null> {
+  if (!key.startsWith("story/")) return null;
+  try {
+    const { client, bucket } = r2();
+    const r = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    if (!r.Body) return null;
+    const bytes = await r.Body.transformToByteArray();
+    return Buffer.from(bytes);
+  } catch {
+    return null;
+  }
+}
+
 /** Presigned GET URL for a story image (story/ prefix only). Pass downloadName
  * to force a browser download via Content-Disposition (no CORS needed). */
 export async function presignStoryDownload(

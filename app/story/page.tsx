@@ -306,6 +306,93 @@ export default function StoryPage() {
     return () => { alive = false; };
   }, [lib]);
 
+  // Helper-extension presence (gates 전체생성, which uses the ChatGPT engine).
+  const [extReady, setExtReady] = useState(false);
+  useEffect(() => {
+    let a = true;
+    isExtensionReady().then((r) => { if (a) setExtReady(r); });
+    return () => { a = false; };
+  }, []);
+
+  // 전체생성: generate an image for every character that doesn't have one yet,
+  // one at a time (sequential → a single ChatGPT tab, no collisions).
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkStatus, setBulkStatus] = useState("");
+  const bulkCancel = useRef(false);
+  const bulkHandle = useRef<GenHandle | null>(null);
+
+  async function generateAll() {
+    const list = lib?.books?.[bookIdx]?.characters || [];
+    if (!list.length || bulkBusy) return;
+    bulkCancel.current = false;
+    setBulkBusy(true);
+    let made = 0;
+    for (let i = 0; i < list.length; i++) {
+      if (bulkCancel.current) break;
+      const c = list[i];
+      const ck = charKeyOf(bookIdx, c, i);
+      const name = (c.name_ko || c.id || `#${i + 1}`).toString();
+      if (imageUrls[ck] || typeof c.imageKey === "string") {
+        setBulkStatus(`${name} 건너뜀 (이미 있음) · ${i + 1}/${list.length}`);
+        continue;
+      }
+      const prompt = buildPrompt(lib?.books?.[bookIdx] || null, c.prompt_en || "", "char");
+      if (!prompt.trim()) { setBulkStatus(`${name} 건너뜀 (프롬프트 없음) · ${i + 1}/${list.length}`); continue; }
+      setBulkStatus(`${name} 생성 중… · ${i + 1}/${list.length}`);
+      try {
+        const handle = generateViaChatGpt({
+          prompt,
+          aspect: "16:9",
+          onProgress: (m) => setBulkStatus(`${name}: ${m} · ${i + 1}/${list.length}`),
+        });
+        bulkHandle.current = handle;
+        const dataUrl = await handle.promise;
+        await handleCharImage(i, dataUrl);
+        made++;
+      } catch (e) {
+        setBulkStatus(`${name} 실패: ${(e as Error)?.message || ""}`);
+      } finally {
+        bulkHandle.current = null;
+      }
+    }
+    setBulkBusy(false);
+    setBulkStatus(bulkCancel.current ? `중지됨 · ${made}장 생성` : `완료 · ${made}장 생성`);
+  }
+
+  function cancelBulk() {
+    bulkCancel.current = true;
+    bulkHandle.current?.cancel();
+    bulkHandle.current = null;
+  }
+
+  async function downloadAllZip() {
+    const list = lib?.books?.[bookIdx]?.characters || [];
+    const items = list
+      .map((c, i) => ({
+        key: typeof c.imageKey === "string" ? c.imageKey : "",
+        name: (c.name_ko || c.id || `character_${i + 1}`).toString(),
+      }))
+      .filter((x) => x.key);
+    if (!items.length) { showToast("저장된 이미지가 없어요"); return; }
+    try {
+      const r = await fetch("/api/story/download-zip", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ items }),
+      });
+      if (!r.ok) { showToast("ZIP 생성 실패"); return; }
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${lib?.books?.[bookIdx]?.meta?.title || "characters"}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      showToast("ZIP 다운로드 실패");
+    }
+  }
+
   function loadLib(obj: StoryLib | StoryBook) {
     const norm = normalizeLib(obj);
     if (!norm) return;
@@ -620,15 +707,41 @@ export default function StoryPage() {
                 <section className="story-sec-pane">
                   <div className="story-sec-title">
                     캐릭터 시트
-                    <button
-                      type="button"
-                      className="story-mini story-sec-action"
-                      title="모든 캐릭터의 프롬프트(본문+add+네거티브)를 빈 줄로 구분해 한 번에 복사"
-                      onClick={() => copyText(chars.map((c) => buildPrompt(book, c.prompt_en || "", "char")).join("\n\n"))}
-                    >
-                      전체 프롬프트 복사
-                    </button>
+                    <div className="story-sec-actions">
+                      {bulkBusy ? (
+                        <button type="button" className="story-mini story-mini--ghost" onClick={cancelBulk}>
+                          <Square size={13} /> 전체 정지
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="story-mini"
+                          disabled={!extReady || chars.length === 0}
+                          title={extReady ? "이미지가 없는 캐릭터를 순서대로 모두 생성" : "ChatGPT 확장 설치 후 사용 가능"}
+                          onClick={generateAll}
+                        >
+                          <Sparkles size={14} /> 전체생성
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="story-mini story-mini--ghost"
+                        title="생성된 캐릭터 이미지를 ZIP으로 모두 받기"
+                        onClick={downloadAllZip}
+                      >
+                        <Download size={14} /> 전체 다운로드
+                      </button>
+                      <button
+                        type="button"
+                        className="story-mini story-mini--ghost"
+                        title="모든 캐릭터의 프롬프트(본문+add+네거티브)를 빈 줄로 구분해 한 번에 복사"
+                        onClick={() => copyText(chars.map((c) => buildPrompt(book, c.prompt_en || "", "char")).join("\n\n"))}
+                      >
+                        전체 프롬프트 복사
+                      </button>
+                    </div>
                   </div>
+                  {bulkStatus && <div className="story-bulk-status">{bulkStatus}</div>}
                   <div className="story-sec-sub">{chars.length}종 · 탭으로 캐릭터를 선택하세요</div>
                   <div className="story-char-tabs">
                     {chars.map((c, i) => (
@@ -649,6 +762,7 @@ export default function StoryPage() {
                       char={currentChar}
                       imageUrl={imageUrls[charKeyOf(bookIdx, currentChar, activeChar)]}
                       imageKey={typeof currentChar.imageKey === "string" ? currentChar.imageKey : undefined}
+                      busy={bulkBusy}
                       onGenerated={(dataUrl) => handleCharImage(activeChar, dataUrl)}
                       appearCuts={cuts.filter((cut) => (cut.ref || []).includes(currentChar.id || "")).map((cut) => cut.no)}
                       onCopy={(t) => copyText(t)}
@@ -990,10 +1104,11 @@ export default function StoryPage() {
 // 나중에 Path A(API)를 다시 쓰려면 true 로 바꾸면 토글이 다시 나타난다.
 const SHOW_ENGINE_TOGGLE = false;
 
-function CharPanel({ char, imageUrl, imageKey, onGenerated, appearCuts, onCopy, buildPromptFor }: {
+function CharPanel({ char, imageUrl, imageKey, busy, onGenerated, appearCuts, onCopy, buildPromptFor }: {
   char: StoryChar;
   imageUrl?: string;
   imageKey?: string;
+  busy?: boolean;
   onGenerated: (dataUrl: string) => void;
   appearCuts: (number | string | undefined)[];
   onCopy: (t: string) => void;
@@ -1166,7 +1281,7 @@ function CharPanel({ char, imageUrl, imageKey, onGenerated, appearCuts, onCopy, 
               type="button"
               className="story-mini"
               onClick={startGenerate}
-              disabled={generating || (engine === "chatgpt" && !extReady)}
+              disabled={generating || busy || (engine === "chatgpt" && !extReady)}
             >
               <Sparkles size={14} /> {generating ? "생성 중…" : "이미지 생성"}
             </button>
