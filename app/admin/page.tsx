@@ -18,7 +18,7 @@ import {
   UserCheck,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useState, type CSSProperties } from "react";
+import { Fragment, useCallback, useEffect, useState, type CSSProperties } from "react";
 import BookViewer from "../components/BookViewer";
 import BookInfoModal, { type InfoValues } from "../components/BookInfoModal";
 import UserChip from "../components/auth/UserChip";
@@ -750,6 +750,7 @@ function SettlementView() {
   const [data, setData] = useState<Settlement | null>(null);
   const [busy, setBusy] = useState(false);
   const [shareEdits, setShareEdits] = useState<Record<string, string>>({});
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setData(null);
@@ -855,7 +856,8 @@ function SettlementView() {
       ) : (
         <>
           <p style={sSummary}>
-            총 읽힘 <strong>{total}</strong>회 · 작가 실지급 합계{" "}
+            총 읽힘(월) <strong>{total}</strong>회 · 누적 조회수{" "}
+            <strong>{data.totalAllReads}</strong>회 · 작가 실지급 합계{" "}
             <strong style={{ color: "#c75b46" }}>{won(totNet)}</strong>{" "}
             <span style={{ color: "#b09a78" }}>
               (원천징수 {won(totWithhold)})
@@ -867,7 +869,8 @@ function SettlementView() {
               <thead>
                 <tr>
                   <th style={sTh}>작가</th>
-                  <th style={sTh}>읽힘</th>
+                  <th style={sTh}>읽힘(월)</th>
+                  <th style={sTh}>누적 조회수</th>
                   <th style={sTh}>비율</th>
                   <th style={sTh}>작가 비율(%)</th>
                   <th style={sTh}>정산액(세전)</th>
@@ -888,12 +891,26 @@ function SettlementView() {
                   const dirty =
                     shareEdits[a.userId] !== undefined &&
                     Number(shareEdits[a.userId]) !== a.share;
+                  const isOpen = expanded === a.userId;
                   return (
-                    <tr key={a.userId}>
+                    <Fragment key={a.userId}>
+                    <tr>
                       <td style={{ ...sTd, fontWeight: 700 }}>
-                        {a.name || a.userId}
+                        <button
+                          type="button"
+                          onClick={() => setExpanded(isOpen ? null : a.userId)}
+                          style={{
+                            background: "none", border: "none", cursor: "pointer",
+                            font: "inherit", fontWeight: 700, color: "#5a3", padding: 0,
+                            display: "inline-flex", alignItems: "center", gap: 4,
+                          }}
+                          title="클릭하면 책별 조회 내역"
+                        >
+                          {isOpen ? "▾" : "▸"} {a.name || a.userId}
+                        </button>
                       </td>
                       <td style={sTd}>{a.reads}</td>
+                      <td style={sTd}>{a.totalReads}</td>
                       <td style={sTd}>{(readShare * 100).toFixed(1)}%</td>
                       <td style={sTd}>
                         <input
@@ -925,6 +942,30 @@ function SettlementView() {
                       <td style={{ ...sTd, fontWeight: 700 }}>{won(net)}</td>
                       <td style={sTd}>{won(platform)}</td>
                     </tr>
+                    {isOpen && (
+                      <tr>
+                        <td colSpan={9} style={{ ...sTd, background: "#fbf6ec" }}>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                            {a.books.length === 0 ? (
+                              <span style={{ color: "#b09a78" }}>읽힌 책이 없어요.</span>
+                            ) : (
+                              a.books.map((bk) => (
+                                <div
+                                  key={bk.bookId}
+                                  style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13 }}
+                                >
+                                  <span>{bk.title || bk.bookId}</span>
+                                  <span style={{ color: "#8a7a66", whiteSpace: "nowrap" }}>
+                                    월 {bk.reads} · 누적 {bk.totalReads}
+                                  </span>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   );
                 })}
               </tbody>

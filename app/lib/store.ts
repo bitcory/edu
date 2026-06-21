@@ -445,15 +445,24 @@ export async function recordBookRead(id: string): Promise<void> {
   }
 }
 
+export type BookReads = {
+  bookId: string;
+  title: string;
+  reads: number; // this month
+  totalReads: number; // cumulative
+};
 export type AuthorSettlement = {
   userId: string;
   name: string;
-  reads: number;
+  reads: number; // this month (payout base)
+  totalReads: number; // cumulative 조회수
   share: number; // author % (platform keeps 100 − share)
+  books: BookReads[];
 };
 export type Settlement = {
   period: string;
-  totalReads: number;
+  totalReads: number; // this month total
+  totalAllReads: number; // cumulative total
   authors: AuthorSettlement[];
 };
 
@@ -462,7 +471,7 @@ export async function getSettlement(period: string): Promise<Settlement> {
   const res = await fetch(`/api/admin/settlement?period=${period}`, {
     cache: "no-store",
   });
-  if (!res.ok) return { period, totalReads: 0, authors: [] };
+  if (!res.ok) return { period, totalReads: 0, totalAllReads: 0, authors: [] };
   return (await res.json()) as Settlement;
 }
 
