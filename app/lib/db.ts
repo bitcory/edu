@@ -100,7 +100,6 @@ export function ensureSchema(): Promise<void> {
         // Cover image now lives in R2 (covers/<id>.jpg); cover_thumb (inline
         // base64) is legacy — kept until migrated, then NULL.
         `ADD COLUMN IF NOT EXISTS cover_key TEXT`,
-        `ADD COLUMN IF NOT EXISTS view_count INTEGER NOT NULL DEFAULT 0`,
       ]) {
         await db.execute(`ALTER TABLE books ${ddl}`);
       }

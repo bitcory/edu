@@ -93,16 +93,6 @@ async function resolveCover(
   };
 }
 
-/** Bump a book's 조회수 (called on every open of a published book). */
-export async function incrementView(id: string): Promise<void> {
-  await ensureSchema();
-  await db.execute({
-    sql: `UPDATE books SET view_count = COALESCE(view_count, 0) + 1
-          WHERE id = ? AND status = 'approved'`,
-    args: [id],
-  });
-}
-
 /** Replace a book's per-page narration manifest (JSON array of R2 keys). */
 export async function setBookNarration(
   id: string,
@@ -141,8 +131,9 @@ export async function listBooks(
       sql: `SELECT b.id, b.title, b.kind, b.author, b.description, b.category,
                    b.price, b.page_w, b.layout, b.owner_id, b.owner_name,
                    b.cover_thumb, b.cover_key, b.status, b.submitted_at, b.reviewed_at,
-                   b.reject_reason, b.audio_key, b.page_count, b.view_count,
-                   (SELECT COUNT(*) FROM likes l WHERE l.book_id = b.id) AS like_count
+                   b.reject_reason, b.audio_key, b.page_count,
+                   (SELECT COUNT(*) FROM likes l WHERE l.book_id = b.id) AS like_count,
+                   (SELECT COUNT(*) FROM reads r WHERE r.book_id = b.id) AS view_count
             FROM books b
             WHERE b.status = 'approved'
             ORDER BY COALESCE(b.reviewed_at, b.submitted_at) DESC`,
