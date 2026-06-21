@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, BookOpen, Library, Pencil, Store } from "lucide-react";
+import { ArrowRight, BookOpen, Library, Pencil, Sparkles, Store } from "lucide-react";
 import UserChip from "./components/auth/UserChip";
 
 export default function Home() {
@@ -33,6 +33,21 @@ export default function Home() {
             </p>
             <span className="landing-card__cta">
               PDF 열기 <ArrowRight size={16} />
+            </span>
+          </div>
+        </Link>
+
+        <Link href="/story" className="landing-card landing-card--story">
+          <div className="landing-card__icon" aria-hidden>
+            <Sparkles size={48} strokeWidth={1.6} />
+          </div>
+          <div className="landing-card__body">
+            <h2 className="landing-card__title">스토리구성</h2>
+            <p className="landing-card__desc">
+              이야기·캐릭터·컷을 정리해 그림책 제작 프롬프트 만들기
+            </p>
+            <span className="landing-card__cta">
+              구성하기 <ArrowRight size={16} />
             </span>
           </div>
         </Link>
