@@ -365,7 +365,10 @@ function EditPageInner() {
                 author: bookMeta?.author ?? author?.displayName,
                 description: bookMeta?.description,
                 category: bookMeta?.category,
-                cover: submitCover ?? mode.pages[0]?.thumb,
+                // submitCover is the crisp page-0 render (set in openStoreSubmit).
+                // Never fall back to the cached 0.2× thumb — a missing cover lets
+                // the author pick one in the modal, rather than baking a blurry one.
+                cover: submitCover,
               }}
               onCancel={() => setSubmitOpen(false)}
               onConfirm={(values) => void handleSubmitToStore(mode.pages, values)}
