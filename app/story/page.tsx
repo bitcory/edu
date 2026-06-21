@@ -318,6 +318,7 @@ export default function StoryPage() {
   // one at a time (sequential → a single ChatGPT tab, no collisions).
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkStatus, setBulkStatus] = useState("");
+  const [zipBusy, setZipBusy] = useState(false);
   const bulkCancel = useRef(false);
   const bulkHandle = useRef<GenHandle | null>(null);
 
@@ -366,6 +367,7 @@ export default function StoryPage() {
   }
 
   async function downloadAllZip() {
+    if (zipBusy) return;
     const list = lib?.books?.[bookIdx]?.characters || [];
     const items = list
       .map((c, i) => ({
@@ -374,6 +376,7 @@ export default function StoryPage() {
       }))
       .filter((x) => x.key);
     if (!items.length) { showToast("저장된 이미지가 없어요"); return; }
+    setZipBusy(true);
     try {
       const r = await fetch("/api/story/download-zip", {
         method: "POST",
@@ -388,8 +391,11 @@ export default function StoryPage() {
       a.download = `${lib?.books?.[bookIdx]?.meta?.title || "characters"}.zip`;
       a.click();
       URL.revokeObjectURL(url);
+      showToast(`ZIP 다운로드 시작! (${items.length}장)`);
     } catch {
       showToast("ZIP 다운로드 실패");
+    } finally {
+      setZipBusy(false);
     }
   }
 
@@ -728,8 +734,9 @@ export default function StoryPage() {
                         className="story-mini story-mini--ghost"
                         title="생성된 캐릭터 이미지를 ZIP으로 모두 받기"
                         onClick={downloadAllZip}
+                        disabled={zipBusy}
                       >
-                        <Download size={14} /> 전체 다운로드
+                        <Download size={14} /> {zipBusy ? "ZIP 준비 중…" : "전체 다운로드"}
                       </button>
                       <button
                         type="button"
