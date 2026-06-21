@@ -70,6 +70,7 @@ export function isExtensionReady(timeoutMs = 600): Promise<boolean> {
 export function generateViaChatGpt(opts: {
   prompt: string;
   aspect: Aspect;
+  referenceImages?: string[]; // data URLs for image-to-image (cut generation)
   onProgress?: (msg: string) => void;
 }): GenHandle {
   const id = `job-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -104,7 +105,7 @@ export function generateViaChatGpt(opts: {
       else if (d.type === "error") { settled = true; cleanup(); reject(new Error(d.message || "생성 실패")); }
     };
     window.addEventListener("message", onMsg);
-    window.postMessage({ source: "tbbook-story", kind: "generate", id, prompt: opts.prompt, aspect: opts.aspect }, "*");
+    window.postMessage({ source: "tbbook-story", kind: "generate", id, prompt: opts.prompt, aspect: opts.aspect, referenceImages: opts.referenceImages || [] }, "*");
     arm();
   });
 

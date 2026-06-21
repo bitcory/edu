@@ -63,8 +63,8 @@ function statusToPage(pageTabId, jobId, status, extra = {}) {
   chrome.tabs.sendMessage(pageTabId, { type: "tbbook-status", jobId, status, ...extra }).catch(() => {});
 }
 
-async function dispatch(jobId, prompt, aspect, pageTabId) {
-  const runMsg = { type: "tbbook-run", jobId, prompt, aspect };
+async function dispatch(jobId, prompt, aspect, referenceImages, pageTabId) {
+  const runMsg = { type: "tbbook-run", jobId, prompt, aspect, referenceImages: referenceImages || [] };
 
   // 1) Try an existing plain-chat tab first (short retry — it's either live or stale).
   const existing = await findUsableTab();
@@ -96,7 +96,7 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
     (async () => {
       try {
         statusToPage(pageTabId, jobId, "progress", { message: "ChatGPT 탭 준비 중…" });
-        await dispatch(jobId, msg.prompt, msg.aspect, pageTabId);
+        await dispatch(jobId, msg.prompt, msg.aspect, msg.referenceImages, pageTabId);
       } catch (e) {
         statusToPage(pageTabId, jobId, "error", { message: "ChatGPT 탭에 연결할 수 없어요 — chatgpt.com 로그인 후 다시 시도하세요. (" + ((e && e.message) || e) + ")" });
         JOBS.delete(jobId);

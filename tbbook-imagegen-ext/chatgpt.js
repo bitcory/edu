@@ -131,8 +131,10 @@
     return false;
   }
   function clearInput(el) { try { const sel = window.getSelection(); sel.removeAllRanges(); const r = document.createRange(); r.selectNodeContents(el); sel.addRange(r); document.execCommand("delete", false); } catch { /* ignore */ } }
-  async function typePrompt(text) {
+  async function typePrompt(text, hasRefs) {
     const el = getPromptInput(); if (!el) return false;
+    // With references, the send button stays disabled during upload — wait longer.
+    const budget = hasRefs ? 25000 : 8000;
     el.focus(); await sleep(50);
     clearInput(el); await sleep(50);
     document.execCommand("insertText", false, text);
@@ -145,7 +147,7 @@
       await sleep(200); fireInput(el, text);
     }
     if (!hasContent(el, text)) return false;
-    return await ensureSendAppears(el, text, 8000);
+    return await ensureSendAppears(el, text, budget);
   }
 
   function lastTurnImageUrls() {
@@ -161,6 +163,35 @@
     return out;
   }
   function blobToDataUrl(blob) { return new Promise((rs, rj) => { const fr = new FileReader(); fr.onloadend = () => rs(fr.result); fr.onerror = rj; fr.readAsDataURL(blob); }); }
+
+  // ── image-to-image: upload reference images into the composer ──────────────
+  function dataUrlToFile(d, name) {
+    const c = d.indexOf(",");
+    const mime = (d.slice(0, c).match(/data:([^;]+)/) || [])[1] || "image/png";
+    const bin = atob(d.slice(c + 1));
+    const a = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+    return new File([a], name, { type: mime });
+  }
+  function countThumbs() {
+    const form = qs("form"); if (!form) return 0;
+    return qsa("img", form).filter((im) => { const s = im.src || ""; return s.startsWith("blob:") || s.startsWith("data:"); }).length;
+  }
+  async function uploadImages(urls) {
+    if (!urls || !urls.length) return true;
+    const fi = qsa('input[type="file"]').find((i) => !i.accept || i.accept.includes("image")) || qsa('input[type="file"]')[0];
+    if (!fi) { log("파일 input 없음"); return false; }
+    const before = countThumbs();
+    const dt = new DataTransfer();
+    urls.forEach((u, i) => {
+      const ext = u.includes("image/png") ? "png" : u.includes("image/webp") ? "webp" : "jpg";
+      dt.items.add(dataUrlToFile(u, "tbbook-ref-" + i + "." + ext));
+    });
+    fi.files = dt.files;
+    fi.dispatchEvent(new Event("change", { bubbles: true, cancelable: true }));
+    for (let i = 0; i < 80; i++) { await sleep(150); if (countThumbs() >= before + urls.length) { log("참조 " + urls.length + "장 업로드"); return true; } }
+    return false;
+  }
 
   async function isLoggedIn() {
     try {
@@ -182,7 +213,8 @@
   const canceled = new Set();
   const status = (jobId, st, extra = {}) => { try { chrome.runtime.sendMessage({ type: "tbbook-status", jobId, status: st, ...extra }); } catch { /* ignore */ } };
 
-  async function runImageJob(jobId, prompt, aspect) {
+  async function runImageJob(jobId, prompt, aspect, referenceImages) {
+    const refs = Array.isArray(referenceImages) ? referenceImages.filter(Boolean) : [];
     const report = (m) => { log(m); status(jobId, "progress", { message: m }); };
     const ckCancel = () => { if (canceled.has(jobId)) throw new Error("정지됨 (사용자 취소)"); };
     try {
@@ -197,9 +229,16 @@
       if (!(await activateImageTool())) log("경고: 이미지 모드 활성 실패 — 일반 모드로 진행");
       await applyImageSize(aspect || "16:9");
 
+      if (refs.length) {
+        report("참조 이미지 업로드… (" + refs.length + "장)");
+        ckCancel();
+        await uploadImages(refs);
+        await sleep(1500);
+      }
+
       report("프롬프트 입력 중…");
       ckCancel();
-      if (!(await typePrompt(prompt || ""))) throw new Error("프롬프트 입력 실패 (전송버튼 미활성)");
+      if (!(await typePrompt(prompt || "", refs.length > 0))) throw new Error("프롬프트 입력 실패 (전송버튼 미활성)");
 
       let sendBtn = getSendButton(), t = 0;
       while ((!sendBtn || sendBtn.disabled) && t++ < 30) { await sleep(150); sendBtn = getSendButton(); }
@@ -241,7 +280,7 @@
 
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (!msg) return;
-    if (msg.type === "tbbook-run") { runImageJob(msg.jobId, msg.prompt, msg.aspect); }
+    if (msg.type === "tbbook-run") { runImageJob(msg.jobId, msg.prompt, msg.aspect, msg.referenceImages); }
     else if (msg.type === "tbbook-cancel") { canceled.add(msg.jobId); }
     else if (msg.type === "tbbook-ping") { sendResponse({ ok: true }); return true; }
   });
