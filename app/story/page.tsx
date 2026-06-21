@@ -114,6 +114,18 @@ function escapeId(s?: string): string {
   return String(s || "");
 }
 
+// Covers are generated with the cover prompt + the parsed full script + an
+// instruction (3:4), on top of the attached reference character images.
+function buildCoverPrompt(book: StoryBook | null, cover: StoryCut, scriptText: string): string {
+  const base = buildPrompt(book, cover.prompt_en || "", "cover");
+  const label = cover.type === "front" ? "앞표지" : cover.type === "back" ? "뒷표지" : "표지";
+  const parts = [base];
+  const s = (scriptText || "").trim();
+  if (s) parts.push(s);
+  parts.push(`첨부된 프롬프트, 대본, 이미지를 바탕으로 그림책 ${label}의 이미지를 만들어줘, 3:4사이즈로 만들어줘`);
+  return parts.join("\n\n");
+}
+
 function parseScript(text: string): string {
   if (!text) return "";
   // 1, 1., 1), [1], (1), <1>, 1: 같은 단독 넘버링 라벨을 인식
@@ -173,6 +185,10 @@ function cutKeyOf(bookIdx: number, cut: StoryCut, idx: number): string {
   return `${bookIdx}:cut:${cut.no ?? idx}`;
 }
 
+function coverKeyOf(bookIdx: number, cover: StoryCut, idx: number): string {
+  return `${bookIdx}:cover:${cover.type ?? idx}`;
+}
+
 function normalizeLib(obj: StoryLib | StoryBook | null): StoryLib | null {
   if (!obj) return null;
   const lib: StoryLib = (obj as StoryLib).books
@@ -201,6 +217,8 @@ export default function StoryPage() {
   const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
   // Per-cut image display URLs, keyed by `${bookIdx}:cut:${cutNo}`.
   const [cutImageUrls, setCutImageUrls] = useState<Record<string, string>>({});
+  // Per-cover image display URLs, keyed by `${bookIdx}:cover:${type}`.
+  const [coverImageUrls, setCoverImageUrls] = useState<Record<string, string>>({});
   const modalFileRef = useRef<HTMLInputElement | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -315,6 +333,40 @@ export default function StoryPage() {
     }
   }, [lib, bookIdx]);
 
+  // Same as handleCutImage but for a cover (stores cover.imageKey).
+  const handleCoverImage = useCallback(async (coverIdx: number, dataUrl: string) => {
+    const cc = lib?.books?.[bookIdx]?.covers?.[coverIdx];
+    if (!cc) return;
+    const ck = coverKeyOf(bookIdx, cc, coverIdx);
+    setCoverImageUrls((m) => ({ ...m, [ck]: dataUrl }));
+    try {
+      const r = await fetch("/api/story/save-image", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ dataUrl }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d.key) return;
+      setCoverImageUrls((m) => ({ ...m, [ck]: d.url || dataUrl }));
+      setLib((prev) => {
+        if (!prev?.books) return prev;
+        const books = [...prev.books];
+        const bk = books[bookIdx];
+        if (!bk) return prev;
+        const covers = [...(bk.covers || [])];
+        const target = covers[coverIdx];
+        if (!target) return prev;
+        covers[coverIdx] = { ...target, imageKey: d.key };
+        books[bookIdx] = { ...bk, covers };
+        const next = { ...prev, books };
+        try { localStorage.setItem(CACHE_KEY, JSON.stringify(next)); } catch {}
+        return next;
+      });
+    } catch {
+      /* keep optimistic data URL */
+    }
+  }, [lib, bookIdx]);
+
   // Resolve a cut's reference character images (for image-to-image) into data URLs.
   const resolveCutRefs = useCallback(async (cut: StoryCut): Promise<{ images: string[]; missing: number }> => {
     const refIds = Array.isArray(cut.ref) ? cut.ref : [];
@@ -346,6 +398,7 @@ export default function StoryPage() {
     const keys: string[] = [];
     const charByCk: Record<string, string> = {};
     const cutByCk: Record<string, string> = {};
+    const coverByCk: Record<string, string> = {};
     (lib?.books || []).forEach((b, bi) => {
       (b.characters || []).forEach((c, ci) => {
         if (typeof c.imageKey === "string" && c.imageKey) {
@@ -357,6 +410,12 @@ export default function StoryPage() {
         if (typeof cut.imageKey === "string" && cut.imageKey) {
           keys.push(cut.imageKey);
           cutByCk[cutKeyOf(bi, cut, ci)] = cut.imageKey;
+        }
+      });
+      (b.covers || []).forEach((cv, ci) => {
+        if (typeof cv.imageKey === "string" && cv.imageKey) {
+          keys.push(cv.imageKey);
+          coverByCk[coverKeyOf(bi, cv, ci)] = cv.imageKey;
         }
       });
     });
@@ -378,6 +437,11 @@ export default function StoryPage() {
         setCutImageUrls((m) => {
           const next = { ...m };
           for (const ck in cutByCk) { const u = d.urls[cutByCk[ck]]; if (u) next[ck] = u; }
+          return next;
+        });
+        setCoverImageUrls((m) => {
+          const next = { ...m };
+          for (const ck in coverByCk) { const u = d.urls[coverByCk[ck]]; if (u) next[ck] = u; }
           return next;
         });
       })
@@ -521,6 +585,41 @@ export default function StoryPage() {
         cutBulkHandle.current = null;
       }
     }
+
+    // Covers next — image-to-image at 3:4 (front/back cover ratio).
+    const coverList = lib?.books?.[bookIdx]?.covers || [];
+    for (let i = 0; i < coverList.length; i++) {
+      if (cutBulkCancel.current) break;
+      const cv = coverList[i];
+      const ck = coverKeyOf(bookIdx, cv, i);
+      const label = cv.type === "front" ? "앞표지" : cv.type === "back" ? "뒤표지" : `표지 ${i + 1}`;
+      if (coverImageUrls[ck] || typeof cv.imageKey === "string") {
+        setCutBulkStatus(`${label} 건너뜀 (이미 있음)`);
+        continue;
+      }
+      const prompt = buildCoverPrompt(lib?.books?.[bookIdx] || null, cv, scriptParsed);
+      if (!prompt.trim()) { setCutBulkStatus(`${label} 건너뜀 (프롬프트 없음)`); continue; }
+      setCutBulkStatus(`${label} 참조 준비 중…`);
+      try {
+        const refs = await resolveCutRefs(cv);
+        const note = refs.missing ? ` (참조 ${refs.images.length}/없음 ${refs.missing})` : ` (참조 ${refs.images.length})`;
+        const handle = generateViaChatGpt({
+          prompt,
+          aspect: "3:4",
+          referenceImages: refs.images,
+          onProgress: (m) => setCutBulkStatus(`${label}${note}: ${m}`),
+        });
+        cutBulkHandle.current = handle;
+        const dataUrl = await handle.promise;
+        await handleCoverImage(i, dataUrl);
+        made++;
+      } catch (e) {
+        setCutBulkStatus(`${label} 실패: ${(e as Error)?.message || ""}`);
+      } finally {
+        cutBulkHandle.current = null;
+      }
+    }
+
     setCutBulkBusy(false);
     setCutBulkStatus(cutBulkCancel.current ? `중지됨 · ${made}장 생성` : `완료 · ${made}장 생성`);
   }
@@ -533,14 +632,17 @@ export default function StoryPage() {
 
   async function downloadAllCutsZip() {
     if (cutZipBusy) return;
-    const list = lib?.books?.[bookIdx]?.cuts || [];
-    const items = list
-      .map((cut, i) => ({
-        key: typeof cut.imageKey === "string" ? cut.imageKey : "",
-        name: `cut_${cut.no ?? i + 1}`,
-      }))
-      .filter((x) => x.key);
-    if (!items.length) { showToast("저장된 컷 이미지가 없어요"); return; }
+    const bk = lib?.books?.[bookIdx];
+    const cutItems = (bk?.cuts || []).map((cut, i) => ({
+      key: typeof cut.imageKey === "string" ? cut.imageKey : "",
+      name: `cut_${cut.no ?? i + 1}`,
+    }));
+    const coverItems = (bk?.covers || []).map((cv, i) => ({
+      key: typeof cv.imageKey === "string" ? cv.imageKey : "",
+      name: `cover_${cv.type || i + 1}`,
+    }));
+    const items = [...cutItems, ...coverItems].filter((x) => x.key);
+    if (!items.length) { showToast("저장된 컷/표지 이미지가 없어요"); return; }
     setCutZipBusy(true);
     try {
       const r = await fetch("/api/story/download-zip", {
@@ -1057,14 +1159,21 @@ export default function StoryPage() {
                     {covers
                       .map((co, i) => ({ co, i, key: `cover-${co.type || i}` }))
                       .filter(({ key }) => cutFilter === "all" || cutFilter === key)
-                      .map(({ co, key }) => (
+                      .map(({ co, i, key }) => (
                         <CoverCard
                           key={key}
                           cover={co}
                           charMap={charMap}
+                          imageUrl={coverImageUrls[coverKeyOf(bookIdx, co, i)]}
+                          imageKey={typeof co.imageKey === "string" ? co.imageKey : undefined}
+                          busy={cutBulkBusy}
+                          extReady={extReady}
+                          resolveRefs={resolveCutRefs}
+                          onGenerated={(dataUrl) => handleCoverImage(i, dataUrl)}
                           onCopy={(t) => copyText(t)}
                           onJumpChar={jumpToChar}
                           buildPromptFor={(base) => buildPrompt(book, base, "cover")}
+                          genPrompt={buildCoverPrompt(book, co, scriptParsed)}
                         />
                       ))}
                   </div>
@@ -1745,14 +1854,81 @@ function CutCard({ cut, charMap, imageUrl, imageKey, busy, extReady, resolveRefs
   );
 }
 
-function CoverCard({ cover, charMap, onCopy, onJumpChar, buildPromptFor }: {
+function CoverCard({ cover, charMap, imageUrl, imageKey, busy, extReady, resolveRefs, onGenerated, onCopy, onJumpChar, buildPromptFor, genPrompt }: {
   cover: StoryCut;
   charMap: Record<string, StoryChar>;
+  imageUrl?: string;
+  imageKey?: string;
+  busy?: boolean;
+  extReady?: boolean;
+  resolveRefs: (cut: StoryCut) => Promise<{ images: string[]; missing: number }>;
+  onGenerated: (dataUrl: string) => void;
   onCopy: (t: string) => void;
   onJumpChar: (id: string) => void;
   buildPromptFor: (base: string) => string;
+  genPrompt: string; // cover prompt + parsed script + 3:4 instruction (for generate/copy)
 }) {
   const typeLabel = cover.type === "front" ? "앞표지" : cover.type === "back" ? "뒤표지" : cover.type;
+  const [generating, setGenerating] = useState(false);
+  const [statusMsg, setStatusMsg] = useState("");
+  const [lightbox, setLightbox] = useState(false);
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const handleRef = useRef<GenHandle | null>(null);
+
+  const fileName = `cover_${cover.type || "front"}`;
+  const downloadHref = imageKey
+    ? `/api/story/download?key=${encodeURIComponent(imageKey)}&name=${encodeURIComponent(fileName)}`
+    : imageUrl;
+
+  useEffect(() => {
+    if (!lightbox) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setLightbox(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [lightbox]);
+
+  function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => onGenerated(String(reader.result));
+    reader.readAsDataURL(f);
+    e.target.value = "";
+  }
+
+  // Covers are image-to-image at 3:4 (front/back cover ratio).
+  function startGenerate() {
+    if (generating) return;
+    const prompt = genPrompt;
+    if (!prompt.trim()) { setStatusMsg("프롬프트가 비어 있어요."); return; }
+    setGenerating(true);
+    setStatusMsg("참조 이미지 준비 중…");
+    let cancelled = false;
+    const composite: GenHandle = {
+      promise: (async () => {
+        const refs = await resolveRefs(cover);
+        if (cancelled) throw new Error("정지됨 (사용자 취소)");
+        if (refs.missing) setStatusMsg(`참조 ${refs.images.length}장 사용 (없음 ${refs.missing}) · 생성 중…`);
+        const inner = generateViaChatGpt({ prompt, aspect: "3:4", referenceImages: refs.images, onProgress: setStatusMsg });
+        handleRef.current = inner;
+        return await inner.promise;
+      })(),
+      cancel: () => { cancelled = true; handleRef.current?.cancel(); },
+    };
+    handleRef.current = composite;
+    composite.promise
+      .then((dataUrl) => { onGenerated(dataUrl); setStatusMsg(""); })
+      .catch((err: unknown) => { setStatusMsg((err as Error)?.message || "생성 실패"); })
+      .finally(() => { setGenerating(false); handleRef.current = null; });
+  }
+
+  function stopGenerate() {
+    handleRef.current?.cancel();
+    handleRef.current = null;
+    setGenerating(false);
+    setStatusMsg("정지됨");
+  }
+
   return (
     <div className="story-cut">
       <div className="story-cut-top">
@@ -1762,23 +1938,97 @@ function CoverCard({ cover, charMap, onCopy, onJumpChar, buildPromptFor }: {
         </div>
       </div>
       <div className="story-cut-body">
-        <div className="story-prompt">{buildPromptFor(cover.prompt_en || "")}</div>
-        {cover.title_area && (
-          <div className="story-title-area">
-            <Ruler size={14} /> {cover.title_area}
+        <div className="story-cp-row">
+          <div className="story-cp-left">
+            <div className="story-prompt">{buildPromptFor(cover.prompt_en || "")}</div>
+            {cover.title_area && (
+              <div className="story-title-area">
+                <Ruler size={14} /> {cover.title_area}
+              </div>
+            )}
+            <div className="story-actions">
+              <button
+                type="button"
+                className="story-mini"
+                title="표지 프롬프트 + 본문대본 + 지시문(3:4)을 한 번에 복사"
+                onClick={() => onCopy(genPrompt)}
+              >
+                프롬프트 복사
+              </button>
+            </div>
           </div>
-        )}
-        <div className="story-actions">
-          <button
-            type="button"
-            className="story-mini"
-            title="본문 + cover_add + 네거티브를 합쳐 복사"
-            onClick={() => onCopy(buildPromptFor(cover.prompt_en || ""))}
-          >
-            프롬프트 복사
-          </button>
+
+          <div className="story-cp-imgcol">
+            <div className="story-img-stage story-img-stage--cover">
+              {imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={imageUrl}
+                  alt={typeLabel}
+                  className="story-img-preview"
+                  role="button"
+                  title="클릭해서 크게 보기"
+                  onClick={() => setLightbox(true)}
+                />
+              ) : (
+                <div className="story-img-empty">
+                  <ImagePlus size={28} />
+                  <span>표지 이미지를<br />생성 (3:4)</span>
+                </div>
+              )}
+              {generating && <div className="story-img-progress">{statusMsg || "생성 중…"}</div>}
+              <button type="button" className="story-img-upload" onClick={() => fileRef.current?.click()}>
+                <ImagePlus size={14} /> 이미지 업로드
+              </button>
+              <input ref={fileRef} type="file" accept="image/*" hidden onChange={onPickFile} />
+            </div>
+            <div className="story-img-actions">
+              <button
+                type="button"
+                className="story-mini"
+                onClick={startGenerate}
+                disabled={generating || busy || !extReady}
+                title={extReady ? "등장 캐릭터를 참조해 3:4로 생성" : "ChatGPT 확장 설치 후 사용 가능"}
+              >
+                <Sparkles size={14} /> {generating ? "생성 중…" : "이미지 생성"}
+              </button>
+              <button
+                type="button"
+                className="story-mini story-mini--ghost"
+                onClick={stopGenerate}
+                disabled={!generating}
+              >
+                <Square size={13} /> 정지
+              </button>
+            </div>
+            {statusMsg && !generating && <div className="story-img-msg">{statusMsg}</div>}
+          </div>
         </div>
       </div>
+
+      {lightbox && imageUrl && (
+        <div
+          className="story-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          onClick={(e) => { if ((e.target as HTMLElement).classList.contains("story-modal-backdrop")) setLightbox(false); }}
+        >
+          <div className="story-lightbox">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={imageUrl} alt={fileName} className="story-lightbox__img" />
+            <div className="story-lightbox__bar">
+              {downloadHref && (
+                <a className="story-btn story-btn--apply" href={downloadHref} download={`${fileName}.png`}>
+                  <Download size={16} /> 다운로드
+                </a>
+              )}
+              <button type="button" className="story-btn" onClick={() => setLightbox(false)}>
+                <X size={16} /> 닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
