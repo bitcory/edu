@@ -931,7 +931,7 @@ export default function StoryPage() {
             <div className="story-nav-list">
               <a
                 className="story-nav-item story-guide story-guide--gpt"
-                href="https://chatgpt.com/g/g-6a1394316644819192df66a06c4795ea-pro-4dangye-aiwa-hamggehaneun-geurimcaeg-mandeulgi-v6-0"
+                href="https://chatgpt.com/g/g-6a213b075c3c8191bf103f609057af25-pro-4dangye-aiwa-hamggehaneun-geurimcaeg-mandeulgi-v6-5-fn"
                 target="_blank"
                 rel="noopener noreferrer"
               >
