@@ -26,6 +26,9 @@ import {
 import { buildBookPages } from "./handoff";
 import { saveDraft } from "../lib/store";
 import { PAGE_W } from "../lib/editor-types";
+import {
+  webtoonPreset, mergePromptParts, WEBTOON_NEGATIVE,
+} from "./webtoon-styles";
 
 const SAMPLE_URL = "/picbook/sample_library.json";
 const CACHE_KEY = "toolb_step8_picbook_v1";
@@ -178,20 +181,38 @@ function adaptStoryBook(b: StoryBook): StoryBook {
     theme: b.meta?.theme ?? str(b.theme),
     message: b.meta?.message ?? str(b.logline),
   };
-  const characters: StoryChar[] = (b.characters || []).map((c) => ({
-    ...c,
-    prompt_en: c.prompt_en ?? str(c.ref_prompt),
-  }));
-  const cuts: StoryCut[] = pages.map((p, i) => ({
-    no: p.page ?? i + 1,
-    ref: Array.isArray(p.ref) ? p.ref : [],
-    prompt_en: p.image_prompt ?? "",
-    type: "scene",
-    tone: p.tone,
-    // 패널 장면 설명을 합쳐 ref 추론/표시에 활용 (나레이션·말풍선은 보존만).
-    scene: (p.panels || []).map((pn) => pn.scene).filter(Boolean).join(" / "),
-    panels: p.panels,
-  }));
+  // style_set 으로 프리셋을 찾아 art_style·tone·safety·negative 를 "빠진 것만" 보강
+  // 병합한다(중복 방지). 프리셋을 못 찾으면 원본 프롬프트를 그대로 둔다.
+  const preset = webtoonPreset(str(b.style_set));
+  const art = preset?.art_style;
+  const safety = preset?.safety_context;
+
+  const characters: StoryChar[] = (b.characters || []).map((c) => {
+    const baseCh = c.prompt_en ?? str(c.ref_prompt) ?? "";
+    return {
+      ...c,
+      // 캐릭터 시트엔 art_style·safety 만 보강(톤·negative 는 시트에 부적합).
+      prompt_en: preset ? mergePromptParts(baseCh, [art, safety]) : baseCh,
+    };
+  });
+
+  const cuts: StoryCut[] = pages.map((p, i) => {
+    const toneStr = typeof p.tone === "string" ? p.tone : undefined;
+    const tonePrompt = toneStr ? preset?.tones?.[toneStr]?.prompt : undefined;
+    const baseCut = p.image_prompt ?? "";
+    return {
+      no: p.page ?? i + 1,
+      ref: Array.isArray(p.ref) ? p.ref : [],
+      prompt_en: preset
+        ? mergePromptParts(baseCut, [art, tonePrompt, safety, WEBTOON_NEGATIVE])
+        : baseCut,
+      type: "scene",
+      tone: p.tone,
+      // 패널 장면 설명을 합쳐 ref 추론/표시에 활용 (나레이션·말풍선은 보존만).
+      scene: (p.panels || []).map((pn) => pn.scene).filter(Boolean).join(" / "),
+      panels: p.panels,
+    };
+  });
   return { ...b, meta, characters, cuts };
 }
 
