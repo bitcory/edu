@@ -10,7 +10,7 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { Music, Play, VolumeX } from "lucide-react";
+import { BookOpen, Gauge, Music, Play, VolumeX } from "lucide-react";
 import type { RenderedPage } from "../lib/pdf-to-images";
 
 type FlipBookInstance = {
@@ -61,21 +61,31 @@ type FlipBookProps = {
   onFlip?: (e: { data: number }) => void;
 };
 
+// 웹툰 자동스크롤 속도 단계 (최대 px/sec; 나레이션이 길면 그보다 더 느려짐).
+const WEBTOON_SPEEDS = [
+  { label: "느림", pxps: 40 },
+  { label: "보통", pxps: 60 },
+  { label: "빠름", pxps: 92 },
+];
+const WEBTOON_SPEED_DEFAULT = 1; // 보통
+
 type PageProps = {
   src: string;
   alt: string;
   isCover?: boolean;
+  /** Rigid (hardcover) flip. Off by default so the page curls like paper. */
+  hard?: boolean;
 };
 
 const Page = forwardRef<HTMLDivElement, PageProps>(function Page(
-  { src, alt, isCover },
+  { src, alt, isCover, hard },
   ref,
 ) {
   return (
     <div
       ref={ref}
       className={`bv-page${isCover ? " bv-page--cover" : ""}`}
-      data-density={isCover ? "hard" : "soft"}
+      data-density={hard ? "hard" : "soft"}
     >
       <img src={src} alt={alt} draggable={false} />
     </div>
@@ -197,6 +207,23 @@ export default function BookViewer({
   const autoTimerRef = useRef<number | null>(null);
   // True while we're holding for the current page's narration to finish.
   const waitingForNarrationRef = useRef(false);
+  // 웹툰 자동스크롤: rAF handle + the panel currently being scrolled through.
+  const autoRafRef = useRef<number | null>(null);
+  const autoSegRef = useRef<{
+    fromTop: number;
+    toTop: number;
+    durationMs: number;
+    startTs: number;
+    idx: number;
+  } | null>(null);
+  // Min seconds to spend on a panel that has no narration of its own.
+  const WEBTOON_SILENT_SECS = 4;
+  // User-chosen cap on auto-scroll speed (CSS px / sec). If a panel's narration
+  // is short relative to its height, syncing to the voice would scroll too fast,
+  // so we stretch the travel time to keep speed at or below this. The ref mirrors
+  // the state so the rAF/segment logic reads the latest value synchronously.
+  const [webtoonSpeedIdx, setWebtoonSpeedIdx] = useState(WEBTOON_SPEED_DEFAULT);
+  const webtoonSpeedRef = useRef(WEBTOON_SPEEDS[WEBTOON_SPEED_DEFAULT].pxps);
 
   const clearAutoTimer = () => {
     if (autoTimerRef.current !== null) {
@@ -206,7 +233,15 @@ export default function BookViewer({
     waitingForNarrationRef.current = false;
   };
 
-  // Move to the next page; stop auto-play at the end.
+  const stopAutoScroll = () => {
+    if (autoRafRef.current !== null) {
+      cancelAnimationFrame(autoRafRef.current);
+      autoRafRef.current = null;
+    }
+    autoSegRef.current = null;
+  };
+
+  // Move to the next page; stop auto-play at the end (flipbook).
   const advance = () => {
     if (currentPageRef.current >= pages.length - 1) {
       setAutoPlaying(false);
@@ -215,7 +250,93 @@ export default function BookViewer({
     bookRef.current?.pageFlip?.().flipNext();
   };
 
-  // Decide when to advance from the page we're currently on.
+  // ---- 웹툰 자동스크롤 (나레이션에 맞춘 연속 스크롤) ----
+  // The scroll never stops on its own: each frame advances scrollTop toward the
+  // next panel's top. The DURATION of that travel = the current panel's
+  // narration length, so we glide through a panel exactly while its voice plays
+  // (motion-comic style). Audio and scroll are independent, so the scroll keeps
+  // working even if a narration clip is blocked or missing.
+  const tickAutoScroll = (ts: number) => {
+    if (!autoPlayingRef.current) {
+      autoRafRef.current = null;
+      return;
+    }
+    const root = webtoonRootRef.current;
+    const seg = autoSegRef.current;
+    if (!root || !seg) {
+      autoRafRef.current = null;
+      return;
+    }
+    if (!seg.startTs) seg.startTs = ts;
+    const t = Math.min(1, (ts - seg.startTs) / seg.durationMs);
+    root.scrollTop = seg.fromTop + (seg.toTop - seg.fromTop) * t;
+    if (t >= 1) {
+      autoRafRef.current = null;
+      if (seg.idx >= pages.length - 1) {
+        setAutoPlaying(false);
+        return;
+      }
+      beginWebtoonPanel(seg.idx + 1);
+      return;
+    }
+    autoRafRef.current = requestAnimationFrame(tickAutoScroll);
+  };
+
+  // Start playing panel `idx`'s narration and set up the scroll segment that
+  // glides through it for the narration's duration.
+  const beginWebtoonPanel = (i: number) => {
+    if (!autoPlayingRef.current) return;
+    const root = webtoonRootRef.current;
+    if (!root) return;
+    const last = pages.length - 1;
+    const idx = Math.max(0, Math.min(last, i));
+    currentPageRef.current = idx;
+    if (idx >= 1) startMusicOnce();
+    playNarrationForPage(idx);
+
+    const panels = panelRefs.current;
+    const fromTop = root.scrollTop;
+    const toTop =
+      idx >= last
+        ? Math.max(0, root.scrollHeight - root.clientHeight)
+        : panels[idx + 1]?.offsetTop ?? fromTop;
+
+    const begin = (durationMs: number) => {
+      // Don't let the travel be faster than the chosen max speed.
+      const distance = Math.abs(toTop - fromTop);
+      const minMsForSpeed = (distance / webtoonSpeedRef.current) * 1000;
+      autoSegRef.current = {
+        fromTop,
+        toTop,
+        durationMs: Math.max(800, durationMs, minMsForSpeed),
+        startTs: 0,
+        idx,
+      };
+      if (autoRafRef.current === null) {
+        autoRafRef.current = requestAnimationFrame(tickAutoScroll);
+      }
+    };
+
+    const el = narrationRef.current;
+    if (narrationUrls?.[idx] && el) {
+      // Glide for the narration's real length once metadata gives us duration.
+      const usable = () => Number.isFinite(el.duration) && el.duration > 0;
+      if (usable()) {
+        begin(el.duration * 1000);
+      } else {
+        const onMeta = () => begin(usable() ? el.duration * 1000 : WEBTOON_SILENT_SECS * 1000);
+        el.addEventListener("loadedmetadata", onMeta, { once: true });
+        // Safety net if metadata never arrives.
+        window.setTimeout(() => {
+          if (autoSegRef.current?.idx !== idx) onMeta();
+        }, 1200);
+      }
+    } else {
+      begin(WEBTOON_SILENT_SECS * 1000);
+    }
+  };
+
+  // Decide when to advance from the page we're currently on (flipbook).
   const scheduleAdvance = () => {
     clearAutoTimer();
     if (!autoPlayingRef.current) return;
@@ -229,15 +350,18 @@ export default function BookViewer({
   };
 
   const onNarrationEnded = () => {
+    // Flipbook only — webtoon advances on scroll-segment completion, not here.
+    if (webtoon) return;
     if (autoPlayingRef.current && waitingForNarrationRef.current) {
       waitingForNarrationRef.current = false;
       autoTimerRef.current = window.setTimeout(advance, 600);
     }
   };
 
-  // If a page's narration fails to load/play in auto mode, don't get stuck —
-  // fall back to the timed advance.
+  // If a page's narration fails to load/play in flipbook auto mode, don't get
+  // stuck — fall back to the timed advance.
   const onNarrationError = () => {
+    if (webtoon) return;
     if (autoPlayingRef.current && waitingForNarrationRef.current) {
       waitingForNarrationRef.current = false;
       autoTimerRef.current = window.setTimeout(advance, autoSeconds * 1000);
@@ -246,17 +370,79 @@ export default function BookViewer({
 
   useEffect(() => {
     autoPlayingRef.current = autoPlaying;
-    if (autoPlaying) scheduleAdvance();
-    else clearAutoTimer();
-    return () => clearAutoTimer();
+    if (autoPlaying) {
+      // Start here (NOT in the click handler): this effect runs once when
+      // autoPlaying flips true and owns the rAF/timer, so a re-render can't tear
+      // it down. The click handler only primes audio inside the user gesture.
+      if (webtoon) beginWebtoonPanel(currentPageRef.current);
+      else scheduleAdvance();
+    } else {
+      clearAutoTimer();
+      stopAutoScroll();
+    }
+    return () => {
+      clearAutoTimer();
+      stopAutoScroll();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoPlaying, autoSeconds]);
+  }, [autoPlaying, autoSeconds, webtoon]);
 
   const startAuto = (seconds: number) => {
     const s = Math.min(60, Math.max(1, Math.round(seconds) || 5));
     setAutoSeconds(s);
     setAutoOpen(false);
+    // Start the music NOW — this runs inside the modal's "시작" click, a real
+    // user gesture, so the browser's autoplay policy lets it play. (The later
+    // auto-advance happens from a timer, which can't unlock audio on its own.)
+    startMusicOnce();
+    // Open the first page right away instead of sitting on the cover for one
+    // interval. If we're already past the cover, auto-play continues from here.
+    if (currentPageRef.current < 1) {
+      bookRef.current?.pageFlip?.().flipNext();
+    }
     setAutoPlaying(true);
+  };
+
+  // 웹툰 모드: 자동보기 버튼은 모달 없이 바로 나레이션-페이스 자동스크롤을 토글한다.
+  const toggleWebtoonAuto = () => {
+    if (autoPlaying) {
+      setAutoPlaying(false);
+      narrationRef.current?.pause();
+      return;
+    }
+    // Prime audio inside THIS click (a user gesture) so the browser's autoplay
+    // policy doesn't block it: start the music and the current panel's narration
+    // now. The effect (triggered by setAutoPlaying) then drives the scroll.
+    startMusicOnce();
+    playNarrationForPage(currentPageRef.current);
+    setAutoPlaying(true);
+  };
+
+  // Cycle 느림 → 보통 → 빠름. Applies to upcoming panels and re-paces the panel
+  // currently in motion so the change is felt immediately.
+  const cycleWebtoonSpeed = () => {
+    const next = (webtoonSpeedIdx + 1) % WEBTOON_SPEEDS.length;
+    setWebtoonSpeedIdx(next);
+    webtoonSpeedRef.current = WEBTOON_SPEEDS[next].pxps;
+    const root = webtoonRootRef.current;
+    const seg = autoSegRef.current;
+    if (root && seg) {
+      const dist = Math.abs(seg.toTop - root.scrollTop);
+      seg.fromTop = root.scrollTop;
+      seg.durationMs = Math.max(300, (dist / webtoonSpeedRef.current) * 1000);
+      seg.startTs = 0;
+    }
+  };
+
+  // A genuine wheel/touch on the webtoon unlocks music AND stops auto-scroll
+  // (so the reader can take over), mirroring how webtoon viewers pause on
+  // manual scroll. Ctrl/⌘+wheel is a zoom gesture, so leave auto-scroll alone.
+  const onWebtoonManualScroll = (
+    e: React.WheelEvent | React.TouchEvent,
+  ) => {
+    startMusicOnce();
+    const isZoom = "ctrlKey" in e && (e.ctrlKey || e.metaKey);
+    if (autoPlayingRef.current && !isZoom) setAutoPlaying(false);
   };
 
   const toggleMusic = () => {
@@ -368,6 +554,9 @@ export default function BookViewer({
     if (!els.length) return;
     const obs = new IntersectionObserver(
       (entries) => {
+        // During auto-scroll the explicit stepping drives narration; ignore the
+        // observer so it doesn't double-trigger or fight the programmatic scroll.
+        if (autoPlayingRef.current) return;
         for (const e of entries) {
           if (!e.isIntersecting) continue;
           const i = Number((e.target as HTMLElement).dataset.index);
@@ -411,6 +600,9 @@ export default function BookViewer({
           src={p.url}
           alt={`page ${i + 1}`}
           isCover={i === 0 || i === pages.length - 1}
+          // Front cover flips soft (paper curl) like every other page; only the
+          // back cover keeps the rigid hardcover turn to "close" the book.
+          hard={i === pages.length - 1}
         />
       )),
     [pages],
@@ -420,41 +612,6 @@ export default function BookViewer({
     <div className="bv-shell">
       <div className="bv-desk-light" aria-hidden />
       <div className="bv-desk-grain" aria-hidden />
-      {onClose && (
-        <button
-          type="button"
-          onClick={onClose}
-          className="bv-close"
-          aria-label="새 책 보기"
-          title="새 책 보기"
-        >
-          <img
-            className="bv-close__art"
-            src="/view-close-book.png"
-            alt=""
-            aria-hidden="true"
-          />
-          <span>새 책 보기</span>
-        </button>
-      )}
-      {!webtoon && (
-        <button
-          type="button"
-          className={`bv-auto${autoPlaying ? " is-on" : ""}`}
-          onClick={() => (autoPlaying ? setAutoPlaying(false) : setAutoOpen(true))}
-          aria-label={autoPlaying ? "자동보기 정지" : "자동보기"}
-          title={autoPlaying ? "자동보기 정지" : "자동보기"}
-        >
-          <span>{autoPlaying ? "정지" : "자동보기"}</span>
-        </button>
-      )}
-      {autoOpen && (
-        <AutoPlayModal
-          initial={autoSeconds}
-          onStart={startAuto}
-          onClose={() => setAutoOpen(false)}
-        />
-      )}
       {hasNarration && (
         <audio
           ref={narrationRef}
@@ -463,27 +620,92 @@ export default function BookViewer({
           onError={onNarrationError}
         />
       )}
-      {audioUrl && (
-        <>
-          <audio ref={audioRef} src={audioUrl} loop preload="auto" />
+      {audioUrl && <audio ref={audioRef} src={audioUrl} loop preload="auto" />}
+      <div className="bv-controls">
+        {onClose && (
           <button
             type="button"
-            className={`bv-music${musicOn ? " is-on" : ""}`}
+            onClick={onClose}
+            className="bv-ctl bv-ctl--close"
+            aria-label="새 책 보기"
+            title="새 책 보기"
+          >
+            <BookOpen size={18} aria-hidden />
+            <span>새 책 보기</span>
+          </button>
+        )}
+        {audioUrl && (
+          <button
+            type="button"
+            className={`bv-ctl bv-ctl--icon bv-music${musicOn ? " is-on" : ""}`}
             onClick={toggleMusic}
             aria-label={musicOn ? "음악 끄기" : "음악 켜기"}
             title={musicOn ? "음악 끄기" : "음악 켜기"}
           >
-            {musicOn ? <Music size={22} /> : <VolumeX size={22} />}
+            {musicOn ? <Music size={20} /> : <VolumeX size={20} />}
           </button>
-        </>
+        )}
+        <button
+          type="button"
+          className={`bv-ctl bv-auto${webtoon ? " bv-auto--scroll" : ""}${autoPlaying ? " is-on" : ""}`}
+          onClick={() =>
+            autoPlaying
+              ? setAutoPlaying(false)
+              : webtoon
+                ? toggleWebtoonAuto()
+                : setAutoOpen(true)
+          }
+          aria-label={
+            autoPlaying
+              ? webtoon
+                ? "자동스크롤 정지"
+                : "자동보기 정지"
+              : webtoon
+                ? "자동스크롤"
+                : "자동보기"
+          }
+          title={
+            autoPlaying
+              ? webtoon
+                ? "자동스크롤 정지"
+                : "자동보기 정지"
+              : webtoon
+                ? "자동스크롤"
+                : "자동보기"
+          }
+        >
+          <Play size={16} aria-hidden />
+          <span>
+            {autoPlaying ? "정지" : webtoon ? "자동스크롤" : "자동보기"}
+          </span>
+        </button>
+        {webtoon && (
+          <button
+            type="button"
+            className="bv-ctl bv-ctl--speed"
+            onClick={cycleWebtoonSpeed}
+            aria-label={`스크롤 속도: ${WEBTOON_SPEEDS[webtoonSpeedIdx].label} (눌러서 변경)`}
+            title="스크롤 속도"
+          >
+            <Gauge size={16} aria-hidden />
+            <span>{WEBTOON_SPEEDS[webtoonSpeedIdx].label}</span>
+          </button>
+        )}
+      </div>
+      {autoOpen && (
+        <AutoPlayModal
+          initial={autoSeconds}
+          onStart={startAuto}
+          onClose={() => setAutoOpen(false)}
+        />
       )}
       {webtoon ? (
         <div
           ref={webtoonRootRef}
           className="bv-webtoon"
           onScroll={startMusicOnce}
-          onWheel={startMusicOnce}
-          onTouchStart={startMusicOnce}
+          onWheel={onWebtoonManualScroll}
+          onTouchStart={onWebtoonManualScroll}
         >
           <div
             className="bv-webtoon__strip"

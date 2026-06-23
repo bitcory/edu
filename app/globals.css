@@ -344,7 +344,10 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 16px clamp(112px, 10vw, 140px) 16px 16px;
+  /* Symmetric side padding so the spread sits in the TRUE center (the old
+     one-sided right reserve shoved it left). Extra bottom room clears the
+     control bar. */
+  padding: 16px clamp(72px, 9vw, 120px) 84px;
   overflow: hidden;
   isolation: isolate;
 }
@@ -382,166 +385,182 @@ body {
   mix-blend-mode: overlay;
 }
 
-.bv-music {
+/* ---------- Control bar ----------
+   All viewer controls (새 책 보기 / 음악 / 자동보기) live in ONE rounded bar
+   pinned to the bottom-center. Keeps the top corners clear of the page text
+   and groups the actions so they're not scattered across the screen. */
+.bv-controls {
   position: absolute;
-  top: 16px;
-  right: 16px;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  padding: 7px 8px 9px;
+  border-radius: 21px;
+  background:
+    radial-gradient(circle at 20% 18%, rgba(255, 255, 255, 0.8) 0 2px, transparent 3px),
+    linear-gradient(180deg, rgba(255, 251, 226, 0.98), rgba(243, 204, 144, 0.96));
+  border: 2px solid rgba(193, 132, 77, 0.42);
+  box-shadow:
+    0 6px 0 rgba(139, 91, 51, 0.28),
+    0 15px 30px rgba(70, 44, 25, 0.3),
+    inset 0 2px 2px rgba(255, 255, 255, 0.82);
+  z-index: 7;
+  backdrop-filter: blur(3px);
+}
+
+/* Shared rounded-rectangle button base. */
+.bv-ctl {
+  --clay-top: #fff5dc;
+  --clay-mid: #f5c783;
+  --clay-bottom: #d99554;
+  --clay-edge: #b8783f;
+  --clay-ink: #50331f;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  border: 1px solid rgba(255, 180, 117, 0.5);
+  gap: 7px;
+  height: 46px;
+  padding: 0 18px;
+  border-radius: 14px 15px 13px 16px;
+  border: 2px solid color-mix(in srgb, var(--clay-edge) 76%, white);
   background:
-    linear-gradient(180deg, rgba(255, 253, 235, 0.96), rgba(255, 210, 128, 0.92));
-  color: #9a7c5d;
+    radial-gradient(circle at 18% 24%, rgba(255, 255, 255, 0.62) 0 2px, transparent 3px),
+    radial-gradient(circle at 78% 72%, rgba(107, 58, 27, 0.1) 0 1px, transparent 2px),
+    linear-gradient(180deg, var(--clay-top) 0%, var(--clay-mid) 58%, var(--clay-bottom) 100%);
+  color: var(--clay-ink);
+  font-weight: 800;
+  font-size: 14px;
+  white-space: nowrap;
   cursor: pointer;
-  z-index: 7;
-  box-shadow: 0 8px 18px rgba(92, 62, 35, 0.24);
-  transition: transform 0.12s ease, color 0.12s ease;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.58);
+  box-shadow:
+    0 4px 0 var(--clay-edge),
+    0 7px 10px rgba(75, 43, 22, 0.22),
+    inset 0 2px 1px rgba(255, 255, 255, 0.72),
+    inset 0 -2px 3px rgba(103, 53, 23, 0.14);
+  transition:
+    transform 0.12s ease,
+    filter 0.12s ease,
+    box-shadow 0.12s ease;
 }
 
-.bv-music:hover {
-  transform: scale(1.06);
+.bv-ctl::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 3px 7px auto;
+  height: 34%;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.54), transparent);
+  pointer-events: none;
+}
+
+.bv-ctl:hover {
+  transform: translateY(-2px) rotate(-0.4deg);
+  filter: saturate(1.08) brightness(1.04);
+  box-shadow:
+    0 6px 0 var(--clay-edge),
+    0 10px 14px rgba(75, 43, 22, 0.24),
+    inset 0 2px 1px rgba(255, 255, 255, 0.78),
+    inset 0 -2px 3px rgba(103, 53, 23, 0.14);
+}
+
+.bv-ctl:active {
+  transform: translateY(3px);
+  box-shadow:
+    0 1px 0 var(--clay-edge),
+    0 3px 5px rgba(75, 43, 22, 0.2),
+    inset 0 2px 4px rgba(103, 53, 23, 0.16);
+}
+
+.bv-ctl:focus-visible {
+  outline: 3px solid rgba(255, 255, 255, 0.9);
+  outline-offset: 3px;
+}
+
+/* Icon-only button (음악) — square so it doesn't look stretched. */
+.bv-ctl--icon {
+  width: 46px;
+  padding: 0;
+}
+
+/* Webtoon scroll-speed cycle button — quieter than the primary actions. */
+.bv-ctl--speed {
+  padding: 0 12px;
+  background: linear-gradient(180deg, #fbf7ee, #ece2cf);
+  color: #6b5740;
+  font-size: 13px;
+}
+.bv-ctl--speed:hover {
+  background: linear-gradient(180deg, #fffdf7, #efe6d4);
+}
+
+/* Coral clay: return to the bookstore. */
+.bv-ctl--close {
+  --clay-top: #ffd3bd;
+  --clay-mid: #ff9d79;
+  --clay-bottom: #e96e55;
+  --clay-edge: #b94f42;
+  --clay-ink: #5e2d26;
+}
+
+/* Violet clay: background music. */
+.bv-music {
+  --clay-top: #eee5ff;
+  --clay-mid: #baa2ee;
+  --clay-bottom: #876bc8;
+  --clay-edge: #6550a4;
+  --clay-ink: #3f2d72;
 }
 
 .bv-music.is-on {
-  color: #e0743a;
-}
-
-.bv-close {
-  position: absolute;
-  top: 16px;
-  left: 16px;
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  width: 88px;
-  height: 88px;
-  background: linear-gradient(180deg, #fff8df, #ffd28a);
-  border: 2px solid rgba(255, 180, 117, 0.55);
-  border-radius: 50%;
-  color: #634431;
-  font-weight: 800;
-  font-size: 13px;
-  cursor: pointer;
-  z-index: 6;
-  box-shadow: 0 14px 28px rgba(92, 62, 35, 0.3);
-  overflow: hidden;
-  transition: transform 0.12s ease, background 0.12s ease;
-}
-
-.bv-close:hover {
-  background: linear-gradient(180deg, #fffbe9, #ffd68b);
-  transform: scale(1.05);
-}
-
-.bv-close::before {
-  content: none;
-}
-
-.bv-close::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 50% 68%, rgba(255, 247, 220, 0.8), transparent 34%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 214, 139, 0.18));
-}
-
-/* 자동보기 button — same look as 새 책 보기, pinned to the bottom-right. */
-.bv-auto {
-  position: absolute;
-  bottom: 18px;
-  right: 16px;
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  width: 88px;
-  height: 88px;
-  background:
-    url("/view-auto-book.png") center / cover no-repeat,
-    linear-gradient(180deg, #fff8df, #ffd28a);
-  border: 2px solid rgba(255, 180, 117, 0.55);
-  border-radius: 50%;
-  color: #263f5f;
-  font-weight: 800;
-  font-size: 13px;
-  cursor: pointer;
-  z-index: 6;
-  box-shadow: 0 14px 28px rgba(92, 62, 35, 0.3);
-  overflow: hidden;
-  transition: transform 0.12s ease, background 0.12s ease;
-}
-.bv-auto:hover {
-  background:
-    url("/view-auto-book.png") center / cover no-repeat,
-    linear-gradient(180deg, #fffbe9, #ffd68b);
-  transform: scale(1.05);
-}
-.bv-auto.is-on {
-  border-color: rgba(58, 126, 151, 0.68);
-  color: #20445b;
+  --clay-top: #e5d8ff;
+  --clay-mid: #a987ef;
+  --clay-bottom: #7657c5;
+  color: #2f1d64;
   box-shadow:
-    0 14px 28px rgba(48, 85, 105, 0.3),
-    0 0 0 3px rgba(116, 192, 218, 0.25);
-}
-.bv-auto svg,
-.bv-auto span {
-  position: relative;
-  z-index: 3;
-  filter:
-    drop-shadow(0 1px 0 rgba(255, 255, 255, 0.82))
-    drop-shadow(0 2px 3px rgba(255, 247, 214, 0.72));
-}
-.bv-auto:not(.is-on) svg {
-  opacity: 0;
+    0 4px 0 var(--clay-edge),
+    0 0 0 3px rgba(205, 183, 255, 0.44),
+    0 8px 14px rgba(75, 43, 22, 0.24),
+    inset 0 2px 1px rgba(255, 255, 255, 0.72);
 }
 
-/* Legible white pill behind the button labels — the text was getting lost on
-   the busy bookshelf background. */
-.bv-close span,
-.bv-auto span {
-  display: inline-block;
-  padding: 2px 11px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.95);
-  color: #4a3322;
-  font-weight: 800;
-  white-space: nowrap;
-  filter: none;
-  box-shadow: 0 2px 7px rgba(92, 62, 35, 0.22);
+/* Mint clay: page-by-page auto view. */
+.bv-auto {
+  --clay-top: #d9fff1;
+  --clay-mid: #77d8bd;
+  --clay-bottom: #47ae9a;
+  --clay-edge: #318377;
+  --clay-ink: #174f49;
+}
+
+/* Sky-blue clay: continuous webtoon auto scroll. */
+.bv-auto--scroll {
+  --clay-top: #e0f5ff;
+  --clay-mid: #78c5ef;
+  --clay-bottom: #4899d1;
+  --clay-edge: #3172aa;
+  --clay-ink: #174b74;
+}
+
+/* Active state keeps each feature color and adds a pressed/play ring. */
+.bv-auto.is-on {
+  filter: saturate(1.12);
+  box-shadow:
+    0 3px 0 var(--clay-edge),
+    0 0 0 3px color-mix(in srgb, var(--clay-mid) 42%, transparent),
+    0 7px 12px rgba(75, 43, 22, 0.22),
+    inset 0 3px 5px rgba(36, 91, 78, 0.13);
 }
 
 .modal-card--narrow {
   max-width: 340px;
-}
-
-.bv-close__art {
-  position: absolute;
-  inset: 2px;
-  z-index: 1;
-  width: calc(100% - 4px);
-  height: calc(100% - 4px);
-  border-radius: 50%;
-  object-fit: cover;
-  opacity: 0.88;
-  pointer-events: none;
-}
-
-.bv-close svg,
-.bv-close span {
-  position: relative;
-  z-index: 3;
-  filter:
-    drop-shadow(0 1px 0 rgba(255, 255, 255, 0.9))
-    drop-shadow(0 2px 4px rgba(92, 62, 35, 0.18));
 }
 
 .bv-stage {
@@ -690,81 +709,51 @@ body {
   }
 
   .bv-shell {
-    /* extra bottom room so the book doesn't sit under the back button */
-    padding: 16px 10px 84px;
+    /* symmetric sides + extra bottom room so the book clears the control bar */
+    padding: 16px 10px 80px;
   }
 
-  /* On phones the right-center circle overlapped the full-width book and its
-     label wrapped to two lines. Use a horizontal pill pinned to the bottom
-     center instead — clear of the book, label on one line. */
-  /* Both pills share one bottom row, centered as a pair. 새 책 보기 on the
-     left half, 자동보기 on the right half (5px gap on each side of center). */
-  .bv-close {
-    top: auto;
-    bottom: 16px;
-    right: calc(50% + 5px);
-    left: auto;
-    transform: none;
-    flex-direction: row;
-    gap: 8px;
-    width: auto;
-    height: auto;
-    padding: 11px 20px;
-    border-radius: 999px;
-    font-size: 14px;
-    white-space: nowrap;
+  /* On phones, tighten the bar so all three buttons fit one row on narrow
+     screens. The bar itself stays bottom-center (flex layout handles it). */
+  .bv-controls {
+    bottom: 14px;
+    gap: 5px;
+    padding: 5px;
   }
-  .bv-close:hover {
-    transform: scale(1.04);
+  .bv-ctl {
+    height: 42px;
+    padding: 0 13px;
+    font-size: 13px;
   }
-
-  .bv-auto {
-    top: auto;
-    bottom: 16px;
-    left: calc(50% + 5px);
-    right: auto;
-    transform: none;
-    flex-direction: row;
-    gap: 8px;
-    width: auto;
-    height: auto;
-    padding: 11px 20px;
-    border-radius: 999px;
-    font-size: 14px;
-    white-space: nowrap;
-  }
-  .bv-auto:hover {
-    transform: scale(1.04);
+  .bv-ctl--icon {
+    width: 42px;
+    padding: 0;
   }
 }
 
-/* Phones / small tablets in LANDSCAPE (wide but short). Here the spread is
-   limited by height, and the desktop right-side bookshelf reserve (clamp 112–
-   140px) shoves it left, leaving a big empty right shelf. Trim the padding to
-   thin + symmetric so the book is centered and as large as the height allows.
-   The decorative shelf still frames the sides (a portrait spread can't fill a
-   very wide screen without cropping the art). */
+/* Phones / small tablets in LANDSCAPE (wide but short). The spread is limited
+   by height, so trim top/bottom padding to keep the book as tall (= big) as the
+   short height allows. Sides stay symmetric so it's centered; the bar overlays
+   the bottom strip without needing a tall reserve. */
 @media (min-width: 721px) and (orientation: landscape) and (max-height: 600px) {
-  /* Reserve side room so the spread is NARROWER than the screen — it must clear
-     the top-left "새 책 보기" and bottom-right "자동보기" corner buttons and not
-     run off the screen edges. Thin top/bottom keeps the book as tall (= big) as
-     the short landscape height allows. */
   .bv-shell {
-    padding: 8px clamp(72px, 10vw, 100px);
+    padding: 8px clamp(72px, 10vw, 100px) 64px;
   }
 
-  /* Oversized 88px circles eat the short screen — shrink them so they sit in
-     the side gaps and don't cover the page. */
-  .bv-close,
-  .bv-auto {
-    width: 64px;
-    height: 64px;
-    font-size: 10px;
+  /* Compact the bar so it doesn't eat the short height. */
+  .bv-controls {
+    bottom: 10px;
+    gap: 5px;
+    padding: 5px;
   }
-
-  .bv-music {
-    width: 40px;
-    height: 40px;
+  .bv-ctl {
+    height: 38px;
+    padding: 0 12px;
+    font-size: 12px;
+  }
+  .bv-ctl--icon {
+    width: 38px;
+    padding: 0;
   }
 }
 
@@ -5603,7 +5592,7 @@ textarea.ed-input {
   padding: 24px;
 }
 .apick-modal {
-  width: min(720px, 96vw);
+  width: min(1120px, 96vw);
   max-height: 86vh;
   display: flex;
   flex-direction: column;
@@ -5643,27 +5632,51 @@ textarea.ed-input {
   text-align: center;
   color: #8a6f57;
 }
-.apick-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 12px;
-  padding: 18px;
-  overflow-y: auto;
+.apick-carousel {
+  position: relative;
+  min-width: 0;
+  padding: 24px 54px 30px;
+}
+.apick-scroller {
+  display: flex;
+  gap: 18px;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scroll-behavior: smooth;
+  scroll-snap-type: x mandatory;
+  scrollbar-color: rgba(240, 111, 95, 0.65) rgba(90, 60, 30, 0.08);
+  scrollbar-width: thin;
+  padding: 2px 2px 16px;
+}
+.apick-scroller::-webkit-scrollbar {
+  height: 8px;
+}
+.apick-scroller::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgba(90, 60, 30, 0.08);
+}
+.apick-scroller::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(240, 111, 95, 0.65);
 }
 .apick-card {
+  flex: 0 0 238px;
+  min-height: 356px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 9px;
   text-align: center;
-  padding: 18px 12px;
+  padding: 12px 12px 18px;
   border: 1px solid #ecdfc9;
-  border-radius: 14px;
+  border-radius: 22px;
   background: #fff;
   text-decoration: none;
   color: inherit;
+  scroll-snap-align: start;
   transition:
-    transform 0.1s ease,
+    transform 0.18s ease,
     box-shadow 0.15s ease,
     border-color 0.15s ease;
 }
@@ -5672,24 +5685,31 @@ textarea.ed-input {
   border-color: var(--accent);
   box-shadow: 0 10px 24px -12px rgba(240, 111, 95, 0.5);
 }
-.apick-card__avatar {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-  font-weight: 800;
-  color: #fff;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+.apick-card:focus-visible {
+  outline: 3px solid rgba(240, 111, 95, 0.45);
+  outline-offset: 2px;
+}
+.apick-card__portrait {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 16px;
+  background: #f8ead7;
+}
+.apick-card__portrait img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
 }
 .apick-card__name {
   font-weight: 800;
-  font-size: 14px;
+  font-size: 18px;
 }
 .apick-card__intro {
-  font-size: 12px;
+  min-height: 2.9em;
+  font-size: 13px;
   color: #8a6f57;
   line-height: 1.45;
   display: -webkit-box;
@@ -5698,15 +5718,63 @@ textarea.ed-input {
   overflow: hidden;
 }
 .apick-card__stats {
+  margin-top: auto;
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 12px;
+  font-size: 13px;
   color: #6b513a;
   font-weight: 700;
 }
 .apick-card__stats svg {
   color: var(--accent);
+}
+.apick-nav {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #ecdfc9;
+  border-radius: 50%;
+  background: rgba(255, 253, 248, 0.96);
+  color: #6b513a;
+  box-shadow: 0 8px 22px rgba(64, 39, 20, 0.14);
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+.apick-nav:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.apick-nav--prev {
+  left: 10px;
+}
+.apick-nav--next {
+  right: 10px;
+}
+
+@media (max-width: 640px) {
+  .apick-backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+  .apick-modal {
+    width: 100%;
+    max-height: 92vh;
+    border-radius: 22px 22px 0 0;
+  }
+  .apick-carousel {
+    padding: 18px 18px 24px;
+  }
+  .apick-card {
+    flex-basis: min(74vw, 270px);
+  }
+  .apick-nav {
+    display: none;
+  }
 }
 
 /* 작가 페이지 뒤로가기 → 북스토어 */

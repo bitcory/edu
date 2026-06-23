@@ -148,8 +148,56 @@ function parseScript(text: string): string {
 //  - 샷 번호: no / scene_no / cut_no / shot_no → 없으면 배열 순서로 자동 부여
 //  - 캐릭터 한글이름: name_ko / name
 //  - 등장 인물(ref): 없으면 컷 텍스트에서 캐릭터 id·이름을 스캔해 추론
-function normalizeBook(b: StoryBook): StoryBook {
-  if (!b || typeof b !== "object") return b;
+// 웹툰 페이지/패널 포맷 → 컷 기반 그림책 포맷 어댑터.
+// 다른 파이프라인이 내보내는 { title, logline, style_set, characters[ref_prompt],
+// pages[{ image_prompt, panels[...] }] } 형태를 이 화면이 읽는 { meta, characters
+// [prompt_en], cuts[prompt_en] }로 매핑한다. 9:16 페이지 1장 = 컷 1개.
+type WebtoonPanel = {
+  position?: string;
+  scene?: string;
+  narration?: unknown[];
+  bubbles?: unknown[];
+  [k: string]: unknown;
+};
+type WebtoonPage = {
+  page?: number;
+  tone?: string;
+  ref?: string[];
+  image_prompt?: string;
+  panels?: WebtoonPanel[];
+  [k: string]: unknown;
+};
+function adaptStoryBook(b: StoryBook): StoryBook {
+  const pages = (b as { pages?: WebtoonPage[] }).pages;
+  // 이미 컷 기반이거나 pages가 없으면 그대로 둔다.
+  if (!Array.isArray(pages) || (Array.isArray(b.cuts) && b.cuts.length)) return b;
+  const str = (v: unknown) => (typeof v === "string" ? v : undefined);
+  const meta: BookMeta = {
+    ...(b.meta || {}),
+    title: b.meta?.title ?? str(b.title),
+    theme: b.meta?.theme ?? str(b.theme),
+    message: b.meta?.message ?? str(b.logline),
+  };
+  const characters: StoryChar[] = (b.characters || []).map((c) => ({
+    ...c,
+    prompt_en: c.prompt_en ?? str(c.ref_prompt),
+  }));
+  const cuts: StoryCut[] = pages.map((p, i) => ({
+    no: p.page ?? i + 1,
+    ref: Array.isArray(p.ref) ? p.ref : [],
+    prompt_en: p.image_prompt ?? "",
+    type: "scene",
+    tone: p.tone,
+    // 패널 장면 설명을 합쳐 ref 추론/표시에 활용 (나레이션·말풍선은 보존만).
+    scene: (p.panels || []).map((pn) => pn.scene).filter(Boolean).join(" / "),
+    panels: p.panels,
+  }));
+  return { ...b, meta, characters, cuts };
+}
+
+function normalizeBook(bIn: StoryBook): StoryBook {
+  if (!bIn || typeof bIn !== "object") return bIn;
+  const b = adaptStoryBook(bIn);
   const characters: StoryChar[] = (b.characters || []).map((c) => ({
     ...c,
     name_ko: c.name_ko ?? c.name ?? c.id,
