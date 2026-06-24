@@ -6443,6 +6443,64 @@ textarea.ed-input {
   word-break: break-word;
 }
 .story-root .story-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+
+/* 대사·내레이션 인라인 편집기 (말풍선 글자 → 프롬프트 [BUBBLE_n] 자동 반영) */
+.story-root .story-textedit {
+  margin-top: 10px;
+  padding: 12px;
+  background: #fffdf5;
+  border: 1px solid var(--st-line);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.story-root .story-textedit__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed var(--st-line);
+}
+.story-root .story-textedit__panel:last-of-type { border-bottom: none; padding-bottom: 0; }
+.story-root .story-textedit__pos {
+  font-size: 0.74rem;
+  font-weight: 800;
+  color: var(--st-ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.story-root .story-textedit__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.story-root .story-textedit__tag {
+  flex: none;
+  min-width: 124px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--st-ink-soft);
+  background: #f3ead2;
+  border-radius: 999px;
+  padding: 3px 9px;
+  white-space: nowrap;
+}
+.story-root .story-textedit__tag--narr { background: #e7eef0; color: #4a6168; }
+.story-root .story-textedit__input {
+  flex: 1;
+  font-family: inherit;
+  font-size: 0.86rem;
+  color: var(--st-ink);
+  background: #fff;
+  border: 1.3px solid var(--st-line);
+  border-radius: 8px;
+  padding: 7px 10px;
+}
+.story-root .story-textedit__input:focus {
+  outline: none;
+  border-color: var(--st-accent, #e0a32e);
+}
 .story-root .story-mini {
   font-family: inherit;
   font-size: 0.85rem;

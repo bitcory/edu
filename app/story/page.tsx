@@ -155,11 +155,21 @@ function parseScript(text: string): string {
 // 다른 파이프라인이 내보내는 { title, logline, style_set, characters[ref_prompt],
 // pages[{ image_prompt, panels[...] }] } 형태를 이 화면이 읽는 { meta, characters
 // [prompt_en], cuts[prompt_en] }로 매핑한다. 9:16 페이지 1장 = 컷 1개.
+type CutNarration = { id?: string; text?: string; [k: string]: unknown };
+type CutBubble = {
+  id?: string;
+  type?: string; // dialogue | thought
+  speaker?: string; // character id
+  text?: string;
+  x?: number;
+  y?: number;
+  [k: string]: unknown;
+};
 type WebtoonPanel = {
   position?: string;
   scene?: string;
-  narration?: unknown[];
-  bubbles?: unknown[];
+  narration?: CutNarration[];
+  bubbles?: CutBubble[];
   [k: string]: unknown;
 };
 type WebtoonPage = {
@@ -170,6 +180,42 @@ type WebtoonPage = {
   panels?: WebtoonPanel[];
   [k: string]: unknown;
 };
+
+// 컷(=페이지)에 보존된 panels 를 타입 있게 읽는다 (런타임에 어댑터가 붙임).
+function cutPanels(cut: StoryCut): WebtoonPanel[] {
+  const p = (cut as { panels?: WebtoonPanel[] }).panels;
+  return Array.isArray(p) ? p : [];
+}
+// 페이지 전체 말풍선을 패널 순서대로 모은다 ([BUBBLE_1], [BUBBLE_2] … 순).
+function cutBubbles(cut: StoryCut): CutBubble[] {
+  return cutPanels(cut).flatMap((p) => p.bubbles || []);
+}
+// 컷에 편집할 대사/내레이션이 하나라도 있는지.
+function cutHasText(cut: StoryCut): boolean {
+  return cutPanels(cut).some(
+    (p) => (p.narration?.length || 0) + (p.bubbles?.length || 0) > 0,
+  );
+}
+// 웹툰(세로 9:16) 책인지. 어댑터가 붙인 webtoon 플래그 또는 컷의 panels 로 판별.
+function isWebtoonBook(book: StoryBook | null): boolean {
+  if (!book) return false;
+  if ((book as { webtoon?: unknown }).webtoon === true) return true;
+  return (book.cuts || []).some((c) => cutPanels(c).length > 0);
+}
+// image_prompt 의 [BUBBLE_n] 자리표시자를 해당 말풍선 text 로 치환한다.
+// (지침 6번: 웹페이지가 [BUBBLE_n] → bubbles[n-1].text. 텍스트 단일 출처)
+function substituteBubbles(text: string, cut: StoryCut): string {
+  const bubbles = cutBubbles(cut);
+  if (!bubbles.length || !text) return text;
+  let out = text;
+  bubbles.forEach((b, i) => {
+    const t = (b?.text || "").trim();
+    const re = new RegExp(`\\[BUBBLE_?${i + 1}\\]`, "g");
+    // 빈 텍스트면 자리표시자만 제거(빈 말풍선 유지).
+    out = out.replace(re, t);
+  });
+  return out;
+}
 function adaptStoryBook(b: StoryBook): StoryBook {
   const pages = (b as { pages?: WebtoonPage[] }).pages;
   // 이미 컷 기반이거나 pages가 없으면 그대로 둔다.
@@ -213,7 +259,8 @@ function adaptStoryBook(b: StoryBook): StoryBook {
       panels: p.panels,
     };
   });
-  return { ...b, meta, characters, cuts };
+  // 세로 웹툰 책 표시 → 컷 이미지를 9:16 으로 생성하게 한다.
+  return { ...b, meta, characters, cuts, webtoon: true };
 }
 
 function normalizeBook(bIn: StoryBook): StoryBook {
@@ -407,6 +454,25 @@ export default function StoryPage() {
       /* keep optimistic data URL */
     }
   }, [lib, bookIdx]);
+
+  // 컷의 말풍선/내레이션 편집을 상태에 반영(immutable + localStorage). normalize 는
+  // 로드 때만 도므로 여기서 panels 를 직접 써도 덮어쓰이지 않는다.
+  const handleCutPanels = useCallback((cutIdx: number, panels: WebtoonPanel[]) => {
+    setLib((prev) => {
+      if (!prev?.books) return prev;
+      const books = [...prev.books];
+      const bk = books[bookIdx];
+      if (!bk) return prev;
+      const cuts = [...(bk.cuts || [])];
+      const target = cuts[cutIdx];
+      if (!target) return prev;
+      cuts[cutIdx] = { ...target, panels } as StoryCut;
+      books[bookIdx] = { ...bk, cuts };
+      const next = { ...prev, books };
+      try { localStorage.setItem(CACHE_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }, [bookIdx]);
 
   // Same as handleCutImage but for a cover (stores cover.imageKey).
   const handleCoverImage = useCallback(async (coverIdx: number, dataUrl: string) => {
@@ -638,7 +704,7 @@ export default function StoryPage() {
         setCutBulkStatus(`${label} 건너뜀 (이미 있음) · ${i + 1}/${list.length}`);
         continue;
       }
-      const prompt = buildPrompt(lib?.books?.[bookIdx] || null, cut.prompt_en || "", "scene");
+      const prompt = buildPrompt(lib?.books?.[bookIdx] || null, substituteBubbles(cut.prompt_en || "", cut), "scene");
       if (!prompt.trim()) { setCutBulkStatus(`${label} 건너뜀 (프롬프트 없음) · ${i + 1}/${list.length}`); continue; }
       setCutBulkStatus(`${label} 참조 준비 중… · ${i + 1}/${list.length}`);
       try {
@@ -646,7 +712,7 @@ export default function StoryPage() {
         const note = refs.missing ? ` (참조 ${refs.images.length}/없음 ${refs.missing})` : ` (참조 ${refs.images.length})`;
         const handle = generateViaChatGpt({
           prompt,
-          aspect: "16:9",
+          aspect: isWebtoonBook(lib?.books?.[bookIdx] || null) ? "9:16" : "16:9",
           referenceImages: refs.images,
           onProgress: (m) => setCutBulkStatus(`${label}${note}: ${m} · ${i + 1}/${list.length}`),
         });
@@ -887,6 +953,8 @@ export default function StoryPage() {
   const chars = book?.characters || [];
   const cuts = book?.cuts || [];
   const covers = book?.covers || [];
+  // 웹툰 책이면 컷(=페이지)을 세로 9:16, 아니면 가로 16:9 로 생성한다.
+  const cutAspect: Aspect = isWebtoonBook(book) ? "9:16" : "16:9";
   // emotion 필드가 있는 컷이 하나도 없으면 인물매칭 모달의 '감정' 컬럼을 숨긴다.
   const matchHasEmotion = cuts.some((c) => c.emotion);
   const currentChar = chars[activeChar] || null;
@@ -1282,6 +1350,8 @@ export default function StoryPage() {
                           onCopy={(t) => copyText(t)}
                           onJumpChar={jumpToChar}
                           buildPromptFor={(base) => buildPrompt(book, base, "scene")}
+                          onEditPanels={(panels) => handleCutPanels(i, panels)}
+                          aspect={cutAspect}
                         />
                       ))}
                     {covers
@@ -1800,7 +1870,7 @@ function RefTags({ refs, charMap, onJumpChar }: {
   );
 }
 
-function CutCard({ cut, charMap, imageUrl, imageKey, busy, extReady, resolveRefs, onGenerated, onCopy, onJumpChar, buildPromptFor }: {
+function CutCard({ cut, charMap, imageUrl, imageKey, busy, extReady, resolveRefs, onGenerated, onCopy, onJumpChar, buildPromptFor, onEditPanels, aspect }: {
   cut: StoryCut;
   charMap: Record<string, StoryChar>;
   imageUrl?: string;
@@ -1812,12 +1882,38 @@ function CutCard({ cut, charMap, imageUrl, imageKey, busy, extReady, resolveRefs
   onCopy: (t: string) => void;
   onJumpChar: (id: string) => void;
   buildPromptFor: (base: string) => string;
+  onEditPanels: (panels: WebtoonPanel[]) => void;
+  aspect: Aspect;
 }) {
   const [generating, setGenerating] = useState(false);
   const [statusMsg, setStatusMsg] = useState("");
   const [lightbox, setLightbox] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const handleRef = useRef<GenHandle | null>(null);
+
+  // 말풍선 글자가 박힌 최종 프롬프트(자리표시자 치환 → 스타일/네거티브 병합).
+  // 말풍선 text 가 곧 이미지 글자라, 아래 편집기에서 고치면 여기에 즉시 반영된다.
+  const finalPrompt = buildPromptFor(substituteBubbles(cut.prompt_en || "", cut));
+  const panels = cutPanels(cut);
+  const hasText = cutHasText(cut);
+
+  // 한 패널의 narration/bubbles 중 한 항목의 text 만 바꿔 새 panels 를 만들어 올린다.
+  function editItemText(
+    kind: "narration" | "bubbles",
+    pi: number,
+    idx: number,
+    text: string,
+  ) {
+    const next = panels.map((p, i) => {
+      if (i !== pi) return p;
+      const arr = (p[kind] || []).map((it, j) =>
+        j === idx ? { ...it, text } : it,
+      );
+      return { ...p, [kind]: arr };
+    });
+    onEditPanels(next);
+  }
 
   const fileName = `cut_${cut.no ?? ""}`;
   const downloadHref = imageKey
@@ -1840,10 +1936,11 @@ function CutCard({ cut, charMap, imageUrl, imageKey, busy, extReady, resolveRefs
     e.target.value = "";
   }
 
-  // Image-to-image: upload the cut's reference character images + prompt at 16:9.
+  // Image-to-image: upload the cut's reference character images + prompt at the
+  // book's aspect (웹툰=9:16, 그림책=16:9).
   function startGenerate() {
     if (generating) return;
-    const prompt = buildPromptFor(cut.prompt_en || "");
+    const prompt = finalPrompt;
     if (!prompt.trim()) { setStatusMsg("프롬프트가 비어 있어요."); return; }
     setGenerating(true);
     setStatusMsg("참조 이미지 준비 중…");
@@ -1855,7 +1952,7 @@ function CutCard({ cut, charMap, imageUrl, imageKey, busy, extReady, resolveRefs
         if (refs.missing) setStatusMsg(`참조 ${refs.images.length}장 사용 (없음 ${refs.missing}) · 생성 중…`);
         const inner = generateViaChatGpt({
           prompt,
-          aspect: "16:9",
+          aspect,
           referenceImages: refs.images,
           onProgress: setStatusMsg,
         });
@@ -1891,17 +1988,74 @@ function CutCard({ cut, charMap, imageUrl, imageKey, busy, extReady, resolveRefs
         <div className="story-cp-row">
           {/* LEFT 60% — prompt */}
           <div className="story-cp-left">
-            <div className="story-prompt">{buildPromptFor(cut.prompt_en || "")}</div>
+            <div className="story-prompt">{finalPrompt}</div>
             <div className="story-actions">
               <button
                 type="button"
                 className="story-mini"
-                title="본문 + scene_add + 네거티브를 합쳐 복사"
-                onClick={() => onCopy(buildPromptFor(cut.prompt_en || ""))}
+                title="말풍선 글자 + 스타일 + 네거티브를 합쳐 복사"
+                onClick={() => onCopy(finalPrompt)}
               >
                 프롬프트 복사
               </button>
+              {hasText && (
+                <button
+                  type="button"
+                  className="story-mini story-mini--ghost"
+                  onClick={() => setEditOpen((v) => !v)}
+                  title="말풍선 대사 / 내레이션 자막을 수정"
+                >
+                  <MessageSquare size={13} /> {editOpen ? "편집 닫기" : "대사·내레이션 편집"}
+                </button>
+              )}
             </div>
+            {editOpen && hasText && (
+              <div className="story-textedit">
+                {panels.map((p, pi) => {
+                  // [BUBBLE_n] 번호는 페이지 전체 누적 → 이 패널의 시작 번호 계산.
+                  const startNo = panels
+                    .slice(0, pi)
+                    .reduce((n, q) => n + (q.bubbles?.length || 0), 0);
+                  const hasAny = (p.narration?.length || 0) + (p.bubbles?.length || 0) > 0;
+                  if (!hasAny) return null;
+                  return (
+                    <div key={pi} className="story-textedit__panel">
+                      <div className="story-textedit__pos">{p.position || `패널 ${pi + 1}`}</div>
+                      {(p.narration || []).map((n, ni) => (
+                        <label key={n.id || `n${ni}`} className="story-textedit__row">
+                          <span className="story-textedit__tag story-textedit__tag--narr">내레이션</span>
+                          <input
+                            className="story-textedit__input"
+                            value={n.text || ""}
+                            placeholder="내레이션 자막 (이미지엔 안 그려지고 자막으로 얹힘)"
+                            onChange={(e) => editItemText("narration", pi, ni, e.target.value)}
+                          />
+                        </label>
+                      ))}
+                      {(p.bubbles || []).map((b, bi) => {
+                        const sp = b.speaker ? charMap[b.speaker] : undefined;
+                        const spName = sp?.name_ko || b.speaker || "";
+                        return (
+                          <label key={b.id || `b${bi}`} className="story-textedit__row">
+                            <span className="story-textedit__tag">
+                              말풍선 {startNo + bi + 1}
+                              {b.type === "thought" ? " · 속마음" : " · 대사"}
+                              {spName ? ` · ${spName}` : ""}
+                            </span>
+                            <input
+                              className="story-textedit__input"
+                              value={b.text || ""}
+                              placeholder="말풍선 안에 들어갈 한글 대사"
+                              onChange={(e) => editItemText("bubbles", pi, bi, e.target.value)}
+                            />
+                          </label>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* RIGHT 40% — image (image-to-image) */}
@@ -1937,7 +2091,7 @@ function CutCard({ cut, charMap, imageUrl, imageKey, busy, extReady, resolveRefs
                 className="story-mini"
                 onClick={startGenerate}
                 disabled={generating || busy || !extReady}
-                title={extReady ? "등장 캐릭터 이미지를 참조해 16:9로 생성" : "ChatGPT 확장 설치 후 사용 가능"}
+                title={extReady ? `등장 캐릭터 이미지를 참조해 ${aspect}로 생성` : "ChatGPT 확장 설치 후 사용 가능"}
               >
                 <Sparkles size={14} /> {generating ? "생성 중…" : "이미지 생성"}
               </button>
