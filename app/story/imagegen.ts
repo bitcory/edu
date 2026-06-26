@@ -97,14 +97,17 @@ export function generateViaChatGpt(opts: {
     rejectFn = reject;
     // If no message arrives for a while, the extension isn't responding (stale
     // context, not installed on this tab, etc.) — fail instead of hanging.
-    // Reset on every message so long generations don't trip it.
+    // Reset on every message so long generations don't trip it. The window is
+    // generous because jobs run in BACKGROUND ChatGPT tabs, whose timers Chrome
+    // throttles (down to ~once/min after 5 min hidden); chatgpt.js sends a
+    // heartbeat every poll so this only fires when the tab is truly dead.
     const arm = () => {
       if (watchdog) clearTimeout(watchdog);
       watchdog = setTimeout(() => {
         if (settled) return;
         settled = true; cleanup();
         reject(new Error("확장이 응답하지 않아요. 페이지를 새로고침(Cmd+R)했는지, ChatGPT에 로그인돼 있는지 확인하세요."));
-      }, 30000);
+      }, 180000);
     };
     onMsg = (e: MessageEvent) => {
       if (e.source !== window) return;

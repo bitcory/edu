@@ -222,11 +222,13 @@
       await sleep(500);
 
       let stableUrl = null, stableCount = 0;
-      for (let i = 0; i < 160; i++) {
+      for (let i = 0; i < 240; i++) {
         await sleep(1500);
         if (i % 4 === 0) ckCancel();
         if (isRateLimited()) throw new Error("ChatGPT 사용량 한도(레이트 리밋)에 도달했어요");
-        if (i > 0 && i % 8 === 0) report("이미지 생성 대기 중… (" + Math.round(i * 1.5) + "초)");
+        // Heartbeat every iteration: this tab may be backgrounded/throttled, and
+        // the page's watchdog must keep hearing from us or it gives up.
+        report("이미지 생성 대기 중… (" + i + "회)");
         const urls = lastTurnImageUrls();
         const u = urls.length ? urls[urls.length - 1] : null;
         if (u) {
