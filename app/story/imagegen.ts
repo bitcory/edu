@@ -14,6 +14,14 @@ export type Aspect = "1:1" | "3:4" | "4:3" | "16:9" | "9:16";
 export type Engine = "api" | "chatgpt";
 export type GenHandle = { promise: Promise<string>; cancel: () => void };
 
+// ChatGPT가 인터페이스를 바꿔 확장(chatgpt.js)의 사이즈 드롭다운 클릭이 더 이상
+// 통하지 않는다. 그래서 가로세로비율을 프롬프트 본문 끝에 한국어 지시로 붙여
+// ChatGPT가 텍스트에서 직접 비율을 잡게 한다.
+export function withAspectInstruction(prompt: string, aspect: Aspect): string {
+  const p = (prompt || "").trimEnd();
+  return `${p}\n\n가로세로비율 ${aspect}사이즈로 이미지 만들어줘`;
+}
+
 // ---- Path A: server API ----
 export function generateViaApi(opts: {
   prompt: string;
@@ -105,7 +113,7 @@ export function generateViaChatGpt(opts: {
       else if (d.type === "error") { settled = true; cleanup(); reject(new Error(d.message || "생성 실패")); }
     };
     window.addEventListener("message", onMsg);
-    window.postMessage({ source: "tbbook-story", kind: "generate", id, prompt: opts.prompt, aspect: opts.aspect, referenceImages: opts.referenceImages || [] }, "*");
+    window.postMessage({ source: "tbbook-story", kind: "generate", id, prompt: withAspectInstruction(opts.prompt, opts.aspect), aspect: opts.aspect, referenceImages: opts.referenceImages || [] }, "*");
     arm();
   });
 

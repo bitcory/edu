@@ -124,14 +124,16 @@ function escapeId(s?: string): string {
 }
 
 // Covers are generated with the cover prompt + the parsed full script + an
-// instruction (3:4), on top of the attached reference character images.
+// instruction, on top of the attached reference character images. The 3:4
+// aspect instruction is appended at the generation layer (withAspectInstruction
+// in imagegen.ts), so it isn't repeated here.
 function buildCoverPrompt(book: StoryBook | null, cover: StoryCut, scriptText: string): string {
   const base = buildPrompt(book, cover.prompt_en || "", "cover");
   const label = cover.type === "front" ? "앞표지" : cover.type === "back" ? "뒷표지" : "표지";
   const parts = [base];
   const s = (scriptText || "").trim();
   if (s) parts.push(s);
-  parts.push(`첨부된 프롬프트, 대본, 이미지를 바탕으로 그림책 ${label}의 이미지를 만들어줘, 3:4사이즈로 만들어줘`);
+  parts.push(`첨부된 프롬프트, 대본, 이미지를 바탕으로 그림책 ${label}의 이미지를 만들어줘`);
   return parts.join("\n\n");
 }
 
