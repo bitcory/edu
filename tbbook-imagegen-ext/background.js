@@ -4,22 +4,6 @@
 // jobId → { pageTabId, chatgptTabId }
 const JOBS = new Map();
 
-// A plain chat tab can use the image tool; "/g/" custom GPTs and settings can't.
-function isUsable(url) {
-  try {
-    const p = new URL(url).pathname;
-    return p === "/" || p.startsWith("/c/");
-  } catch {
-    return false;
-  }
-}
-
-async function findUsableTab() {
-  const tabs = await chrome.tabs.query({ url: ["https://chatgpt.com/*", "https://chat.openai.com/*"] });
-  const t = tabs.find((x) => isUsable(x.url));
-  return t ? t.id : null;
-}
-
 function waitForTabComplete(tabId, timeoutMs = 25000) {
   return new Promise((resolve) => {
     const t0 = Date.now();
@@ -37,8 +21,11 @@ function waitForTabComplete(tabId, timeoutMs = 25000) {
   });
 }
 
+// Open in the background (active:false): several jobs run in parallel, so we
+// must not let each new tab steal focus. DOM automation in chatgpt.js uses
+// synthetic events (no focus needed); the tab is left open for later review.
 async function openFreshTab() {
-  const created = await chrome.tabs.create({ url: "https://chatgpt.com/", active: true });
+  const created = await chrome.tabs.create({ url: "https://chatgpt.com/", active: false });
   await waitForTabComplete(created.id);
   return created.id;
 }
@@ -66,20 +53,9 @@ function statusToPage(pageTabId, jobId, status, extra = {}) {
 async function dispatch(jobId, prompt, aspect, referenceImages, pageTabId) {
   const runMsg = { type: "tbbook-run", jobId, prompt, aspect, referenceImages: referenceImages || [] };
 
-  // 1) Try an existing plain-chat tab first (short retry — it's either live or stale).
-  const existing = await findUsableTab();
-  if (existing != null) {
-    JOBS.set(jobId, { pageTabId, chatgptTabId: existing });
-    try {
-      await sendToTab(existing, runMsg, 6);
-      await chrome.tabs.update(existing, { active: true }).catch(() => {});
-      return;
-    } catch {
-      /* stale/orphaned content script → fall through to a fresh tab */
-    }
-  }
-
-  // 2) Open a fresh chatgpt.com tab and run there.
+  // Always open a fresh tab per job (no reuse): the page may fire several jobs
+  // at once, and each needs its own tab to run in parallel. Finished tabs stay
+  // open so the user can review every generation.
   statusToPage(pageTabId, jobId, "progress", { message: "ChatGPT 탭 여는 중…" });
   const fresh = await openFreshTab();
   JOBS.set(jobId, { pageTabId, chatgptTabId: fresh });

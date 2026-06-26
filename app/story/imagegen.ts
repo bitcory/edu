@@ -85,12 +85,16 @@ export function generateViaChatGpt(opts: {
   let settled = false;
   let onMsg: ((e: MessageEvent) => void) | null = null;
   let watchdog: ReturnType<typeof setTimeout> | null = null;
+  // Captured so cancel() can reject the promise — otherwise an awaiting caller
+  // (the 전체생성 loop) hangs forever and never resets its busy state.
+  let rejectFn: ((reason: Error) => void) | null = null;
   const cleanup = () => {
     if (onMsg) window.removeEventListener("message", onMsg);
     if (watchdog) clearTimeout(watchdog);
   };
 
   const promise = new Promise<string>((resolve, reject) => {
+    rejectFn = reject;
     // If no message arrives for a while, the extension isn't responding (stale
     // context, not installed on this tab, etc.) — fail instead of hanging.
     // Reset on every message so long generations don't trip it.
@@ -124,6 +128,7 @@ export function generateViaChatGpt(opts: {
       settled = true;
       window.postMessage({ source: "tbbook-story", kind: "cancel", id }, "*");
       cleanup();
+      rejectFn?.(new Error("정지됨 (사용자 취소)"));
     },
   };
 }

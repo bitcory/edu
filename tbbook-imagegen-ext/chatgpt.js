@@ -25,14 +25,6 @@
     genAlt: ["생성된 이미지", "Generated image"],
     editAlt: ["편집된 이미지", "Edited image"],
   };
-  const SIZE_MAP = {
-    "1:1": { ratio: "1:1", labels: ["정사각형 1:1", "Square 1:1"] },
-    "3:4": { ratio: "3:4", labels: ["세로 3:4", "Portrait 3:4"] },
-    "4:3": { ratio: "4:3", labels: ["가로 4:3", "Landscape 4:3"] },
-    "16:9": { ratio: "16:9", labels: ["와이드스크린 16:9", "Widescreen 16:9"] },
-    "9:16": { ratio: "9:16", labels: ["스토리 9:16", "Story 9:16"] },
-  };
-
   const getPromptInput = () => qs(SEL.promptInput) || qs(SEL.promptFallback);
   const getPlusButton = () => qs(SEL.plus) || qs(SEL.plusFallback);
   const getSendButton = () => qs(SEL.send);
@@ -99,25 +91,6 @@
     return isImageModeActive();
   }
 
-  function findSizeBtn() {
-    const form = qs("form"); if (!form) return null;
-    const cands = ["자동", "Auto", "1:1", "3:4", "4:3", "9:16", "16:9"];
-    return qsa("button", form).find((b) => { const t = (b.innerText || "").trim(); return cands.some((c) => t === c || t.startsWith(c)); }) || null;
-  }
-  const isSizeMenuOpen = () => { const m = qs('[role="menu"]'); return !!m && m.querySelectorAll('[role="menuitemradio"]').length > 0; };
-  async function applyImageSize(ASPECT) {
-    const map = SIZE_MAP[ASPECT]; if (!map) return false;
-    const btn = findSizeBtn(); if (!btn) return false;
-    if ((btn.innerText || "").trim().includes(map.ratio)) return true;
-    await clickEl(btn);
-    for (let i = 0; i < 15; i++) { await sleep(100); if (isSizeMenuOpen()) break; }
-    if (!isSizeMenuOpen()) return false;
-    const target = qsa('[role="menuitemradio"]').find((it) => { const t = (it.innerText || "").trim(); return map.labels.some((l) => t === l || t.includes(l)) || t.includes(map.ratio); });
-    if (!target) { document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); return false; }
-    await clickEl(target);
-    for (let i = 0; i < 10; i++) { await sleep(100); const f = findSizeBtn(); if (f && (f.innerText || "").trim().includes(map.ratio)) return true; }
-    return false;
-  }
 
   function hasContent(el, text) { return (el.textContent || "").includes(text.slice(0, Math.min(20, text.length))); }
   function fireInput(el, text) {
@@ -227,7 +200,8 @@
 
       report("이미지 모드 활성화…");
       if (!(await activateImageTool())) log("경고: 이미지 모드 활성 실패 — 일반 모드로 진행");
-      await applyImageSize(aspect || "16:9");
+      // 가로세로비율은 프롬프트 텍스트(가로세로비율 N사이즈로 …)로 지정한다.
+      // ChatGPT UI의 사이즈 메뉴 클릭은 모달이 떠 혼란/오류를 일으켜 제거했다.
 
       if (refs.length) {
         report("참조 이미지 업로드… (" + refs.length + "장)");

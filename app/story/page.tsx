@@ -36,6 +36,44 @@ const SCRIPT_KEY = "toolb_step8_script_v1";
 // 왼쪽 붙여넣기 원본(넘버링 포함)을 따로 저장 — 새로고침 후에도 원본이 그대로 보이도록.
 const SCRIPT_INPUT_KEY = "toolb_step8_script_input_v1";
 
+// 전체생성: 한 번에 동시 생성할 ChatGPT 탭 수(=병렬 수). 각 작업은 자기 전용 탭에서
+// 돌고 끝난 탭은 닫지 않아 결과를 확인할 수 있다. 숫자를 올리면 빨라지지만
+// ChatGPT 단기 속도제한·브라우저 부하가 커진다.
+const GEN_CONCURRENCY = 5;
+// 탭이 한꺼번에 우르르 열리지 않도록 레인(동시 작업) 시작 시점을 이만큼 어긋나게 한다.
+const GEN_STAGGER_MS = 1200;
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+// 동시 `limit`개까지 worker 를 병렬 실행하는 작업 풀. 각 레인은 공유 큐에서 다음
+// 인덱스를 가져와 처리하고, shouldStop() 이 true 면 새 작업을 더 시작하지 않는다.
+// 레인 시작은 staggerMs 만큼 어긋나게 해서 탭이 동시에 폭주하지 않게 한다.
+async function runPool<T>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<void>,
+  shouldStop: () => boolean,
+  staggerMs = 0,
+): Promise<void> {
+  let next = 0;
+  const lane = async () => {
+    for (;;) {
+      if (shouldStop()) return;
+      const i = next++;
+      if (i >= items.length) return;
+      await worker(items[i], i);
+    }
+  };
+  const lanes: Promise<void>[] = [];
+  const laneCount = Math.min(limit, items.length);
+  for (let k = 0; k < laneCount; k++) {
+    if (k > 0 && staggerMs) await sleep(staggerMs);
+    if (shouldStop()) break;
+    lanes.push(lane());
+  }
+  await Promise.all(lanes);
+}
+
 // ---- data shapes (GPT output is loosely typed; keep fields optional) ----
 type StoryChar = {
   id?: string;
@@ -605,8 +643,9 @@ export default function StoryPage() {
     return () => { a = false; };
   }, []);
 
-  // 전체생성: generate an image for every character that doesn't have one yet,
-  // one at a time (sequential → a single ChatGPT tab, no collisions).
+  // 전체생성: generate an image for every item that doesn't have one yet, up to
+  // GEN_CONCURRENCY at once (each job runs in its own fresh ChatGPT tab, so they
+  // don't collide). In-flight handles are tracked in a Set so 정지 cancels all.
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkStatus, setBulkStatus] = useState("");
   const [zipBusy, setZipBusy] = useState(false);
@@ -614,52 +653,58 @@ export default function StoryPage() {
   const [cutBulkStatus, setCutBulkStatus] = useState("");
   const [cutZipBusy, setCutZipBusy] = useState(false);
   const cutBulkCancel = useRef(false);
-  const cutBulkHandle = useRef<GenHandle | null>(null);
+  const cutBulkHandles = useRef<Set<GenHandle>>(new Set());
   const bulkCancel = useRef(false);
-  const bulkHandle = useRef<GenHandle | null>(null);
+  const bulkHandles = useRef<Set<GenHandle>>(new Set());
 
   async function generateAll() {
     const list = lib?.books?.[bookIdx]?.characters || [];
     if (!list.length || bulkBusy) return;
     bulkCancel.current = false;
+    bulkHandles.current.clear();
     setBulkBusy(true);
+    const total = list.length;
     let made = 0;
-    for (let i = 0; i < list.length; i++) {
-      if (bulkCancel.current) break;
-      const c = list[i];
+    let done = 0;
+    await runPool(list, GEN_CONCURRENCY, async (c, i) => {
       const ck = charKeyOf(bookIdx, c, i);
       const name = (c.name_ko || c.id || `#${i + 1}`).toString();
       if (imageUrls[ck] || typeof c.imageKey === "string") {
-        setBulkStatus(`${name} 건너뜀 (이미 있음) · ${i + 1}/${list.length}`);
-        continue;
+        done++;
+        setBulkStatus(`${done}/${total} · ${name} 건너뜀 (이미 있음)`);
+        return;
       }
       const prompt = buildPrompt(lib?.books?.[bookIdx] || null, c.prompt_en || "", "char");
-      if (!prompt.trim()) { setBulkStatus(`${name} 건너뜀 (프롬프트 없음) · ${i + 1}/${list.length}`); continue; }
-      setBulkStatus(`${name} 생성 중… · ${i + 1}/${list.length}`);
+      if (!prompt.trim()) { done++; setBulkStatus(`${done}/${total} · ${name} 건너뜀 (프롬프트 없음)`); return; }
+      setBulkStatus(`${done}/${total} · ${name} 생성 중…`);
       try {
         const handle = generateViaChatGpt({
           prompt,
           aspect: "16:9",
-          onProgress: (m) => setBulkStatus(`${name}: ${m} · ${i + 1}/${list.length}`),
+          onProgress: (m) => setBulkStatus(`${done}/${total} · ${name}: ${m}`),
         });
-        bulkHandle.current = handle;
-        const dataUrl = await handle.promise;
-        await handleCharImage(i, dataUrl);
-        made++;
+        bulkHandles.current.add(handle);
+        try {
+          const dataUrl = await handle.promise;
+          await handleCharImage(i, dataUrl);
+          made++;
+        } finally {
+          bulkHandles.current.delete(handle);
+        }
       } catch (e) {
-        setBulkStatus(`${name} 실패: ${(e as Error)?.message || ""}`);
+        setBulkStatus(`${done}/${total} · ${name} 실패: ${(e as Error)?.message || ""}`);
       } finally {
-        bulkHandle.current = null;
+        done++;
       }
-    }
+    }, () => bulkCancel.current, GEN_STAGGER_MS);
     setBulkBusy(false);
     setBulkStatus(bulkCancel.current ? `중지됨 · ${made}장 생성` : `완료 · ${made}장 생성`);
   }
 
   function cancelBulk() {
     bulkCancel.current = true;
-    bulkHandle.current?.cancel();
-    bulkHandle.current = null;
+    bulkHandles.current.forEach((h) => h.cancel());
+    bulkHandles.current.clear();
   }
 
   async function downloadAllZip() {
@@ -696,58 +741,68 @@ export default function StoryPage() {
   }
 
   // 본문 컷 전체생성 — image-to-image: each cut uses its ref characters' images.
+  // Cuts first (up to GEN_CONCURRENCY in parallel), then covers.
   async function generateAllCuts() {
-    const list = lib?.books?.[bookIdx]?.cuts || [];
-    if (!list.length || cutBulkBusy) return;
+    const book0 = lib?.books?.[bookIdx] || null;
+    const list = book0?.cuts || [];
+    const coverList = book0?.covers || [];
+    if ((!list.length && !coverList.length) || cutBulkBusy) return;
     cutBulkCancel.current = false;
+    cutBulkHandles.current.clear();
     setCutBulkBusy(true);
+    const webtoon = isWebtoonBook(book0);
+    const total = list.length + coverList.length;
     let made = 0;
-    for (let i = 0; i < list.length; i++) {
-      if (cutBulkCancel.current) break;
-      const cut = list[i];
+    let done = 0;
+    const stop = () => cutBulkCancel.current;
+
+    await runPool(list, GEN_CONCURRENCY, async (cut, i) => {
       const ck = cutKeyOf(bookIdx, cut, i);
       const label = `컷 ${cut.no ?? i + 1}`;
       if (cutImageUrls[ck] || typeof cut.imageKey === "string") {
-        setCutBulkStatus(`${label} 건너뜀 (이미 있음) · ${i + 1}/${list.length}`);
-        continue;
+        done++;
+        setCutBulkStatus(`${done}/${total} · ${label} 건너뜀 (이미 있음)`);
+        return;
       }
-      const prompt = buildPrompt(lib?.books?.[bookIdx] || null, substituteBubbles(cut.prompt_en || "", cut), "scene");
-      if (!prompt.trim()) { setCutBulkStatus(`${label} 건너뜀 (프롬프트 없음) · ${i + 1}/${list.length}`); continue; }
-      setCutBulkStatus(`${label} 참조 준비 중… · ${i + 1}/${list.length}`);
+      const prompt = buildPrompt(book0, substituteBubbles(cut.prompt_en || "", cut), "scene");
+      if (!prompt.trim()) { done++; setCutBulkStatus(`${done}/${total} · ${label} 건너뜀 (프롬프트 없음)`); return; }
+      setCutBulkStatus(`${done}/${total} · ${label} 참조 준비 중…`);
       try {
         const refs = await resolveCutRefs(cut);
         const note = refs.missing ? ` (참조 ${refs.images.length}/없음 ${refs.missing})` : ` (참조 ${refs.images.length})`;
         const handle = generateViaChatGpt({
           prompt,
-          aspect: isWebtoonBook(lib?.books?.[bookIdx] || null) ? "9:16" : "16:9",
+          aspect: webtoon ? "9:16" : "16:9",
           referenceImages: refs.images,
-          onProgress: (m) => setCutBulkStatus(`${label}${note}: ${m} · ${i + 1}/${list.length}`),
+          onProgress: (m) => setCutBulkStatus(`${done}/${total} · ${label}${note}: ${m}`),
         });
-        cutBulkHandle.current = handle;
-        const dataUrl = await handle.promise;
-        await handleCutImage(i, dataUrl);
-        made++;
+        cutBulkHandles.current.add(handle);
+        try {
+          const dataUrl = await handle.promise;
+          await handleCutImage(i, dataUrl);
+          made++;
+        } finally {
+          cutBulkHandles.current.delete(handle);
+        }
       } catch (e) {
-        setCutBulkStatus(`${label} 실패: ${(e as Error)?.message || ""}`);
+        setCutBulkStatus(`${done}/${total} · ${label} 실패: ${(e as Error)?.message || ""}`);
       } finally {
-        cutBulkHandle.current = null;
+        done++;
       }
-    }
+    }, stop, GEN_STAGGER_MS);
 
     // Covers next — image-to-image at 3:4 (front/back cover ratio).
-    const coverList = lib?.books?.[bookIdx]?.covers || [];
-    for (let i = 0; i < coverList.length; i++) {
-      if (cutBulkCancel.current) break;
-      const cv = coverList[i];
+    await runPool(coverList, GEN_CONCURRENCY, async (cv, i) => {
       const ck = coverKeyOf(bookIdx, cv, i);
       const label = cv.type === "front" ? "앞표지" : cv.type === "back" ? "뒤표지" : `표지 ${i + 1}`;
       if (coverImageUrls[ck] || typeof cv.imageKey === "string") {
-        setCutBulkStatus(`${label} 건너뜀 (이미 있음)`);
-        continue;
+        done++;
+        setCutBulkStatus(`${done}/${total} · ${label} 건너뜀 (이미 있음)`);
+        return;
       }
-      const prompt = buildCoverPrompt(lib?.books?.[bookIdx] || null, cv, scriptParsed);
-      if (!prompt.trim()) { setCutBulkStatus(`${label} 건너뜀 (프롬프트 없음)`); continue; }
-      setCutBulkStatus(`${label} 참조 준비 중…`);
+      const prompt = buildCoverPrompt(book0, cv, scriptParsed);
+      if (!prompt.trim()) { done++; setCutBulkStatus(`${done}/${total} · ${label} 건너뜀 (프롬프트 없음)`); return; }
+      setCutBulkStatus(`${done}/${total} · ${label} 참조 준비 중…`);
       try {
         const refs = await resolveCutRefs(cv);
         const note = refs.missing ? ` (참조 ${refs.images.length}/없음 ${refs.missing})` : ` (참조 ${refs.images.length})`;
@@ -755,18 +810,22 @@ export default function StoryPage() {
           prompt,
           aspect: "3:4",
           referenceImages: refs.images,
-          onProgress: (m) => setCutBulkStatus(`${label}${note}: ${m}`),
+          onProgress: (m) => setCutBulkStatus(`${done}/${total} · ${label}${note}: ${m}`),
         });
-        cutBulkHandle.current = handle;
-        const dataUrl = await handle.promise;
-        await handleCoverImage(i, dataUrl);
-        made++;
+        cutBulkHandles.current.add(handle);
+        try {
+          const dataUrl = await handle.promise;
+          await handleCoverImage(i, dataUrl);
+          made++;
+        } finally {
+          cutBulkHandles.current.delete(handle);
+        }
       } catch (e) {
-        setCutBulkStatus(`${label} 실패: ${(e as Error)?.message || ""}`);
+        setCutBulkStatus(`${done}/${total} · ${label} 실패: ${(e as Error)?.message || ""}`);
       } finally {
-        cutBulkHandle.current = null;
+        done++;
       }
-    }
+    }, stop, GEN_STAGGER_MS);
 
     setCutBulkBusy(false);
     setCutBulkStatus(cutBulkCancel.current ? `중지됨 · ${made}장 생성` : `완료 · ${made}장 생성`);
@@ -774,8 +833,8 @@ export default function StoryPage() {
 
   function cancelCutBulk() {
     cutBulkCancel.current = true;
-    cutBulkHandle.current?.cancel();
-    cutBulkHandle.current = null;
+    cutBulkHandles.current.forEach((h) => h.cancel());
+    cutBulkHandles.current.clear();
   }
 
   async function downloadAllCutsZip() {
