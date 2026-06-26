@@ -33,6 +33,8 @@ import {
 const SAMPLE_URL = "/picbook/sample_library.json";
 const CACHE_KEY = "toolb_step8_picbook_v1";
 const SCRIPT_KEY = "toolb_step8_script_v1";
+// 왼쪽 붙여넣기 원본(넘버링 포함)을 따로 저장 — 새로고침 후에도 원본이 그대로 보이도록.
+const SCRIPT_INPUT_KEY = "toolb_step8_script_input_v1";
 
 // ---- data shapes (GPT output is loosely typed; keep fields optional) ----
 type StoryChar = {
@@ -369,10 +371,13 @@ export default function StoryPage() {
       const saved = localStorage.getItem(SCRIPT_KEY);
       if (saved) {
         // Restore the saved script on mount (client-side hydration, see above).
+        // 왼쪽 붙여넣기 칸은 원본(넘버링 포함)을 복원한다. 원본 키가 없으면(구버전
+        // 저장본) 파싱본으로 폴백한다.
+        const savedInput = localStorage.getItem(SCRIPT_INPUT_KEY);
         /* eslint-disable react-hooks/set-state-in-effect */
         setScriptParsed(saved);
         setScriptPreview(saved);
-        setScriptInput(saved);
+        setScriptInput(savedInput ?? saved);
         /* eslint-enable react-hooks/set-state-in-effect */
       }
     } catch {}
@@ -1511,7 +1516,11 @@ export default function StoryPage() {
                 disabled={!scriptPreview}
                 onClick={() => {
                   setScriptParsed(scriptPreview);
-                  try { localStorage.setItem(SCRIPT_KEY, scriptPreview); } catch {}
+                  try {
+                    localStorage.setItem(SCRIPT_KEY, scriptPreview);
+                    // 원본(넘버링 포함)도 저장해 왼쪽 붙여넣기 칸에 그대로 남도록.
+                    localStorage.setItem(SCRIPT_INPUT_KEY, scriptInput);
+                  } catch {}
                   showToast("대본을 저장했어요!");
                   setScriptModalOpen(false);
                 }}
