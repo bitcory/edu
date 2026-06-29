@@ -12,6 +12,9 @@
   const alive = () => {
     try { return !!(chrome.runtime && chrome.runtime.id); } catch { return false; }
   };
+  // Installed extension version, sent on pong/ready so the page can compare it
+  // against /api/ext/latest and warn when this self-distributed build is stale.
+  const VERSION = (() => { try { return chrome.runtime.getManifest().version; } catch { return ""; } })();
   const toPage = (payload) => window.postMessage({ source: "tbbook-ext", ...payload }, "*");
   const STALE_MSG = "확장이 새로고침됐어요. 이 페이지를 새로고침(Cmd+R)한 뒤 다시 시도하세요.";
 
@@ -22,7 +25,7 @@
     if (!d || d.source !== "tbbook-story") return;
 
     if (d.kind === "ping") {
-      if (alive()) toPage({ type: "pong" });
+      if (alive()) toPage({ type: "pong", version: VERSION });
       return;
     }
     if (!alive()) {
@@ -50,5 +53,5 @@
   } catch { /* extension already gone */ }
 
   // Announce presence so the page can enable the ChatGPT engine.
-  if (alive()) toPage({ type: "ready" });
+  if (alive()) toPage({ type: "ready", version: VERSION });
 })();

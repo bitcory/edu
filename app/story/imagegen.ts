@@ -51,6 +51,7 @@ type ExtMsg = {
   id?: string;
   message?: string;
   dataUrl?: string;
+  version?: string;
 };
 
 /** Resolves true if the TB Magic Book extension's bridge content script is present. */
@@ -72,6 +73,30 @@ export function isExtensionReady(timeoutMs = 600): Promise<boolean> {
     window.addEventListener("message", onMsg);
     window.postMessage({ source: "tbbook-story", kind: "ping" }, "*");
     setTimeout(() => finish(false), timeoutMs);
+  });
+}
+
+/** Installed extension version, read from its pong/ready handshake. Resolves
+ * null if the extension isn't present (no reply within the timeout). Used to
+ * compare against /api/ext/latest and show an "업데이트 필요" banner. */
+export function getExtVersion(timeoutMs = 800): Promise<string | null> {
+  if (typeof window === "undefined") return Promise.resolve(null);
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (v: string | null) => {
+      if (done) return;
+      done = true;
+      window.removeEventListener("message", onMsg);
+      resolve(v);
+    };
+    const onMsg = (e: MessageEvent) => {
+      if (e.source !== window) return;
+      const d = e.data as ExtMsg;
+      if (d?.source === "tbbook-ext" && (d.type === "pong" || d.type === "ready") && d.version) finish(d.version);
+    };
+    window.addEventListener("message", onMsg);
+    window.postMessage({ source: "tbbook-story", kind: "ping" }, "*");
+    setTimeout(() => finish(null), timeoutMs);
   });
 }
 

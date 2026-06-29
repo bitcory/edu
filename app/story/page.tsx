@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
-  generateViaApi, generateViaChatGpt, isExtensionReady,
+  generateViaApi, generateViaChatGpt, isExtensionReady, getExtVersion,
   type Aspect, type Engine, type GenHandle,
 } from "./imagegen";
 import { buildBookPages } from "./handoff";
@@ -39,11 +39,23 @@ const SCRIPT_INPUT_KEY = "toolb_step8_script_input_v1";
 // 전체생성: 한 번에 동시 생성할 ChatGPT 탭 수(=병렬 수). 각 작업은 자기 전용 탭에서
 // 돌고 끝난 탭은 닫지 않아 결과를 확인할 수 있다. 숫자를 올리면 빨라지지만
 // ChatGPT 단기 속도제한·브라우저 부하가 커진다.
-const GEN_CONCURRENCY = 5;
+const GEN_CONCURRENCY = 3;
 // 탭이 한꺼번에 우르르 열리지 않도록 레인(동시 작업) 시작 시점을 이만큼 어긋나게 한다.
-const GEN_STAGGER_MS = 1200;
+const GEN_STAGGER_MS = 2000;
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+// Compare dotted versions ("0.1.0"): -1 if a<b, 1 if a>b, 0 if equal. Used to
+// detect an outdated self-distributed extension build.
+function cmpVer(a: string, b: string): number {
+  const pa = String(a).split(".").map((n) => parseInt(n, 10) || 0);
+  const pb = String(b).split(".").map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] || 0) - (pb[i] || 0);
+    if (d) return d < 0 ? -1 : 1;
+  }
+  return 0;
+}
 
 // 동시 `limit`개까지 worker 를 병렬 실행하는 작업 풀. 각 레인은 공유 큐에서 다음
 // 인덱스를 가져와 처리하고, shouldStop() 이 true 면 새 작업을 더 시작하지 않는다.
@@ -643,6 +655,25 @@ export default function StoryPage() {
     return () => { a = false; };
   }, []);
 
+  // The extension is self-distributed (no Chrome Web Store / no auto-update), so
+  // warn when the installed build is older than the latest one we ship.
+  const [extUpdate, setExtUpdate] = useState<{ installed: string; latest: string; downloadUrl: string } | null>(null);
+  useEffect(() => {
+    let a = true;
+    (async () => {
+      const installed = await getExtVersion();
+      if (!a || !installed) return; // extension not present → nothing to nag about
+      const latest: { version?: string; downloadUrl?: string } = await fetch("/api/ext/latest")
+        .then((r) => r.json())
+        .catch(() => ({}));
+      if (!a || !latest.version) return;
+      if (cmpVer(installed, latest.version) < 0) {
+        setExtUpdate({ installed, latest: latest.version, downloadUrl: latest.downloadUrl || "" });
+      }
+    })();
+    return () => { a = false; };
+  }, []);
+
   // 전체생성: generate an image for every item that doesn't have one yet, up to
   // GEN_CONCURRENCY at once (each job runs in its own fresh ChatGPT tab, so they
   // don't collide). In-flight handles are tracked in a Set so 정지 cancels all.
@@ -1070,6 +1101,25 @@ export default function StoryPage() {
           </button>
         </div>
       </header>
+
+      {extUpdate && (
+        <div className="story-ext-update" role="alert">
+          <span>
+            ChatGPT 확장 업데이트가 있어요 — 설치됨 v{extUpdate.installed} → 최신 v{extUpdate.latest}.
+            새 폴더를 받아 <code>chrome://extensions</code>에서 다시 로드하세요.
+          </span>
+          <span className="story-ext-update-actions">
+            {extUpdate.downloadUrl && (
+              <a className="story-mini" href={extUpdate.downloadUrl} target="_blank" rel="noreferrer">
+                새 버전 받기
+              </a>
+            )}
+            <button type="button" className="story-mini story-mini--ghost" onClick={() => setExtUpdate(null)}>
+              닫기
+            </button>
+          </span>
+        </div>
+      )}
 
       {sidebarOpen && (
         <div className="story-sidebar-backdrop" onClick={() => setSidebarOpen(false)} />

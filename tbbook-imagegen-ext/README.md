@@ -35,6 +35,30 @@
 - 페이지는 `window.postMessage`만 사용 → 확장이 없으면 자동으로 **API 엔진**으로 폴백.
 - `chatgpt.js`의 DOM 자동화 로직은 ai-video-studio `automate.js`에서 재사용.
 
+## 업데이트 (자동 업데이트 없음 → 알림으로 보완)
+
+이 확장은 chatgpt.com을 자동화하므로 Chrome 웹스토어에 올릴 수 없어, **자동
+업데이트가 없다.** 각자 폴더를 받아 `chrome://extensions`에서 다시 로드해야 한다.
+대신 앱이 **구버전을 감지해 배너로 알려준다**:
+
+1. `bridge.js`가 `manifest.json`의 `version`을 `/story` 페이지로 보낸다.
+2. 페이지는 `GET /api/ext/latest`(`{ version, downloadUrl }`)와 비교해, 설치된
+   버전이 더 낮으면 상단에 "업데이트 필요" 배너 + 다운로드 링크를 띄운다.
+
+**새 빌드 배포 절차**
+
+1. `manifest.json`의 `version`을 올린다 (예: `0.1.1` → `0.1.2`).
+2. `bash tbbook-imagegen-ext/pack.sh` 실행 → `public/tbbook-imagegen-ext.zip`
+   재생성. 앱이 `/tbbook-imagegen-ext.zip` 으로 그대로 서빙한다(파일명 고정).
+3. 서버 환경변수를 갱신한다:
+   - `EXT_LATEST_VERSION` = 올린 버전 (미설정 시 라우트의 fallback 상수 사용)
+   - `EXT_DOWNLOAD_URL` = `/tbbook-imagegen-ext.zip` (배너의 "새 버전 받기" 버튼)
+4. 배포(zip 커밋 또는 빌드에 포함) 후, 구버전 사용자에게 배너가 떠
+   "새 버전 받기" → 압축 풀고 `chrome://extensions`에서 다시 로드 → 최신.
+
+> 다운로드 zip은 stable 파일명(`tbbook-imagegen-ext.zip`)이라 `EXT_DOWNLOAD_URL`은
+> 한 번만 정하면 되고, 매 릴리스마다 zip 내용과 `EXT_LATEST_VERSION`만 바꾸면 된다.
+
 ## 배포 도메인 추가
 
 다른 도메인에서도 쓰려면 `manifest.json`의 `content_scripts[].matches`(bridge.js 항목)에
