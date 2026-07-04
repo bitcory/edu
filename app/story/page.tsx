@@ -46,6 +46,13 @@ const GEN_STAGGER_MS = 2000;
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
+// 짧은 비암호화 해시(djb2) — Flow 소재 이름에 붙여 이미지 버전을 구분한다.
+function shortHash(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36).slice(0, 5);
+}
+
 // Compare dotted versions ("0.1.0"): -1 if a<b, 1 if a>b, 0 if equal. Used to
 // detect an outdated self-distributed extension build.
 function cmpVer(a: string, b: string): number {
@@ -566,18 +573,25 @@ export default function StoryPage() {
     }
   }, [lib, bookIdx]);
 
-  // Resolve a cut's reference character images (for image-to-image) into data URLs.
-  const resolveCutRefs = useCallback(async (cut: StoryCut): Promise<{ images: string[]; missing: number }> => {
+  // Resolve a cut's reference character images (for image-to-image) into data
+  // URLs, plus a stable per-image asset name. Flow 엔진은 이 이름으로 소재
+  // 라이브러리에 1회만 업로드하고 컷마다 등장 캐릭터만 골라 재첨부한다(인물매칭).
+  // 이름에 imageKey 해시를 붙여, 캐릭터 이미지를 다시 만들면 새 소재로 올라간다.
+  const resolveCutRefs = useCallback(async (cut: StoryCut): Promise<{ images: string[]; names: string[]; missing: number }> => {
     const refIds = Array.isArray(cut.ref) ? cut.ref : [];
     const chars = lib?.books?.[bookIdx]?.characters || [];
     const keys: string[] = [];
+    const names: string[] = [];
     let missing = 0;
     for (const id of refIds) {
       const c = chars.find((x) => x.id === id);
-      if (c && typeof c.imageKey === "string") keys.push(c.imageKey);
-      else missing++;
+      if (c && typeof c.imageKey === "string") {
+        keys.push(c.imageKey);
+        const base = (c.name_ko || c.id || "char").toString().slice(0, 16);
+        names.push(`${base}_${shortHash(c.imageKey)}`);
+      } else missing++;
     }
-    if (!keys.length) return { images: [], missing };
+    if (!keys.length) return { images: [], names: [], missing };
     try {
       const r = await fetch("/api/story/image-data", {
         method: "POST",
@@ -585,10 +599,15 @@ export default function StoryPage() {
         body: JSON.stringify({ keys }),
       });
       const d = await r.json().catch(() => ({}));
-      const images = keys.map((k) => d.dataUrls?.[k]).filter(Boolean) as string[];
-      return { images, missing };
+      const images: string[] = [];
+      const outNames: string[] = [];
+      keys.forEach((k, i) => {
+        const u = d.dataUrls?.[k];
+        if (u) { images.push(u); outNames.push(names[i]); }
+      });
+      return { images, names: outNames, missing };
     } catch {
-      return { images: [], missing: refIds.length };
+      return { images: [], names: [], missing: refIds.length };
     }
   }, [lib, bookIdx]);
 
@@ -704,7 +723,9 @@ export default function StoryPage() {
     const total = list.length;
     let made = 0;
     let done = 0;
-    await runPool(list, GEN_CONCURRENCY, async (c, i) => {
+    // Flow 는 탭 하나의 큐가 30%/80% 파이프라인으로 처리하므로 2개까지 미리 보낸다.
+    const flowEng = getGenEngine() === "flow";
+    await runPool(list, flowEng ? 2 : GEN_CONCURRENCY, async (c, i) => {
       const ck = charKeyOf(bookIdx, c, i);
       const name = (c.name_ko || c.id || `#${i + 1}`).toString();
       if (imageUrls[ck] || typeof c.imageKey === "string") {
@@ -734,7 +755,7 @@ export default function StoryPage() {
       } finally {
         done++;
       }
-    }, () => bulkCancel.current, GEN_STAGGER_MS);
+    }, () => bulkCancel.current, flowEng ? 500 : GEN_STAGGER_MS);
     setBulkBusy(false);
     setBulkStatus(bulkCancel.current ? `중지됨 · ${made}장 생성` : `완료 · ${made}장 생성`);
   }
@@ -793,8 +814,12 @@ export default function StoryPage() {
     let made = 0;
     let done = 0;
     const stop = () => cutBulkCancel.current;
+    // Flow 는 탭 하나의 큐가 30%/80% 파이프라인으로 처리하므로 2개까지 미리 보낸다.
+    const flowEng = getGenEngine() === "flow";
+    const conc = flowEng ? 2 : GEN_CONCURRENCY;
+    const stagger = flowEng ? 500 : GEN_STAGGER_MS;
 
-    await runPool(list, GEN_CONCURRENCY, async (cut, i) => {
+    await runPool(list, conc, async (cut, i) => {
       const ck = cutKeyOf(bookIdx, cut, i);
       const label = `컷 ${cut.no ?? i + 1}`;
       if (cutImageUrls[ck] || typeof cut.imageKey === "string") {
@@ -812,6 +837,7 @@ export default function StoryPage() {
           prompt,
           aspect: webtoon ? "9:16" : "16:9",
           referenceImages: refs.images,
+          referenceNames: refs.names,
           onProgress: (m) => setCutBulkStatus(`${done}/${total} · ${label}${note}: ${m}`),
         });
         cutBulkHandles.current.add(handle);
@@ -827,10 +853,10 @@ export default function StoryPage() {
       } finally {
         done++;
       }
-    }, stop, GEN_STAGGER_MS);
+    }, stop, stagger);
 
     // Covers next — image-to-image at 3:4 (front/back cover ratio).
-    await runPool(coverList, GEN_CONCURRENCY, async (cv, i) => {
+    await runPool(coverList, conc, async (cv, i) => {
       const ck = coverKeyOf(bookIdx, cv, i);
       const label = cv.type === "front" ? "앞표지" : cv.type === "back" ? "뒤표지" : `표지 ${i + 1}`;
       if (coverImageUrls[ck] || typeof cv.imageKey === "string") {
@@ -848,6 +874,7 @@ export default function StoryPage() {
           prompt,
           aspect: "3:4",
           referenceImages: refs.images,
+          referenceNames: refs.names,
           onProgress: (m) => setCutBulkStatus(`${done}/${total} · ${label}${note}: ${m}`),
         });
         cutBulkHandles.current.add(handle);
@@ -863,7 +890,7 @@ export default function StoryPage() {
       } finally {
         done++;
       }
-    }, stop, GEN_STAGGER_MS);
+    }, stop, stagger);
 
     setCutBulkBusy(false);
     setCutBulkStatus(cutBulkCancel.current ? `중지됨 · ${made}장 생성` : `완료 · ${made}장 생성`);
@@ -1030,7 +1057,19 @@ export default function StoryPage() {
   }
 
   function resetToSample() {
+    if (!window.confirm("초기화하면 캐릭터 시트·본문 컷에 저장된 이미지와 본문 대본이 모두 지워집니다. 계속할까요?")) return;
     try { localStorage.removeItem(CACHE_KEY); } catch {}
+    try { localStorage.removeItem(SCRIPT_KEY); } catch {}
+    try { localStorage.removeItem(SCRIPT_INPUT_KEY); } catch {}
+    // 표시 중인 이미지 URL 맵도 함께 비운다 — lib 만 샘플로 갈아끼우면 키가 겹치는
+    // 캐릭터/컷의 이전 이미지가 그대로 남아 보인다.
+    setImageUrls({});
+    setCutImageUrls({});
+    setCoverImageUrls({});
+    // 본문 대본 상태 초기화 (저장 키는 위에서 제거)
+    setScriptInput("");
+    setScriptPreview("");
+    setScriptParsed("");
     fetch(SAMPLE_URL).then((r) => r.json()).then((obj) => loadLib(obj));
   }
 
@@ -2025,7 +2064,7 @@ function CutCard({ cut, charMap, imageUrl, imageKey, busy, extReady, resolveRefs
   imageKey?: string;
   busy?: boolean;
   extReady?: boolean;
-  resolveRefs: (cut: StoryCut) => Promise<{ images: string[]; missing: number }>;
+  resolveRefs: (cut: StoryCut) => Promise<{ images: string[]; names: string[]; missing: number }>;
   onGenerated: (dataUrl: string) => void;
   onCopy: (t: string) => void;
   onJumpChar: (id: string) => void;
@@ -2102,6 +2141,7 @@ function CutCard({ cut, charMap, imageUrl, imageKey, busy, extReady, resolveRefs
           prompt,
           aspect,
           referenceImages: refs.images,
+          referenceNames: refs.names,
           onProgress: setStatusMsg,
         });
         handleRef.current = inner;
@@ -2291,7 +2331,7 @@ function CoverCard({ cover, charMap, imageUrl, imageKey, busy, extReady, resolve
   imageKey?: string;
   busy?: boolean;
   extReady?: boolean;
-  resolveRefs: (cut: StoryCut) => Promise<{ images: string[]; missing: number }>;
+  resolveRefs: (cut: StoryCut) => Promise<{ images: string[]; names: string[]; missing: number }>;
   onGenerated: (dataUrl: string) => void;
   onCopy: (t: string) => void;
   onJumpChar: (id: string) => void;
@@ -2339,7 +2379,7 @@ function CoverCard({ cover, charMap, imageUrl, imageKey, busy, extReady, resolve
         const refs = await resolveRefs(cover);
         if (cancelled) throw new Error("정지됨 (사용자 취소)");
         if (refs.missing) setStatusMsg(`참조 ${refs.images.length}장 사용 (없음 ${refs.missing}) · 생성 중…`);
-        const inner = generateViaChatGpt({ prompt, aspect: "3:4", referenceImages: refs.images, onProgress: setStatusMsg });
+        const inner = generateViaChatGpt({ prompt, aspect: "3:4", referenceImages: refs.images, referenceNames: refs.names, onProgress: setStatusMsg });
         handleRef.current = inner;
         return await inner.promise;
       })(),

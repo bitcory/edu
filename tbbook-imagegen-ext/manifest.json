@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TB Magic Book — 이미지 생성 도우미",
-  "version": "0.3.0",
+  "version": "0.4.2",
   "description": "스토리구성 화면에서 ChatGPT 또는 Google Flow로 이미지를 생성해 가져옵니다. (tbbook 전용)",
   "permissions": ["tabs"],
   "host_permissions": [

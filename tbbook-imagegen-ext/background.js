@@ -35,9 +35,41 @@ function waitForTabComplete(tabId, timeoutMs = 25000) {
 // The window is reused across jobs; finished tabs stay open for review.
 let genWindowId = null;
 
+// Flow 는 탭 하나(프로젝트 하나)를 계속 재사용한다 — 참조 이미지를 라이브러리에
+// 한 번만 올려두고 컷마다 이름으로 재첨부하며, 탭 안의 큐가 30%/80% 파이프라인으로
+// 연속 생성한다. ChatGPT 는 기존대로 잡마다 새 탭.
+let flowTabId = null;
+let flowTabOpening = null; // 동시 잡의 탭 중복 생성 방지
+
 chrome.windows.onRemoved.addListener((id) => {
   if (id === genWindowId) genWindowId = null;
 });
+
+chrome.tabs.onRemoved.addListener((id) => {
+  if (id === flowTabId) flowTabId = null;
+});
+
+async function getFlowTab() {
+  if (flowTabId != null) {
+    try {
+      const tab = await chrome.tabs.get(flowTabId);
+      if (tab && (tab.url || "").indexOf("labs.google") !== -1) return flowTabId;
+    } catch { /* fallthrough */ }
+    flowTabId = null;
+  }
+  if (!flowTabOpening) {
+    flowTabOpening = (async () => {
+      try {
+        const id = await openFreshTab(ENGINE_URL.flow);
+        flowTabId = id;
+        return id;
+      } finally {
+        flowTabOpening = null;
+      }
+    })();
+  }
+  return flowTabOpening;
+}
 
 async function openFreshTab(url) {
   let tabId = null;
@@ -80,16 +112,16 @@ function statusToPage(pageTabId, jobId, status, extra = {}) {
   chrome.tabs.sendMessage(pageTabId, { type: "tbbook-status", jobId, status, ...extra }).catch(() => {});
 }
 
-async function dispatch(jobId, prompt, aspect, referenceImages, pageTabId, engine) {
+async function dispatch(jobId, prompt, aspect, referenceImages, referenceNames, pageTabId, engine) {
   const eng = ENGINE_URL[engine] ? engine : "chatgpt";
   const label = eng === "flow" ? "Flow" : "ChatGPT";
-  const runMsg = { type: "tbbook-run", jobId, prompt, aspect, referenceImages: referenceImages || [] };
+  const runMsg = { type: "tbbook-run", jobId, prompt, aspect, referenceImages: referenceImages || [], referenceNames: referenceNames || [] };
 
-  // 잡마다 전용 창 안에 새 탭을 연다. 끝난 탭은 닫지 않아 결과를 확인할 수 있다.
-  statusToPage(pageTabId, jobId, "progress", { message: label + " 창 여는 중…" });
-  const fresh = await openFreshTab(ENGINE_URL[eng]);
-  JOBS.set(jobId, { pageTabId, genTabId: fresh });
-  await sendToTab(fresh, runMsg, 50);
+  statusToPage(pageTabId, jobId, "progress", { message: label + " 탭 여는 중…" });
+  // Flow: 단일 탭 재사용(탭 안에서 큐잉) · ChatGPT: 잡마다 전용 창 안에 새 탭.
+  const tabId = eng === "flow" ? await getFlowTab() : await openFreshTab(ENGINE_URL[eng]);
+  JOBS.set(jobId, { pageTabId, genTabId: tabId });
+  await sendToTab(tabId, runMsg, 50);
 }
 
 // MV3 서비스워커에는 FileReader 가 없어 base64 를 직접 만든다.
@@ -123,7 +155,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     (async () => {
       try {
         statusToPage(pageTabId, jobId, "progress", { message: label + " 탭 준비 중…" });
-        await dispatch(jobId, msg.prompt, msg.aspect, msg.referenceImages, pageTabId, msg.engine);
+        await dispatch(jobId, msg.prompt, msg.aspect, msg.referenceImages, msg.referenceNames, pageTabId, msg.engine);
       } catch (e) {
         statusToPage(pageTabId, jobId, "error", { message: label + " 탭에 연결할 수 없어요 — " + loginHint + " (" + ((e && e.message) || e) + ")" });
         JOBS.delete(jobId);

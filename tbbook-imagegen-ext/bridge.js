@@ -35,7 +35,7 @@
     }
     try {
       if (d.kind === "generate") {
-        chrome.runtime.sendMessage({ type: "tbbook-generate", jobId: d.id, prompt: d.prompt || "", aspect: d.aspect || "16:9", referenceImages: d.referenceImages || [], engine: d.engine || "chatgpt" });
+        chrome.runtime.sendMessage({ type: "tbbook-generate", jobId: d.id, prompt: d.prompt || "", aspect: d.aspect || "16:9", referenceImages: d.referenceImages || [], referenceNames: d.referenceNames || [], engine: d.engine || "chatgpt" });
       } else if (d.kind === "cancel") {
         chrome.runtime.sendMessage({ type: "tbbook-cancel", jobId: d.id });
       }

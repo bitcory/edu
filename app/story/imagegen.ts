@@ -118,6 +118,9 @@ export function generateViaChatGpt(opts: {
   prompt: string;
   aspect: Aspect;
   referenceImages?: string[]; // data URLs for image-to-image (cut generation)
+  /** referenceImages 와 같은 순서의 표시 이름 (캐릭터명). Flow 엔진이 소재
+   * 라이브러리에 이 이름으로 1회만 업로드하고 컷마다 이름으로 재첨부한다. */
+  referenceNames?: string[];
   onProgress?: (msg: string) => void;
   /** 미지정 시 페이지 토글(localStorage)의 현재 엔진을 따른다. */
   engine?: ExtEngine;
@@ -167,7 +170,7 @@ export function generateViaChatGpt(opts: {
     // Flow 는 확장이 tune 패널에서 화면비율을 직접 설정하므로 프롬프트에 비율
     // 지시문을 붙이지 않는다 (ChatGPT 만 텍스트로 비율을 잡음).
     const prompt = engine === "flow" ? opts.prompt : withAspectInstruction(opts.prompt, opts.aspect);
-    window.postMessage({ source: "tbbook-story", kind: "generate", id, prompt, aspect: opts.aspect, referenceImages: opts.referenceImages || [], engine }, "*");
+    window.postMessage({ source: "tbbook-story", kind: "generate", id, prompt, aspect: opts.aspect, referenceImages: opts.referenceImages || [], referenceNames: opts.referenceNames || [], engine }, "*");
     arm();
   });
 

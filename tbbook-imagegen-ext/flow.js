@@ -29,7 +29,7 @@
     });
   }
 
-  async function runImageJob(jobId, prompt, aspect, referenceImages) {
+  async function runImageJob(jobId, prompt, aspect, referenceImages, referenceNames) {
     const report = (m) => { log(m); status(jobId, "progress", { message: m }); };
     try {
       report("Flow 준비 중…");
@@ -38,6 +38,7 @@
         prompt: prompt || "",
         aspect: aspect || "16:9",
         referenceImages: Array.isArray(referenceImages) ? referenceImages.filter(Boolean) : [],
+        referenceNames: Array.isArray(referenceNames) ? referenceNames : [],
       }, report);
 
       report("이미지 가져오는 중…");
@@ -55,7 +56,7 @@
 
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (!msg) return;
-    if (msg.type === "tbbook-run") { runImageJob(msg.jobId, msg.prompt, msg.aspect, msg.referenceImages); }
+    if (msg.type === "tbbook-run") { runImageJob(msg.jobId, msg.prompt, msg.aspect, msg.referenceImages, msg.referenceNames); }
     else if (msg.type === "tbbook-cancel") { window.postMessage({ tag: TAG, dir: "req", action: "cancel", id: msg.jobId }, "*"); }
     else if (msg.type === "tbbook-ping") { sendResponse({ ok: true }); return true; }
   });
