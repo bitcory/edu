@@ -21,7 +21,8 @@ import {
 import { useRouter } from "next/navigation";
 import {
   generateViaApi, generateViaChatGpt, isExtensionReady, getExtVersion,
-  type Aspect, type Engine, type GenHandle,
+  getGenEngine, setGenEngine,
+  type Aspect, type Engine, type ExtEngine, type GenHandle,
 } from "./imagegen";
 import { buildBookPages } from "./handoff";
 import { saveDraft } from "../lib/store";
@@ -36,10 +37,10 @@ const SCRIPT_KEY = "toolb_step8_script_v1";
 // 왼쪽 붙여넣기 원본(넘버링 포함)을 따로 저장 — 새로고침 후에도 원본이 그대로 보이도록.
 const SCRIPT_INPUT_KEY = "toolb_step8_script_input_v1";
 
-// 전체생성: 한 번에 동시 생성할 ChatGPT 탭 수(=병렬 수). 각 작업은 자기 전용 탭에서
-// 돌고 끝난 탭은 닫지 않아 결과를 확인할 수 있다. 숫자를 올리면 빨라지지만
-// ChatGPT 단기 속도제한·브라우저 부하가 커진다.
-const GEN_CONCURRENCY = 3;
+// 전체생성: 한 번에 동시 생성할 ChatGPT 탭 수. 1 = 순차 생성 — 동시에 여러 탭을
+// 돌리면 ChatGPT가 봇으로 의심해 차단하므로 하나씩만 만든다. 각 작업은 확장이
+// 띄우는 전용 창의 새 탭에서 돌고, 끝난 탭은 닫지 않아 결과를 확인할 수 있다.
+const GEN_CONCURRENCY = 1;
 // 탭이 한꺼번에 우르르 열리지 않도록 레인(동시 작업) 시작 시점을 이만큼 어긋나게 한다.
 const GEN_STAGGER_MS = 2000;
 
@@ -647,13 +648,19 @@ export default function StoryPage() {
     return () => { alive = false; };
   }, [lib]);
 
-  // Helper-extension presence (gates 전체생성, which uses the ChatGPT engine).
+  // Helper-extension presence (gates 전체생성, which uses the extension engines).
   const [extReady, setExtReady] = useState(false);
   useEffect(() => {
     let a = true;
     isExtensionReady().then((r) => { if (a) setExtReady(r); });
     return () => { a = false; };
   }, []);
+
+  // 생성 엔진(ChatGPT/Flow) — localStorage 에 저장되고 모든 생성 버튼(단건/전체)에
+  // 적용된다. generateViaChatGpt 가 호출 시점에 현재 값을 읽는다.
+  const [genEngine, setGenEngineState] = useState<ExtEngine>("chatgpt");
+  useEffect(() => { setGenEngineState(getGenEngine()); }, []);
+  const pickEngine = (e: ExtEngine) => { setGenEngine(e); setGenEngineState(e); };
 
   // The extension is self-distributed (no Chrome Web Store / no auto-update), so
   // warn when the installed build is older than the latest one we ship.
@@ -1076,6 +1083,27 @@ export default function StoryPage() {
           <span className="story-lib-name">{libName}</span>
         </div>
         <div className="story-top-actions">
+          <div
+            className="story-img-engine story-engine-top"
+            role="tablist"
+            aria-label="이미지 생성 엔진"
+            title="이미지 생성 엔진 — 단건/전체생성 모두 여기서 고른 엔진으로 만듭니다"
+          >
+            <button
+              type="button"
+              className={`story-eng${genEngine === "chatgpt" ? " active" : ""}`}
+              onClick={() => pickEngine("chatgpt")}
+            >
+              ChatGPT
+            </button>
+            <button
+              type="button"
+              className={`story-eng${genEngine === "flow" ? " active" : ""}`}
+              onClick={() => pickEngine("flow")}
+            >
+              Flow
+            </button>
+          </div>
           <button type="button" className="story-btn story-btn--ghost" onClick={resetToSample} title="책장을 초기 상태로 되돌리기">
             초기화
           </button>
@@ -1105,7 +1133,7 @@ export default function StoryPage() {
       {extUpdate && (
         <div className="story-ext-update" role="alert">
           <span>
-            ChatGPT 확장 업데이트가 있어요 — 설치됨 v{extUpdate.installed} → 최신 v{extUpdate.latest}.
+            이미지 생성 확장 업데이트가 있어요 — 설치됨 v{extUpdate.installed} → 최신 v{extUpdate.latest}.
             새 폴더를 받아 <code>chrome://extensions</code>에서 다시 로드하세요.
           </span>
           <span className="story-ext-update-actions">
@@ -1302,7 +1330,7 @@ export default function StoryPage() {
                           type="button"
                           className="story-mini"
                           disabled={!extReady || chars.length === 0}
-                          title={extReady ? "이미지가 없는 캐릭터를 순서대로 모두 생성" : "ChatGPT 확장 설치 후 사용 가능"}
+                          title={extReady ? "이미지가 없는 캐릭터를 순서대로 모두 생성" : "이미지 생성 확장 설치 후 사용 가능"}
                           onClick={generateAll}
                         >
                           <Sparkles size={14} /> 전체생성
@@ -1372,7 +1400,7 @@ export default function StoryPage() {
                           type="button"
                           className="story-mini"
                           disabled={!extReady || cuts.length === 0}
-                          title={extReady ? "이미지가 없는 컷을 등장 캐릭터 참조(I2I)로 순서대로 생성" : "ChatGPT 확장 설치 후 사용 가능"}
+                          title={extReady ? "이미지가 없는 컷을 등장 캐릭터 참조(I2I)로 순서대로 생성" : "이미지 생성 확장 설치 후 사용 가능"}
                           onClick={generateAllCuts}
                         >
                           <Sparkles size={14} /> 전체생성
@@ -1793,7 +1821,7 @@ function CharPanel({ char, imageUrl, imageKey, busy, onGenerated, appearCuts, on
     const prompt = buildPromptFor(char.prompt_en || "");
     if (!prompt.trim()) { setStatusMsg("프롬프트가 비어 있어요."); return; }
     setGenerating(true);
-    setStatusMsg(engine === "chatgpt" ? "ChatGPT 준비 중…" : "이미지 생성 중…");
+    setStatusMsg(engine === "chatgpt" ? "생성 준비 중…" : "이미지 생성 중…");
     const handle = engine === "chatgpt"
       ? generateViaChatGpt({ prompt, aspect: ASPECT, onProgress: setStatusMsg })
       : generateViaApi({ prompt, aspect: ASPECT });
@@ -2211,7 +2239,7 @@ function CutCard({ cut, charMap, imageUrl, imageKey, busy, extReady, resolveRefs
                 className="story-mini"
                 onClick={startGenerate}
                 disabled={generating || busy || !extReady}
-                title={extReady ? `등장 캐릭터 이미지를 참조해 ${aspect}로 생성` : "ChatGPT 확장 설치 후 사용 가능"}
+                title={extReady ? `등장 캐릭터 이미지를 참조해 ${aspect}로 생성` : "이미지 생성 확장 설치 후 사용 가능"}
               >
                 <Sparkles size={14} /> {generating ? "생성 중…" : "이미지 생성"}
               </button>
@@ -2390,7 +2418,7 @@ function CoverCard({ cover, charMap, imageUrl, imageKey, busy, extReady, resolve
                 className="story-mini"
                 onClick={startGenerate}
                 disabled={generating || busy || !extReady}
-                title={extReady ? "등장 캐릭터를 참조해 3:4로 생성" : "ChatGPT 확장 설치 후 사용 가능"}
+                title={extReady ? "등장 캐릭터를 참조해 3:4로 생성" : "이미지 생성 확장 설치 후 사용 가능"}
               >
                 <Sparkles size={14} /> {generating ? "생성 중…" : "이미지 생성"}
               </button>

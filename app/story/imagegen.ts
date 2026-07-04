@@ -4,15 +4,29 @@
  * Client helpers for the /story image generation.
  *  - generateViaApi: Path A — server route (OpenAI / fal). No extension needed.
  *  - generateViaChatGpt: Path B — talks to the TB Magic Book Chrome extension via
- *    window.postMessage (bridge.js). The extension drives chatgpt.com and returns
- *    the image. If the extension isn't installed, isExtensionReady() is false.
+ *    window.postMessage (bridge.js). The extension drives chatgpt.com or Google
+ *    Flow (labs.google) and returns the image. If the extension isn't installed,
+ *    isExtensionReady() is false.
  *
  * Both return { promise, cancel } so the "정지" button can abort.
  */
 
 export type Aspect = "1:1" | "3:4" | "4:3" | "16:9" | "9:16";
 export type Engine = "api" | "chatgpt";
+/** 확장이 자동화하는 생성 사이트. 페이지 상단 토글로 고르며 모든 생성 버튼(단건/전체)에 적용. */
+export type ExtEngine = "chatgpt" | "flow";
 export type GenHandle = { promise: Promise<string>; cancel: () => void };
+
+const ENGINE_STORE_KEY = "tbbook:gen-engine";
+
+export function getGenEngine(): ExtEngine {
+  if (typeof window === "undefined") return "chatgpt";
+  try { return localStorage.getItem(ENGINE_STORE_KEY) === "flow" ? "flow" : "chatgpt"; } catch { return "chatgpt"; }
+}
+
+export function setGenEngine(engine: ExtEngine) {
+  try { localStorage.setItem(ENGINE_STORE_KEY, engine); } catch { /* ignore */ }
+}
 
 // ChatGPT가 인터페이스를 바꿔 확장(chatgpt.js)의 사이즈 드롭다운 클릭이 더 이상
 // 통하지 않는다. 그래서 가로세로비율을 프롬프트 본문 끝에 한국어 지시로 붙여
@@ -105,7 +119,10 @@ export function generateViaChatGpt(opts: {
   aspect: Aspect;
   referenceImages?: string[]; // data URLs for image-to-image (cut generation)
   onProgress?: (msg: string) => void;
+  /** 미지정 시 페이지 토글(localStorage)의 현재 엔진을 따른다. */
+  engine?: ExtEngine;
 }): GenHandle {
+  const engine = opts.engine || getGenEngine();
   const id = `job-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   let settled = false;
   let onMsg: ((e: MessageEvent) => void) | null = null;
@@ -131,7 +148,9 @@ export function generateViaChatGpt(opts: {
       watchdog = setTimeout(() => {
         if (settled) return;
         settled = true; cleanup();
-        reject(new Error("확장이 응답하지 않아요. 페이지를 새로고침(Cmd+R)했는지, ChatGPT에 로그인돼 있는지 확인하세요."));
+        reject(new Error(engine === "flow"
+          ? "확장이 응답하지 않아요. 페이지를 새로고침(Cmd+R)했는지, labs.google(구글)에 로그인돼 있는지 확인하세요."
+          : "확장이 응답하지 않아요. 페이지를 새로고침(Cmd+R)했는지, ChatGPT에 로그인돼 있는지 확인하세요."));
       }, 180000);
     };
     onMsg = (e: MessageEvent) => {
@@ -145,7 +164,10 @@ export function generateViaChatGpt(opts: {
       else if (d.type === "error") { settled = true; cleanup(); reject(new Error(d.message || "생성 실패")); }
     };
     window.addEventListener("message", onMsg);
-    window.postMessage({ source: "tbbook-story", kind: "generate", id, prompt: withAspectInstruction(opts.prompt, opts.aspect), aspect: opts.aspect, referenceImages: opts.referenceImages || [] }, "*");
+    // Flow 는 확장이 tune 패널에서 화면비율을 직접 설정하므로 프롬프트에 비율
+    // 지시문을 붙이지 않는다 (ChatGPT 만 텍스트로 비율을 잡음).
+    const prompt = engine === "flow" ? opts.prompt : withAspectInstruction(opts.prompt, opts.aspect);
+    window.postMessage({ source: "tbbook-story", kind: "generate", id, prompt, aspect: opts.aspect, referenceImages: opts.referenceImages || [], engine }, "*");
     arm();
   });
 

@@ -1,13 +1,19 @@
 {
   "manifest_version": 3,
   "name": "TB Magic Book — 이미지 생성 도우미",
-  "version": "0.1.1",
-  "description": "스토리구성 화면에서 ChatGPT로 이미지를 생성해 가져옵니다. (tbbook 전용)",
+  "version": "0.3.0",
+  "description": "스토리구성 화면에서 ChatGPT 또는 Google Flow로 이미지를 생성해 가져옵니다. (tbbook 전용)",
   "permissions": ["tabs"],
   "host_permissions": [
     "https://chatgpt.com/*",
     "https://chat.openai.com/*",
-    "https://*.oaiusercontent.com/*"
+    "https://*.oaiusercontent.com/*",
+    "https://labs.google/*",
+    "https://flow-content.google/*",
+    "https://*.flow-content.google/*",
+    "https://*.googleusercontent.com/*",
+    "https://*.usercontent.google.com/*",
+    "https://*.gstatic.com/*"
   ],
   "background": { "service_worker": "background.js" },
   "content_scripts": [
@@ -15,6 +21,17 @@
       "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
       "js": ["chatgpt.js"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://labs.google/*"],
+      "js": ["flow.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://labs.google/*"],
+      "js": ["flow-main.js"],
+      "run_at": "document_idle",
+      "world": "MAIN"
     },
     {
       "matches": [

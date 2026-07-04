@@ -1,7 +1,8 @@
 # TB Magic Book — 이미지 생성 도우미 (Chrome 확장)
 
-스토리구성(`/story`) 화면의 "이미지 생성"에서 **ChatGPT 엔진**을 선택하면, 이 확장이
-당신의 로그인된 ChatGPT 탭을 자동으로 조작해 이미지를 만들고 결과를 화면으로 가져옵니다.
+스토리구성(`/story`) 화면에서 "이미지 생성"을 누르면, 이 확장이 당신의 로그인된
+**ChatGPT** 또는 **Google Flow(labs.google)** 탭을 자동으로 조작해 이미지를 만들고
+결과를 화면으로 가져옵니다. 엔진은 `/story` 상단바의 **ChatGPT / Flow** 토글로 고릅니다.
 
 > ai-video-studio(TB MTOOL)의 확장과는 **완전히 별개**입니다. 이 확장만 따로
 > 설치하면 되고, 기존 앱/확장에는 아무 영향이 없습니다.
@@ -15,25 +16,32 @@
 
 ## 사용
 
-1. ChatGPT(`chatgpt.com`)에 **로그인**되어 있어야 합니다.
+1. 쓸 엔진에 **로그인**되어 있어야 합니다 — ChatGPT(`chatgpt.com`) 또는
+   Flow(`labs.google`, 구글 계정).
 2. tbbook(`http://localhost:3000` 또는 `https://tbbook.aitoolb.com`)의 `/story` →
-   캐릭터 시트 → 이미지 섹션에서 엔진을 **ChatGPT**로 두고 **이미지 생성**.
-3. 확장이 chatgpt.com 탭을 열어 프롬프트를 넣고 이미지를 생성한 뒤, 결과를
+   상단바에서 엔진(**ChatGPT / Flow**)을 고르고 **이미지 생성**(단건/전체생성 모두 적용).
+3. 확장이 해당 사이트 탭을 열어 프롬프트를 넣고 이미지를 생성한 뒤, 결과를
    `/story` 화면의 이미지 박스로 가져옵니다. **정지**로 취소할 수 있습니다.
 
 ## 동작 방식 (요약)
 
 ```
 /story 페이지 ──postMessage──▶ bridge.js ──runtime──▶ background.js
-                                                          │ chatgpt 탭 열기/조작
+                                                          │ 엔진별 탭 열기/조작
                                                           ▼
-                                                   chatgpt.js (DOM 자동화)
+                                        chatgpt.js  또는  flow.js + flow-main.js
+                                        (DOM 자동화)      (ISOLATED ↔ MAIN world)
                                                           │ 생성 이미지 스크랩
 /story 페이지 ◀──postMessage── bridge.js ◀──runtime── background.js
 ```
 
 - 페이지는 `window.postMessage`만 사용 → 확장이 없으면 자동으로 **API 엔진**으로 폴백.
 - `chatgpt.js`의 DOM 자동화 로직은 ai-video-studio `automate.js`에서 재사용.
+- Flow 자동화(`flow-main.js`)는 ai-video-studio 확장의 검증된 로직을 이식.
+  Flow 생성 버튼은 합성클릭(isTrusted)을 막아 MAIN world에서 React `onClick`을
+  직접 호출해야 하고(→ `flow-main.js`), `chrome.runtime` 통신은 ISOLATED world의
+  `flow.js`가 맡아 `window.postMessage`로 다리를 놓는다. 완성된 Flow 이미지 URL은
+  content script에서 CORS로 못 받아 `background.js`가 대신 fetch(쿠키 포함)한다.
 
 ## 업데이트 (자동 업데이트 없음 → 알림으로 보완)
 

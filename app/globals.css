@@ -6440,6 +6440,10 @@ textarea.ed-input {
 }
 .story-root .story-eng.active { background: var(--st-accent); color: #fff; }
 
+/* 상단바 전역 엔진 토글 (ChatGPT / Flow) — 모든 생성 버튼에 적용 */
+.story-root .story-engine-top { align-self: center; }
+.story-root .story-engine-top .story-eng { flex: none; padding: 4px 12px; }
+
 .story-root .story-img-msg {
   font-size: 0.76rem;
   color: var(--st-ink-soft);

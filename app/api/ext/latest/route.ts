@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 
 // Keep in sync with tbbook-imagegen-ext/manifest.json when shipping without the
 // env override.
-const FALLBACK_VERSION = "0.1.1";
+const FALLBACK_VERSION = "0.3.0";
 
 export async function GET() {
   const version = process.env.EXT_LATEST_VERSION || FALLBACK_VERSION;
