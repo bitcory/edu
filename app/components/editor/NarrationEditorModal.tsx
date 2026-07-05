@@ -557,35 +557,54 @@ export default function NarrationEditorModal({
     }
   };
 
-  // Saved narration of the active page (both modes): listen to what's already
-  // on the server and delete it. This is what keeps previously-saved narration
-  // visible when the modal is reopened later.
-  const savedForActive =
-    activePage && savedPages.has(activePage) ? (
+  // Every narration already saved on the server (both modes): one row per page
+  // with a player and a delete button. This is what keeps previously-saved
+  // narration visible when the modal is reopened later. Clicking the page
+  // label also targets that page on the left.
+  const savedCells = cells.filter((c) => savedPages.has(c.id));
+  const savedList =
+    savedCells.length > 0 ? (
       <div className="narr-ed__saved">
         <span className="narr-ed__saved-label">
-          🎙 {cells.find((c) => c.id === activePage)?.label ?? "이 페이지"}에
-          저장된 나레이션
+          🎙 저장된 나레이션 {savedCells.length}개
         </span>
-        {savedUrls[activePage] && (
-          <audio
-            src={savedUrls[activePage]}
-            controls
-            preload="none"
-            className="narr-pool__player"
-          />
-        )}
-        <button
-          type="button"
-          className="narr-ed__del-saved"
-          disabled={saving}
-          onClick={() => {
-            const cell = cells.find((c) => c.id === activePage);
-            if (cell) void deleteSavedNarration(cell);
-          }}
-        >
-          <Trash2 size={14} /> 이 페이지의 기존 나레이션 지우기
-        </button>
+        <div className="narr-ed__saved-list">
+          {savedCells.map((c) => (
+            <div
+              key={c.id}
+              className={`narr-ed__saved-row${
+                activePage === c.id ? " is-on" : ""
+              }`}
+            >
+              <button
+                type="button"
+                className="narr-ed__saved-page"
+                onClick={() => setActivePage(c.id)}
+                title="이 페이지 선택"
+              >
+                {c.label}
+              </button>
+              {savedUrls[c.id] && (
+                <audio
+                  src={savedUrls[c.id]}
+                  controls
+                  preload="none"
+                  className="narr-pool__player"
+                />
+              )}
+              <button
+                type="button"
+                className="icon-btn icon-btn--delete"
+                disabled={saving}
+                onClick={() => void deleteSavedNarration(c)}
+                title="저장된 나레이션 지우기"
+                aria-label="삭제"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
       </div>
     ) : null;
 
@@ -708,7 +727,7 @@ export default function NarrationEditorModal({
                         : "없음"}
                     </b>
                   </span>
-                  {savedForActive}
+                  {savedList}
                 </div>
 
                 <input
@@ -799,7 +818,7 @@ export default function NarrationEditorModal({
                   구간을 만들 수도 있어요.) <b>왼쪽에서 페이지를 고르고</b> 아래
                   구간을 누르면 매칭을 바꿀 수 있어요.
                 </span>
-                {savedForActive}
+                {savedList}
               </div>
 
               <input

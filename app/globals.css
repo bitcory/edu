@@ -3682,8 +3682,51 @@ textarea.ed-input {
   font-weight: 700;
   color: #1f7f66;
 }
-.narr-ed__saved .narr-ed__del-saved {
-  margin-top: 2px;
+.narr-ed__saved-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.narr-ed__saved-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border: 1px solid #ece0cd;
+  border-radius: 8px;
+  background: #fff;
+}
+.narr-ed__saved-row.is-on {
+  border-color: #1f9e7f;
+  background: rgba(47, 185, 143, 0.1);
+}
+.narr-ed__saved-page {
+  flex-shrink: 0;
+  min-width: 42px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font-weight: 800;
+  font-size: 13px;
+  color: #c0603a;
+  cursor: pointer;
+  text-align: left;
+}
+.narr-ed__saved-page:hover {
+  background: #fff1e3;
+}
+.narr-ed__saved-row .narr-pool__player {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+}
+.narr-ed__saved-row .icon-btn {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
 }
 .narr-ed__del-saved {
   display: inline-flex;
