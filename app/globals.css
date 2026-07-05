@@ -3819,6 +3819,10 @@ textarea.ed-input {
   gap: 8px;
   margin-bottom: 10px;
 }
+/* Icon-only undo/redo: keep them compact next to the labeled buttons. */
+.narr-ed__hist {
+  padding: 9px 12px;
+}
 .narr-ed__play {
   display: inline-flex;
   align-items: center;

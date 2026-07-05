@@ -2,7 +2,18 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Pause, Play, Scissors, Trash2, Upload, Wand2, X } from "lucide-react";
+import {
+  Check,
+  Pause,
+  Play,
+  Redo2,
+  Scissors,
+  Trash2,
+  Undo2,
+  Upload,
+  Wand2,
+  X,
+} from "lucide-react";
 import {
   detectSpeechRegions,
   encodeSlicesToMp3,
@@ -95,6 +106,97 @@ export default function NarrationEditorModal({
     null,
   );
 
+  // ----- Undo/redo (통편집 waveform) ---------------------------------------
+  // Snapshots of the whole edit state: segments + their page matching. Every
+  // mutating operation pushes the state it is ABOUT to change (so ⌘Z restores
+  // it); redo holds states walked back over. Region ids are preserved across
+  // restores so segToPage keys stay valid.
+  type Snap = { segs: Seg[]; segToPage: Record<string, string> };
+  const undoRef = useRef<Snap[]>([]);
+  const redoRef = useRef<Snap[]>([]);
+  // Pre-resize snapshot: captured when a resize handle is grabbed, committed
+  // to the undo stack when the gesture ends (region-updated).
+  const pendingSnapRef = useRef<Snap | null>(null);
+  // Mirror of segToPage readable from wavesurfer event closures (state would
+  // be stale there).
+  const segToPageRef = useRef(segToPage);
+  useEffect(() => {
+    segToPageRef.current = segToPage;
+  }, [segToPage]);
+  // Stack sizes as state, purely to enable/disable the undo/redo buttons.
+  const [hist, setHist] = useState({ undo: 0, redo: 0 });
+  const bumpHist = () =>
+    setHist({ undo: undoRef.current.length, redo: redoRef.current.length });
+
+  const takeSnap = (): Snap => ({
+    segs: [...(regionsRef.current?.getRegions?.() ?? [])]
+      .map((r: any) => ({ id: r.id, start: r.start, end: r.end }))
+      .sort((a: Seg, b: Seg) => a.start - b.start),
+    segToPage: { ...segToPageRef.current },
+  });
+
+  const snapEqual = (a: Snap, b: Snap) =>
+    a.segs.length === b.segs.length &&
+    a.segs.every((s, i) => {
+      const o = b.segs[i];
+      return (
+        s.id === o.id &&
+        Math.abs(s.start - o.start) < 1e-6 &&
+        Math.abs(s.end - o.end) < 1e-6
+      );
+    }) &&
+    Object.keys(a.segToPage).length === Object.keys(b.segToPage).length &&
+    Object.entries(a.segToPage).every(([k, v]) => b.segToPage[k] === v);
+
+  const pushHistory = () => {
+    const snap = takeSnap();
+    const top = undoRef.current[undoRef.current.length - 1];
+    // The previous op turned out to be a no-op → its snapshot already sits on
+    // top; don't stack a duplicate (it would make one ⌘Z feel dead).
+    if (top && snapEqual(top, snap)) return;
+    undoRef.current.push(snap);
+    if (undoRef.current.length > 100) undoRef.current.shift();
+    redoRef.current = [];
+    bumpHist();
+  };
+
+  const applySnap = (snap: Snap) => {
+    const regions = regionsRef.current;
+    if (!regions) return;
+    regions.clearRegions();
+    for (const s of snap.segs) {
+      regions.addRegion({
+        id: s.id,
+        start: s.start,
+        end: s.end,
+        color: REGION_COLOR,
+        drag: false,
+      });
+    }
+    // Update the ref synchronously so an immediately following undo/redo
+    // snapshots the restored mapping, not the stale one.
+    segToPageRef.current = { ...snap.segToPage };
+    setSegToPage({ ...snap.segToPage });
+    syncSegs();
+  };
+
+  const undoEdit = () => {
+    const prev = undoRef.current.pop();
+    if (!prev) return;
+    redoRef.current.push(takeSnap());
+    applySnap(prev);
+    bumpHist();
+  };
+
+  const redoEdit = () => {
+    const next = redoRef.current.pop();
+    if (!next) return;
+    undoRef.current.push(takeSnap());
+    applySnap(next);
+    bumpHist();
+  };
+  // -------------------------------------------------------------------------
+
   // Segments owned by a page, in time order (segs is already sorted by start).
   const segsForPage = (pageId: string) =>
     segs.filter((s) => segToPage[s.id] === pageId);
@@ -142,7 +244,14 @@ export default function NarrationEditorModal({
     if (!el) return;
     el.style.pointerEvents = "none";
     el.querySelectorAll('[part*="region-handle"]').forEach((h) => {
-      (h as HTMLElement).style.pointerEvents = "all";
+      const handle = h as HTMLElement;
+      handle.style.pointerEvents = "all";
+      // Snapshot the pre-resize state the moment a handle is grabbed; it goes
+      // onto the undo stack when the gesture actually changed something
+      // (region-updated fires on gesture end).
+      handle.addEventListener("pointerdown", () => {
+        pendingSnapRef.current = takeSnap();
+      });
     });
   };
 
@@ -209,6 +318,11 @@ export default function NarrationEditorModal({
       setSegs([]);
       setSegToPage({});
       setPlaying(false);
+      // Fresh file, fresh history.
+      undoRef.current = [];
+      redoRef.current = [];
+      pendingSnapRef.current = null;
+      setHist({ undo: 0, redo: 0 });
 
       const WaveSurfer = (await import("wavesurfer.js")).default;
       const RegionsPlugin = (
@@ -255,6 +369,14 @@ export default function NarrationEditorModal({
         syncSegs();
       });
       regions.on("region-updated", (r: any) => {
+        // A resize gesture just ended → commit the pre-resize snapshot.
+        if (pendingSnapRef.current) {
+          undoRef.current.push(pendingSnapRef.current);
+          if (undoRef.current.length > 100) undoRef.current.shift();
+          pendingSnapRef.current = null;
+          redoRef.current = [];
+          bumpHist();
+        }
         normalizeRegion(r);
         syncSegs();
       });
@@ -339,12 +461,39 @@ export default function NarrationEditorModal({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Ctrl/⌘+Z → undo, Ctrl/⌘+Shift+Z (or Ctrl+Y) → redo, for the 통편집
+  // waveform edits. Re-registered per render so the handler sees the current
+  // undoEdit/redoEdit (they only touch refs, but keep it simple and fresh).
+  useEffect(() => {
+    if (mode !== "whole") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      const k = e.key.toLowerCase();
+      if (k !== "z" && k !== "y") return;
+      const t = e.target as HTMLElement | null;
+      if (
+        t &&
+        (t.tagName === "INPUT" ||
+          t.tagName === "TEXTAREA" ||
+          t.isContentEditable)
+      ) {
+        return;
+      }
+      e.preventDefault();
+      if (k === "y" || e.shiftKey) redoEdit();
+      else undoEdit();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
   const playPause = () => wsRef.current?.playPause?.();
 
   const autoSplit = () => {
     const buf = bufferRef.current;
     const regions = regionsRef.current;
     if (!buf || !regions) return;
+    pushHistory();
     regions.clearRegions();
     setSegToPage({});
     for (const r of detectSpeechRegions(buf)) {
@@ -359,6 +508,7 @@ export default function NarrationEditorModal({
   };
 
   const clearAll = () => {
+    pushHistory();
     regionsRef.current?.clearRegions?.();
     setSegToPage({});
     syncSegs();
@@ -377,11 +527,20 @@ export default function NarrationEditorModal({
     const dur = buf.duration;
     const t = ws.getCurrentTime?.() ?? 0;
 
+    const inside = (r: any) => t > r.start + 0.05 && t < r.end - 0.05;
     let regs = regions.getRegions?.() ?? [];
     if (regs.length === 0) {
       // Nothing split yet → the whole clip is one segment to cut into.
+      pushHistory();
       regions.addRegion({ start: 0, end: dur, color: REGION_COLOR, drag: false });
       regs = regions.getRegions?.() ?? [];
+    } else if (regs.some(inside)) {
+      pushHistory();
+    } else {
+      // Cut right on an existing edge (or outside every segment): nothing to
+      // split — bail before the sequential re-match clobbers hand-made
+      // assignments for no visible change.
+      return;
     }
     // Every segment the red line currently sits inside (with a small margin so
     // a cut right on an existing edge is a no-op rather than a zero-length
@@ -389,9 +548,7 @@ export default function NarrationEditorModal({
     // splitting only the first one left the stacked one covering the cut and
     // the button looked dead. Remove them all first, then add the halves — the
     // region-created normalizer resolves any leftover overlap among the pieces.
-    const targets = regs.filter(
-      (r: any) => t > r.start + 0.05 && t < r.end - 0.05,
-    );
+    const targets = regs.filter(inside);
     const spans = targets.map((r: any) => ({ start: r.start, end: r.end }));
     for (const r of targets) r.remove();
     for (const { start, end } of spans) {
@@ -418,7 +575,10 @@ export default function NarrationEditorModal({
 
   const removeSeg = (id: string) => {
     const regs = regionsRef.current?.getRegions?.() ?? [];
-    regs.find((r: any) => r.id === id)?.remove?.();
+    const r = regs.find((rr: any) => rr.id === id);
+    if (!r) return;
+    pushHistory();
+    r.remove?.();
     syncSegs();
   };
 
@@ -433,6 +593,7 @@ export default function NarrationEditorModal({
       alert("먼저 왼쪽에서 페이지를 선택하세요.");
       return;
     }
+    pushHistory();
     setSegToPage((prev) => {
       if (prev[segId] === activePage) {
         const next = { ...prev };
@@ -1045,6 +1206,26 @@ export default function NarrationEditorModal({
                       title="빨간선(재생 위치)에서 자르고 1·3·5 홀수 페이지에 순서대로 매칭"
                     >
                       <Check size={15} /> 여기서 자르기
+                    </button>
+                    <button
+                      type="button"
+                      className="ed-cmodal__btn ed-cmodal__btn--ghost narr-ed__hist"
+                      onClick={undoEdit}
+                      disabled={!ready || hist.undo === 0}
+                      title="실행 취소 (Ctrl/⌘+Z)"
+                      aria-label="실행 취소"
+                    >
+                      <Undo2 size={15} />
+                    </button>
+                    <button
+                      type="button"
+                      className="ed-cmodal__btn ed-cmodal__btn--ghost narr-ed__hist"
+                      onClick={redoEdit}
+                      disabled={!ready || hist.redo === 0}
+                      title="다시 실행 (Ctrl/⌘+Shift+Z)"
+                      aria-label="다시 실행"
+                    >
+                      <Redo2 size={15} />
                     </button>
                   </div>
 
