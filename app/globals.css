@@ -3667,6 +3667,24 @@ textarea.ed-input {
   border-color: #c08a4a;
   background: #fff6e9;
 }
+.narr-ed__saved {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid #d9e8dc;
+  border-radius: 10px;
+  background: #f2f9f3;
+}
+.narr-ed__saved-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1f7f66;
+}
+.narr-ed__saved .narr-ed__del-saved {
+  margin-top: 2px;
+}
 .narr-ed__del-saved {
   display: inline-flex;
   align-items: center;

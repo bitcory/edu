@@ -62,8 +62,10 @@ export default function NarrationEditorModal({
   const [pool, setPool] = useState<PoolItem[]>([]);
   // pageId → pool item id (a page holds at most one audio).
   const [pageToPool, setPageToPool] = useState<Record<string, string>>({});
-  // Pages that already have a saved narration on the server (badge only).
+  // Pages that already have a saved narration on the server (badge + playback).
   const [savedPages, setSavedPages] = useState<Set<string>>(new Set());
+  // pageId → presigned URL of that page's saved narration, for listening.
+  const [savedUrls, setSavedUrls] = useState<Record<string, string>>({});
   const matchInputRef = useRef<HTMLInputElement | null>(null);
   const poolUrlsRef = useRef<string[]>([]);
   const [saving, setSaving] = useState(false);
@@ -351,15 +353,23 @@ export default function NarrationEditorModal({
     });
   };
 
-  // --- 매칭편집: audio pool + click-to-assign ---
-  // Seed which pages already have a saved narration (badge only).
+  // Seed which pages already have a saved narration (both modes: badge on the
+  // page grid + a player to listen to what's saved).
   useEffect(() => {
     let cancelled = false;
     void getNarrationUrls(bookId).then((urls) => {
       if (cancelled) return;
       const s = new Set<string>();
-      for (const c of cells) if (urls[c.index]) s.add(c.id);
+      const m: Record<string, string> = {};
+      for (const c of cells) {
+        const u = urls[c.index];
+        if (u) {
+          s.add(c.id);
+          m[c.id] = u;
+        }
+      }
       setSavedPages(s);
+      setSavedUrls(m);
     });
     return () => {
       cancelled = true;
@@ -455,6 +465,12 @@ export default function NarrationEditorModal({
         n.delete(cell.id);
         return n;
       });
+      setSavedUrls((prev) => {
+        if (!prev[cell.id]) return prev;
+        const n = { ...prev };
+        delete n[cell.id];
+        return n;
+      });
       setPageToPool((prev) => {
         if (!prev[cell.id]) return prev;
         const n = { ...prev };
@@ -527,6 +543,7 @@ export default function NarrationEditorModal({
         });
         await uploadNarration(bookId, cell.index, f);
         applied.push(cell.index);
+        setSavedPages((prev) => new Set(prev).add(cell.id));
         setProgress({ cur: i + 1, total: targets.length });
         await new Promise((r) => setTimeout(r, 0));
       }
@@ -539,6 +556,38 @@ export default function NarrationEditorModal({
       setProgress(null);
     }
   };
+
+  // Saved narration of the active page (both modes): listen to what's already
+  // on the server and delete it. This is what keeps previously-saved narration
+  // visible when the modal is reopened later.
+  const savedForActive =
+    activePage && savedPages.has(activePage) ? (
+      <div className="narr-ed__saved">
+        <span className="narr-ed__saved-label">
+          🎙 {cells.find((c) => c.id === activePage)?.label ?? "이 페이지"}에
+          저장된 나레이션
+        </span>
+        {savedUrls[activePage] && (
+          <audio
+            src={savedUrls[activePage]}
+            controls
+            preload="none"
+            className="narr-pool__player"
+          />
+        )}
+        <button
+          type="button"
+          className="narr-ed__del-saved"
+          disabled={saving}
+          onClick={() => {
+            const cell = cells.find((c) => c.id === activePage);
+            if (cell) void deleteSavedNarration(cell);
+          }}
+        >
+          <Trash2 size={14} /> 이 페이지의 기존 나레이션 지우기
+        </button>
+      </div>
+    ) : null;
 
   // 통편집 page cell (click to target, shows segment count).
   const renderCell = (cell: (typeof cells)[number] | null) => {
@@ -560,13 +609,15 @@ export default function NarrationEditorModal({
         posText = isActive ? "음성을 누르세요" : "비어있음";
       }
     } else {
-      posText =
-        count > 0
-          ? `구간 ${count}개 🎙`
-          : isActive
-            ? "현재 페이지"
-            : "비어있음";
-      if (count > 0) badge = String(count);
+      if (count > 0) {
+        posText = `구간 ${count}개 🎙`;
+        badge = String(count);
+      } else if (savedPages.has(cell.id)) {
+        posText = "🎙 음성 있음";
+        badge = "🎙";
+      } else {
+        posText = isActive ? "현재 페이지" : "비어있음";
+      }
     }
     return (
       <button
@@ -657,19 +708,7 @@ export default function NarrationEditorModal({
                         : "없음"}
                     </b>
                   </span>
-                  {activePage && savedPages.has(activePage) && (
-                    <button
-                      type="button"
-                      className="narr-ed__del-saved"
-                      disabled={saving}
-                      onClick={() => {
-                        const cell = cells.find((c) => c.id === activePage);
-                        if (cell) void deleteSavedNarration(cell);
-                      }}
-                    >
-                      <Trash2 size={14} /> 이 페이지의 기존 나레이션 지우기
-                    </button>
-                  )}
+                  {savedForActive}
                 </div>
 
                 <input
@@ -760,6 +799,7 @@ export default function NarrationEditorModal({
                   구간을 만들 수도 있어요.) <b>왼쪽에서 페이지를 고르고</b> 아래
                   구간을 누르면 매칭을 바꿀 수 있어요.
                 </span>
+                {savedForActive}
               </div>
 
               <input
