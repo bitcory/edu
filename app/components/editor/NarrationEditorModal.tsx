@@ -86,11 +86,85 @@ export default function NarrationEditorModal({
   const [progress, setProgress] = useState<{ cur: number; total: number } | null>(
     null,
   );
+  // Waveform region currently "picked" (blue outline): makes the slice being
+  // adjusted readable and its resize handles easy to find.
+  const [selectedSegId, setSelectedSegId] = useState<string | null>(null);
+  // Bulk-delete progress for the saved-narration list (separate from
+  // `progress`, which drives the footer button label).
+  const [deleting, setDeleting] = useState<{ cur: number; total: number } | null>(
+    null,
+  );
 
   // Segments owned by a page, in time order (segs is already sorted by start).
   const segsForPage = (pageId: string) =>
     segs.filter((s) => segToPage[s.id] === pageId);
   const filledPages = cells.filter((c) => segsForPage(c.id).length > 0);
+
+  // Regions must never overlap: overlapping regions made "여기서 자르기"
+  // silently miss (only the first region under the cursor was split, the
+  // stacked one kept covering it) and duplicated the same audio span across
+  // pages. Whenever a region edge is resized over a neighbor, the CHANGED
+  // region yields — it's clipped to the free gap around it, and removed if
+  // (almost) nothing remains.
+  const normalizeRegion = (changed: any) => {
+    const regions = regionsRef.current;
+    if (!regions || !changed || changed.isRemoved) return;
+    const others = (regions.getRegions?.() ?? []).filter(
+      (r: any) => r.id !== changed.id && !r.isRemoved,
+    );
+    let start = changed.start;
+    let end = changed.end;
+    for (const o of others) {
+      if (o.end <= start || o.start >= end) continue; // no overlap
+      // Clip against this neighbor, keeping the larger surviving side.
+      const leftPart = Math.min(end, o.start) - start;
+      const rightPart = end - Math.max(start, o.end);
+      if (leftPart >= rightPart) end = Math.min(end, o.start);
+      else start = Math.max(start, o.end);
+    }
+    if (end - start < 0.05) {
+      changed.remove();
+      return;
+    }
+    if (start !== changed.start || end !== changed.end) {
+      changed.setOptions({ start, end });
+    }
+  };
+
+  // Region bodies must not swallow pointer events: once cuts cover the whole
+  // waveform, the region elements sat on top of it and the red line could no
+  // longer be grabbed/scrubbed. Let everything pass through to the waveform
+  // (click + drag = move the red line) and keep only the resize handles
+  // interactive. Region "selection" is derived from the seek position instead
+  // of region click events (see the "interaction" handler).
+  const passThroughRegion = (r: any) => {
+    const el = r.element as HTMLElement | undefined;
+    if (!el) return;
+    el.style.pointerEvents = "none";
+    el.querySelectorAll('[part*="region-handle"]').forEach((h) => {
+      (h as HTMLElement).style.pointerEvents = "all";
+    });
+  };
+
+  // Paint the picked region blue (outline + tint) and reset the rest. Inline
+  // styles because region elements live inside wavesurfer's shadow DOM.
+  const applySelection = (id: string | null) => {
+    const regs = regionsRef.current?.getRegions?.() ?? [];
+    for (const r of regs) {
+      const el = r.element as HTMLElement | undefined;
+      if (!el) continue;
+      const on = r.id === id;
+      el.style.outline = on ? "2px solid #2b7fff" : "";
+      el.style.outlineOffset = on ? "-2px" : "";
+      el.style.backgroundColor = on ? "rgba(43, 127, 255, 0.2)" : REGION_COLOR;
+    }
+  };
+
+  // Re-paint the highlight whenever the selection or the region set changes
+  // (regions are re-created on cut, losing their inline styles).
+  useEffect(() => {
+    applySelection(selectedSegId);
+  }, [selectedSegId, segs]);
 
   const syncSegs = () => {
     const regs = regionsRef.current?.getRegions?.() ?? [];
@@ -99,8 +173,9 @@ export default function NarrationEditorModal({
         .map((r: any) => ({ id: r.id, start: r.start, end: r.end }))
         .sort((a: Seg, b: Seg) => a.start - b.start),
     );
-    // Drop assignments whose region no longer exists.
+    // Drop assignments (and the picked highlight) whose region no longer exists.
     const live = new Set(regs.map((r: any) => r.id));
+    setSelectedSegId((prev) => (prev && live.has(prev) ? prev : null));
     setSegToPage((prev) => {
       const next: Record<string, string> = {};
       for (const [segId, pageId] of Object.entries(prev)) {
@@ -150,9 +225,14 @@ export default function NarrationEditorModal({
         barWidth: 2,
         barGap: 1,
         barRadius: 2,
+        // Dragging on the waveform scrubs the red line — everywhere, since
+        // region bodies pass pointer events through (passThroughRegion).
+        // Drag-selection of regions is intentionally NOT enabled: it fought
+        // with scrubbing and stacked overlapping regions on top of existing
+        // ones — segments come from 자동 분할 / 여기서 자르기 instead.
+        dragToSeek: true,
       });
       const regions = ws.registerPlugin(RegionsPlugin.create());
-      regions.enableDragSelection({ color: REGION_COLOR });
       wsRef.current = ws;
       regionsRef.current = regions;
 
@@ -169,25 +249,26 @@ export default function NarrationEditorModal({
         zoomRef.current = fit;
         minZoomRef.current = fit;
       });
-      regions.on("region-created", syncSegs);
-      regions.on("region-updated", syncSegs);
+      regions.on("region-created", (r: any) => {
+        passThroughRegion(r);
+        normalizeRegion(r);
+        syncSegs();
+      });
+      regions.on("region-updated", (r: any) => {
+        normalizeRegion(r);
+        syncSegs();
+      });
       regions.on("region-removed", syncSegs);
-      regions.on("region-clicked", (region: any, e: MouseEvent) => {
-        e.stopPropagation();
-        // Move the red line to exactly where you clicked inside the segment so
-        // "여기서 자르기" can split right at that point. (Clicking an empty part
-        // of the waveform already seeks via wavesurfer's default handling.)
-        const el = region.element as HTMLElement | undefined;
-        const dur = wsRef.current?.getDuration?.() ?? 0;
-        if (el && dur > 0) {
-          const rect = el.getBoundingClientRect();
-          const rel = Math.min(
-            1,
-            Math.max(0, (e.clientX - rect.left) / rect.width),
-          );
-          const t = region.start + rel * (region.end - region.start);
-          wsRef.current?.setTime?.(t);
-        }
+      // Clicking/dragging the waveform moves the red line (native seek); the
+      // segment under the new position becomes the picked one. Region click
+      // events can't be used for picking — region bodies pass pointer events
+      // through so the red line stays grabbable everywhere.
+      ws.on("interaction", (newTime: number) => {
+        const regs = regionsRef.current?.getRegions?.() ?? [];
+        const hit = regs.find(
+          (r: any) => newTime >= r.start && newTime <= r.end,
+        );
+        setSelectedSegId(hit ? hit.id : null);
       });
 
       const url = URL.createObjectURL(file);
@@ -267,7 +348,12 @@ export default function NarrationEditorModal({
     regions.clearRegions();
     setSegToPage({});
     for (const r of detectSpeechRegions(buf)) {
-      regions.addRegion({ start: r.start, end: r.end, color: REGION_COLOR });
+      regions.addRegion({
+        start: r.start,
+        end: r.end,
+        color: REGION_COLOR,
+        drag: false,
+      });
     }
     syncSegs();
   };
@@ -294,19 +380,23 @@ export default function NarrationEditorModal({
     let regs = regions.getRegions?.() ?? [];
     if (regs.length === 0) {
       // Nothing split yet → the whole clip is one segment to cut into.
-      regions.addRegion({ start: 0, end: dur, color: REGION_COLOR });
+      regions.addRegion({ start: 0, end: dur, color: REGION_COLOR, drag: false });
       regs = regions.getRegions?.() ?? [];
     }
-    // The segment the red line currently sits inside (with a small margin so a
-    // cut right on an existing edge is a no-op rather than a zero-length seg).
-    const target = regs.find(
+    // Every segment the red line currently sits inside (with a small margin so
+    // a cut right on an existing edge is a no-op rather than a zero-length
+    // seg). Plural on purpose: if older overlapping segments are still around,
+    // splitting only the first one left the stacked one covering the cut and
+    // the button looked dead. Remove them all first, then add the halves — the
+    // region-created normalizer resolves any leftover overlap among the pieces.
+    const targets = regs.filter(
       (r: any) => t > r.start + 0.05 && t < r.end - 0.05,
     );
-    if (target) {
-      const { start, end } = target;
-      target.remove();
-      regions.addRegion({ start, end: t, color: REGION_COLOR });
-      regions.addRegion({ start: t, end, color: REGION_COLOR });
+    const spans = targets.map((r: any) => ({ start: r.start, end: r.end }));
+    for (const r of targets) r.remove();
+    for (const { start, end } of spans) {
+      regions.addRegion({ start, end: t, color: REGION_COLOR, drag: false });
+      regions.addRegion({ start: t, end, color: REGION_COLOR, drag: false });
     }
 
     // 그림책: re-match every segment in time order to the odd (left) pages.
@@ -484,6 +574,47 @@ export default function NarrationEditorModal({
     }
   };
 
+  // Delete every narration saved on the server, one page at a time (the API
+  // has no bulk endpoint). Pages that fail keep their badge so nothing is
+  // silently lost.
+  const deleteAllSaved = async () => {
+    if (saving) return;
+    const targets = cells.filter((c) => savedPages.has(c.id));
+    if (targets.length === 0) return;
+    if (!confirm(`저장된 나레이션 ${targets.length}개를 모두 지울까요?`)) return;
+    setSaving(true);
+    setDeleting({ cur: 0, total: targets.length });
+    try {
+      for (let i = 0; i < targets.length; i++) {
+        const cell = targets[i];
+        await removeNarration(bookId, cell.index);
+        setSavedPages((prev) => {
+          const n = new Set(prev);
+          n.delete(cell.id);
+          return n;
+        });
+        setSavedUrls((prev) => {
+          if (!prev[cell.id]) return prev;
+          const n = { ...prev };
+          delete n[cell.id];
+          return n;
+        });
+        setPageToPool((prev) => {
+          if (!prev[cell.id]) return prev;
+          const n = { ...prev };
+          delete n[cell.id];
+          return n;
+        });
+        setDeleting({ cur: i + 1, total: targets.length });
+      }
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setSaving(false);
+      setDeleting(null);
+    }
+  };
+
   // Save every page that has a pooled audio assigned to it.
   const applyMatch = async () => {
     const targets = cells
@@ -565,9 +696,23 @@ export default function NarrationEditorModal({
   const savedList =
     savedCells.length > 0 ? (
       <div className="narr-ed__saved">
-        <span className="narr-ed__saved-label">
-          🎙 저장된 나레이션 {savedCells.length}개
-        </span>
+        <div className="narr-ed__saved-head">
+          <span className="narr-ed__saved-label">
+            🎙 저장된 나레이션 {savedCells.length}개
+          </span>
+          <button
+            type="button"
+            className="narr-ed__del-saved"
+            disabled={saving}
+            onClick={() => void deleteAllSaved()}
+            title="저장된 나레이션 모두 지우기"
+          >
+            <Trash2 size={13} />{" "}
+            {deleting
+              ? `지우는 중 ${deleting.cur}/${deleting.total}…`
+              : "전체 삭제"}
+          </button>
+        </div>
         <div className="narr-ed__saved-list">
           {savedCells.map((c) => (
             <div
@@ -812,11 +957,12 @@ export default function NarrationEditorModal({
               <div className="ed-cmodal__detail-head">
                 <strong>음성 → 구간</strong>
                 <span className="ed-cmodal__hint">
-                  재생하거나 파형을 클릭해 <b>빨간선</b>을 옮긴 뒤{" "}
+                  파형을 클릭·드래그해 <b>빨간선</b>을 옮긴 뒤{" "}
                   <b>여기서 자르기</b>를 누르면 그 자리에서 잘려 구간이 만들어지고
-                  1·3·5 홀수 페이지에 순서대로 매칭돼요. (파형을 드래그해 직접
-                  구간을 만들 수도 있어요.) <b>왼쪽에서 페이지를 고르고</b> 아래
-                  구간을 누르면 매칭을 바꿀 수 있어요.
+                  1·3·5 홀수 페이지에 순서대로 매칭돼요. 잘린 구간을 누르면{" "}
+                  <b>파란 테두리</b>로 선택되고, 양끝을 끌어 구간을 다시 조절할 수
+                  있어요. <b>왼쪽에서 페이지를 고르고</b> 아래 구간을 누르면
+                  매칭을 바꿀 수 있어요.
                 </span>
                 {savedList}
               </div>
@@ -918,8 +1064,8 @@ export default function NarrationEditorModal({
                   <div className="narr-ed__list">
                     {segs.length === 0 ? (
                       <p className="ed-cmodal__hint">
-                        파형을 드래그하거나 <b>자동 분할</b>로 구간을 만들어
-                        주세요.
+                        <b>자동 분할</b>이나 <b>여기서 자르기</b>로 구간을
+                        만들어 주세요.
                       </p>
                     ) : (
                       segs.map((s, i) => {
@@ -928,14 +1074,18 @@ export default function NarrationEditorModal({
                           ? cells.find((c) => c.id === assignedId)
                           : null;
                         const onActive = assignedId === activePage;
+                        const picked = s.id === selectedSegId;
                         return (
                           <div
                             key={s.id}
                             className={`narr-ed__seg narr-ed__seg--pick${
                               onActive ? " is-on" : ""
-                            }`}
+                            }${picked ? " is-picked" : ""}`}
                             role="button"
-                            onClick={() => toggleSegAssign(s.id)}
+                            onClick={() => {
+                              setSelectedSegId(s.id);
+                              toggleSegAssign(s.id);
+                            }}
                             title="현재 페이지에 넣기/빼기"
                           >
                             <span className="narr-ed__seg-no">

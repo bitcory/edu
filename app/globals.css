@@ -3677,6 +3677,16 @@ textarea.ed-input {
   border-radius: 10px;
   background: #f2f9f3;
 }
+.narr-ed__saved-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.narr-ed__saved-head .narr-ed__del-saved {
+  margin-top: 0;
+  padding: 4px 9px;
+}
 .narr-ed__saved-label {
   font-size: 13px;
   font-weight: 700;
@@ -3686,7 +3696,9 @@ textarea.ed-input {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-height: 200px;
+  /* Keep the saved list short so the waveform/controls below stay in view
+     even with 10+ saved narrations; the list itself scrolls. */
+  max-height: 140px;
   overflow-y: auto;
 }
 .narr-ed__saved-row {
@@ -3789,6 +3801,17 @@ textarea.ed-input {
   background: #fff;
   margin-bottom: 8px;
 }
+/* Region resize handles (inside wavesurfer's shadow DOM, reachable via
+   ::part): thicker + blue so a picked slice's edges are easy to grab. */
+.narr-ed__wave ::part(region-handle) {
+  width: 8px;
+}
+.narr-ed__wave ::part(region-handle-left) {
+  border-left: 3px solid rgba(43, 127, 255, 0.65);
+}
+.narr-ed__wave ::part(region-handle-right) {
+  border-right: 3px solid rgba(43, 127, 255, 0.65);
+}
 .narr-ed__controls {
   display: flex;
   align-items: center;
@@ -3833,6 +3856,13 @@ textarea.ed-input {
 .ed-cmodal--narr {
   width: min(1240px, 96vw);
   height: min(88vh, 900px);
+}
+
+/* The right pane can outgrow the modal once saved narrations pile up
+   (saved list + waveform + controls + segment list) — scroll it instead of
+   letting the bottom get clipped by the modal's overflow:hidden. */
+.ed-cmodal--narr .ed-cmodal__detail {
+  overflow-y: auto;
 }
 
 /* Bigger page thumbnails in the narration modal — easier to recognize. */
@@ -4006,6 +4036,12 @@ textarea.ed-input {
 .narr-ed__seg--pick.is-on {
   border-color: #1f9e7f;
   background: rgba(47, 185, 143, 0.14);
+}
+/* The slice picked on the waveform (blue outline there) — same blue here so
+   the list row and the region read as one selection. */
+.narr-ed__seg.is-picked {
+  border-color: #2b7fff;
+  box-shadow: inset 0 0 0 1px #2b7fff;
 }
 .narr-ed__seg-no {
   flex-shrink: 0;
