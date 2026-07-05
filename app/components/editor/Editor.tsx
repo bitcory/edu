@@ -1030,6 +1030,56 @@ export default function Editor({
     [activeIndex, pages, PAGE_W],
   );
 
+  // Move the selected object to the previous/next page (펼침에서 왼쪽↔오른쪽).
+  // 페이지-로컬 좌표를 그대로 유지한 채 옮긴 뒤 대상 페이지로 전환하고, 옮긴
+  // 객체를 선택 상태로 남겨 바로 이어서 조정할 수 있게 한다.
+  const moveSelectedToPage = useCallback(
+    async (dir: -1 | 1) => {
+      const api = apiRef.current;
+      const obj = selected;
+      if (!api?.canvas || !obj) return;
+      // 다중 선택(activeselection)은 좌표가 그룹 기준이라 지원하지 않는다.
+      if ((obj.type || "").toLowerCase() === "activeselection") return;
+      const target = activeIndex + dir;
+      if (target < 1 || target >= pages.length) return; // 표지(0)로는 이동 금지
+      const objJson = obj.toObject(["caption"]) as object;
+      api.canvas.discardActiveObject();
+      api.canvas.remove(obj);
+      api.canvas.renderAll();
+      // 객체가 빠진 현재 페이지를 스냅샷하고, 대상 페이지 데이터에 객체를 덧붙인다.
+      const data = api.serialize();
+      const thumb = api.toPng(0.2);
+      const saved = pages.map((p, i) =>
+        i === activeIndex ? { ...p, data, thumb } : p,
+      );
+      const synced = [...syncSpreadPartnerPages(saved, activeIndex, PAGE_W)];
+      const t = synced[target];
+      const tData = (t.data ?? { background: "#ffffff", objects: [] }) as
+        { objects?: object[] } & Record<string, unknown>;
+      const newTData = { ...tData, objects: [...(tData.objects ?? []), objJson] };
+      // 프로그램적 로드 — object:added 가 히스토리에 가짜 편집으로 남지 않게 억제.
+      isApplyingHistoryRef.current = true;
+      try {
+        await api.load(newTData);
+      } finally {
+        isApplyingHistoryRef.current = false;
+      }
+      synced[target] = { ...t, data: newTData, thumb: api.toPng(0.2) };
+      setPages(synced);
+      const c = api.canvas;
+      if (c) {
+        setBgColor((c.backgroundColor as string) || "#ffffff");
+        const objs = c.getObjects();
+        if (objs.length) {
+          c.setActiveObject(objs[objs.length - 1]); // 방금 옮긴 객체 재선택
+          c.renderAll();
+        }
+      }
+      setActiveIndex(target);
+    },
+    [selected, activeIndex, pages, PAGE_W],
+  );
+
   // Tools: add text / image / rect / circle.
 
   // Tools: add text / image / rect / circle.
@@ -3071,6 +3121,29 @@ export default function Editor({
 
         {selected && (
           <>
+            <div className="ed-props__group">
+              <label className="ed-props__label">페이지 이동</label>
+              <div className="ed-btn-row">
+                <button
+                  type="button"
+                  className="ed-mini"
+                  disabled={activeIndex - 1 < 1}
+                  title="선택한 요소를 왼쪽(이전) 페이지로 옮기기"
+                  onClick={() => void moveSelectedToPage(-1)}
+                >
+                  ← 왼쪽 페이지로
+                </button>
+                <button
+                  type="button"
+                  className="ed-mini"
+                  disabled={activeIndex + 1 >= pages.length}
+                  title="선택한 요소를 오른쪽(다음) 페이지로 옮기기"
+                  onClick={() => void moveSelectedToPage(1)}
+                >
+                  오른쪽 페이지로 →
+                </button>
+              </div>
+            </div>
             <div className="ed-props__group">
               <label className="ed-props__label">레이어 순서</label>
               <div className="ed-btn-row">

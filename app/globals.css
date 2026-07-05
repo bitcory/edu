@@ -1901,6 +1901,14 @@ textarea.ed-input {
   background: var(--accent);
 }
 
+.ed-mini:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.ed-mini:disabled:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
 .ed-danger {
   width: 100%;
   padding: 10px;
