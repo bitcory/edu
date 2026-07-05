@@ -183,6 +183,19 @@ export default function BookViewer({
   };
 
   // ---- Per-page narration ----
+  // Flipbook pacing: hold the voice for a beat after the page settles, and
+  // linger on the page for a moment after the voice ends before turning.
+  const NARRATION_START_DELAY_MS = 1500;
+  const ADVANCE_AFTER_NARRATION_MS = 2500;
+  const narrationDelayRef = useRef<number | null>(null);
+  const clearNarrationDelay = () => {
+    if (narrationDelayRef.current !== null) {
+      window.clearTimeout(narrationDelayRef.current);
+      narrationDelayRef.current = null;
+    }
+  };
+  useEffect(() => clearNarrationDelay, []);
+
   // Play (or stop) the narration for a given page index.
   const playNarrationForPage = (i: number) => {
     const el = narrationRef.current;
@@ -354,7 +367,10 @@ export default function BookViewer({
     if (webtoon) return;
     if (autoPlayingRef.current && waitingForNarrationRef.current) {
       waitingForNarrationRef.current = false;
-      autoTimerRef.current = window.setTimeout(advance, 600);
+      autoTimerRef.current = window.setTimeout(
+        advance,
+        ADVANCE_AFTER_NARRATION_MS,
+      );
     }
   };
 
@@ -751,7 +767,7 @@ export default function BookViewer({
               disableFlipByClick
               maxShadowOpacity={0.4}
               drawShadow
-              flippingTime={650}
+              flippingTime={1200}
               useMouseEvents
               usePortrait
               className="bv-flipbook"
@@ -764,8 +780,16 @@ export default function BookViewer({
                 // (last page) — fade the music out, since the story isn't being
                 // read there and the loop shouldn't keep playing.
                 if (e.data === 0 || e.data >= pages.length - 1) stopMusic();
-                // Play this page's narration (manual or auto).
-                playNarrationForPage(e.data);
+                // Stop the previous page's voice right away, then start this
+                // page's narration after a short breath (manual or auto).
+                clearNarrationDelay();
+                narrationRef.current?.pause();
+                if (narrationUrls?.[e.data]) {
+                  narrationDelayRef.current = window.setTimeout(() => {
+                    narrationDelayRef.current = null;
+                    playNarrationForPage(e.data);
+                  }, NARRATION_START_DELAY_MS);
+                }
                 // In auto mode, decide when to turn next from this page.
                 if (autoPlayingRef.current) scheduleAdvance();
               }}
