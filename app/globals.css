@@ -6672,6 +6672,45 @@ textarea.ed-input {
   color: var(--ink);
 }
 .story-modal-backdrop .story-script-modal { width: min(940px, 96vw); }
+.story-modal-backdrop .story-json-modal { width: min(880px, 96vw); }
+
+/* JSON 모달 2단: 왼쪽 붙여넣기 / 오른쪽 파일 업로드(드래그앤드롭) */
+.story-modal-backdrop .story-json-cols {
+  display: grid;
+  grid-template-columns: 1fr 230px;
+  gap: 12px;
+  align-items: stretch;
+}
+.story-modal-backdrop .story-json-cols textarea { min-height: 300px; }
+.story-modal-backdrop .story-json-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+  cursor: pointer;
+  border: 2px dashed #ecd9b8;
+  border-radius: 12px;
+  background: #fdf6e6;
+  color: #8a7259;
+  padding: 18px 14px;
+  font-size: 0.88rem;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.story-modal-backdrop .story-json-drop b { color: var(--ink); line-height: 1.5; }
+.story-modal-backdrop .story-json-drop span { font-size: 0.8rem; }
+.story-modal-backdrop .story-json-drop:hover,
+.story-modal-backdrop .story-json-drop.over {
+  background: #fff3d6;
+  border-color: var(--accent-2);
+  color: var(--ink);
+}
+.story-modal-backdrop .story-json-drop.over { box-shadow: 0 0 0 3px rgba(255, 208, 95, 0.35); }
+@media (max-width: 700px) {
+  .story-modal-backdrop .story-json-cols { grid-template-columns: 1fr; }
+  .story-modal-backdrop .story-json-drop { min-height: 110px; }
+}
 .story-modal-backdrop .story-match-modal { width: min(640px, 94vw); }
 .story-modal-backdrop .story-modal-head { display: flex; align-items: center; gap: 10px; padding: 16px 20px; border-bottom: 1px dashed #ecd9b8; }
 .story-modal-backdrop .story-modal-head h2 { font-size: 1.2rem; font-weight: 800; color: var(--ink); flex: 1; display: flex; align-items: center; gap: 8px; }

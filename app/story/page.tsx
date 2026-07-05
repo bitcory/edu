@@ -391,6 +391,7 @@ export default function StoryPage() {
   const [jsonModalOpen, setJsonModalOpen] = useState(false);
   const [jsonText, setJsonText] = useState("");
   const [jsonErr, setJsonErr] = useState("");
+  const [jsonDragOver, setJsonDragOver] = useState(false);
   const [matchModalOpen, setMatchModalOpen] = useState(false);
   const [scriptModalOpen, setScriptModalOpen] = useState(false);
   const [scriptInput, setScriptInput] = useState("");
@@ -1036,23 +1037,32 @@ export default function StoryPage() {
     }
   }
 
-  function handleModalFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0];
-    if (!f) return;
+  // .json 파일(선택 또는 드래그앤드롭)을 읽어 파싱 성공 시 바로 반영하고 모달을
+  // 닫는다. 실패하면 내용을 왼쪽 textarea 에 남겨 사용자가 고칠 수 있게 한다.
+  function applyJsonFile(f: File) {
+    if (!/\.json$/i.test(f.name) && f.type !== "application/json" && f.type !== "text/plain") {
+      setJsonErr("JSON 파일(.json)만 불러올 수 있어요.");
+      return;
+    }
     const r = new FileReader();
     r.onload = () => {
       const txt = String(r.result);
-      setJsonText(txt);
       try {
         loadLib(JSON.parse(txt));
         setJsonText("");
         setJsonErr("");
         setJsonModalOpen(false);
       } catch (err) {
-        setJsonErr("JSON 파싱 실패: " + (err as Error).message);
+        setJsonText(txt);
+        setJsonErr(`"${f.name}" 파싱 실패: ` + (err as Error).message);
       }
     };
     r.readAsText(f);
+  }
+
+  function handleModalFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (f) applyJsonFile(f);
     e.target.value = "";
   }
 
@@ -1578,7 +1588,7 @@ export default function StoryPage() {
           aria-modal="true"
           onClick={(e) => { if ((e.target as HTMLElement).classList.contains("story-modal-backdrop")) setJsonModalOpen(false); }}
         >
-          <div className="story-modal">
+          <div className="story-modal story-json-modal">
             <div className="story-modal-head">
               <h2><FileInput size={18} /> JSON 불러오기</h2>
               <button type="button" className="story-modal-close" aria-label="닫기" onClick={() => setJsonModalOpen(false)}>
@@ -1587,20 +1597,38 @@ export default function StoryPage() {
             </div>
             <div className="story-modal-body">
               <div className="story-hint">
-                아래에 JSON 내용을 붙여넣고 <b>적용</b>을 누르세요. 또는 좌측 하단 <b>파일 선택</b>으로 .json 파일을 불러올 수 있어요.
+                왼쪽에 JSON 내용을 붙여넣고 <b>적용</b>을 누르거나, 오른쪽에 <b>.json 파일</b>을 올리면 바로 반영돼요.
               </div>
-              <textarea
-                value={jsonText}
-                onChange={(e) => setJsonText(e.target.value)}
-                placeholder='{"library_meta": {...}, "books": [...]}'
-                autoFocus
-              />
+              <div className="story-json-cols">
+                <textarea
+                  value={jsonText}
+                  onChange={(e) => setJsonText(e.target.value)}
+                  placeholder='{"library_meta": {...}, "books": [...]}'
+                  autoFocus
+                />
+                <div
+                  className={`story-json-drop${jsonDragOver ? " over" : ""}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => modalFileRef.current?.click()}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") modalFileRef.current?.click(); }}
+                  onDragOver={(e) => { e.preventDefault(); setJsonDragOver(true); }}
+                  onDragLeave={() => setJsonDragOver(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setJsonDragOver(false);
+                    const f = e.dataTransfer.files?.[0];
+                    if (f) applyJsonFile(f);
+                  }}
+                >
+                  <FolderOpen size={30} />
+                  <b>JSON 파일을 여기에<br />끌어다 놓으세요</b>
+                  <span>또는 클릭해서 파일 선택</span>
+                </div>
+              </div>
               <div className="story-modal-err">{jsonErr}</div>
             </div>
             <div className="story-modal-foot">
-              <button type="button" className="story-btn story-filepick" onClick={() => modalFileRef.current?.click()}>
-                <FolderOpen size={16} /> 파일 선택
-              </button>
               <input
                 ref={modalFileRef}
                 type="file"
