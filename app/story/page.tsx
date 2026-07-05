@@ -174,7 +174,17 @@ function buildPrompt(book: StoryBook | null, base: string, kind: PromptKind): st
     kind === "cover" ? (sb.cover_add ? " " + sb.cover_add : "") :
     (sb.scene_add ? " " + sb.scene_add : "");
   const { negative } = splitNegative(sb.common);
-  return base + add + (negative ? " " + negative : "");
+  // 공통 스타일(common)은 네거티브 문장을 뺀 본문을 프롬프트 맨 앞에 항상 포함한다.
+  // v7 JSON 은 스타일이 style_block.common 에만 있고 prompt_en 은 장면 묘사만 담기
+  // 때문. prompt_en 에 이미 같은 문장이 들어있는 구버전 JSON 은 중복을 피해 생략.
+  const commonBody = (sb.common
+    ? (negative ? String(sb.common).replace(negative, "") : String(sb.common))
+    : "").trim();
+  const dupProbe = commonBody.toLowerCase().slice(0, 40);
+  const head = commonBody && !(dupProbe && base.toLowerCase().includes(dupProbe))
+    ? commonBody + " "
+    : "";
+  return head + base + add + (negative ? " " + negative : "");
 }
 
 function escapeId(s?: string): string {
