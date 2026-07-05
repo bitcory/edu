@@ -650,6 +650,13 @@ export default function Editor({
       snapshotTimerRef.current = null;
       const api = apiRef.current;
       if (!api) return;
+      // A programmatic load may be IN FLIGHT right now (page switch / 페이지
+      // 이동 / undo가 큰 이미지를 로드하는 동안 타이머가 발화하는 경우). 그때
+      // 캔버스는 비어 있거나 다른 페이지가 반쯤 올라온 상태라, 직렬화하면 그
+      // 쓰레기 상태가 pages[idx]를 덮어써 페이지가 하얗게 비어 보인다. 스킵해도
+      // 안전: 페이지를 떠날 때(switchTo)와 flushSnapshot이 캔버스를 다시
+      // 직렬화한다.
+      if (isApplyingHistoryRef.current) return;
       const idx = activeIndexRef.current;
       const data = api.serialize();
       const thumb = api.toPng(0.2);
@@ -1033,8 +1040,12 @@ export default function Editor({
   // Move the selected object to the previous/next page (펼침에서 왼쪽↔오른쪽).
   // 페이지-로컬 좌표를 그대로 유지한 채 옮긴 뒤 대상 페이지로 전환하고, 옮긴
   // 객체를 선택 상태로 남겨 바로 이어서 조정할 수 있게 한다.
+  const movingPageRef = useRef(false);
   const moveSelectedToPage = useCallback(
     async (dir: -1 | 1) => {
+      // 이동은 비동기(이미지 로드 포함)라 진행 중 재클릭이 끼어들면 이전
+      // 상태(stale pages)로 서로 덮어써 페이지가 비어 보일 수 있다 → 재진입 금지.
+      if (movingPageRef.current) return;
       const api = apiRef.current;
       const obj = selected;
       if (!api?.canvas || !obj) return;
@@ -1042,42 +1053,55 @@ export default function Editor({
       if ((obj.type || "").toLowerCase() === "activeselection") return;
       const target = activeIndex + dir;
       if (target < 1 || target >= pages.length) return; // 표지(0)로는 이동 금지
-      const objJson = obj.toObject(["caption"]) as object;
-      api.canvas.discardActiveObject();
-      api.canvas.remove(obj);
-      api.canvas.renderAll();
-      // 객체가 빠진 현재 페이지를 스냅샷하고, 대상 페이지 데이터에 객체를 덧붙인다.
-      const data = api.serialize();
-      const thumb = api.toPng(0.2);
-      const saved = pages.map((p, i) =>
-        i === activeIndex ? { ...p, data, thumb } : p,
-      );
-      const synced = [...syncSpreadPartnerPages(saved, activeIndex, PAGE_W)];
-      const t = synced[target];
-      const tData = (t.data ?? { background: "#ffffff", objects: [] }) as
-        { objects?: object[] } & Record<string, unknown>;
-      const newTData = { ...tData, objects: [...(tData.objects ?? []), objJson] };
-      // 프로그램적 로드 — object:added 가 히스토리에 가짜 편집으로 남지 않게 억제.
-      isApplyingHistoryRef.current = true;
+      movingPageRef.current = true;
       try {
-        await api.load(newTData);
-      } finally {
-        isApplyingHistoryRef.current = false;
-      }
-      synced[target] = { ...t, data: newTData, thumb: api.toPng(0.2) };
-      setPages(synced);
-      const c = api.canvas;
-      if (c) {
-        setBgColor((c.backgroundColor as string) || "#ffffff");
-        const objs = c.getObjects();
-        if (objs.length) {
-          c.setActiveObject(objs[objs.length - 1]); // 방금 옮긴 객체 재선택
-          c.renderAll();
+        // 직전 편집의 대기 중(디바운스) 스냅샷을 먼저 커밋한다 — 아래에서 억제
+        // 모드로 들어가면 타이머가 스킵되므로, 여기서 확정해 유실을 막는다.
+        flushSnapshot();
+        const objJson = obj.toObject(["caption"]) as object;
+        // 제거~대상 페이지 로드 전 과정을 스냅샷 억제로 감싼다. 그러지 않으면
+        // object:removed 가 700ms 스냅샷 타이머를 걸고, 큰 이미지 로드 중에 그
+        // 타이머가 발화해 "비어 있는 캔버스"를 현재 페이지 데이터로 덮어쓴다
+        // (페이지가 하얗게 비는 버그).
+        isApplyingHistoryRef.current = true;
+        let synced: EditorPage[];
+        let newTData: object;
+        try {
+          api.canvas.discardActiveObject();
+          api.canvas.remove(obj);
+          api.canvas.renderAll();
+          // 객체가 빠진 현재 페이지를 스냅샷하고, 대상 페이지 데이터에 객체를 덧붙인다.
+          const data = api.serialize();
+          const thumb = api.toPng(0.2);
+          const saved = pages.map((p, i) =>
+            i === activeIndex ? { ...p, data, thumb } : p,
+          );
+          synced = [...syncSpreadPartnerPages(saved, activeIndex, PAGE_W)];
+          const t = synced[target];
+          const tData = (t.data ?? { background: "#ffffff", objects: [] }) as
+            { objects?: object[] } & Record<string, unknown>;
+          newTData = { ...tData, objects: [...(tData.objects ?? []), objJson] };
+          await api.load(newTData);
+        } finally {
+          isApplyingHistoryRef.current = false;
         }
+        synced[target] = { ...synced[target], data: newTData, thumb: api.toPng(0.2) };
+        setPages(synced);
+        const c = api.canvas;
+        if (c) {
+          setBgColor((c.backgroundColor as string) || "#ffffff");
+          const objs = c.getObjects();
+          if (objs.length) {
+            c.setActiveObject(objs[objs.length - 1]); // 방금 옮긴 객체 재선택
+            c.renderAll();
+          }
+        }
+        setActiveIndex(target);
+      } finally {
+        movingPageRef.current = false;
       }
-      setActiveIndex(target);
     },
-    [selected, activeIndex, pages, PAGE_W],
+    [selected, activeIndex, pages, PAGE_W, flushSnapshot],
   );
 
   // Tools: add text / image / rect / circle.
