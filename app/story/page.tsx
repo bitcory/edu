@@ -16,7 +16,7 @@ import {
   Library, UsersRound, Clapperboard,
   Menu, FileInput, FolderOpen, X, BookOpen, ArrowLeft, Ruler,
   ExternalLink, MessageSquare, AudioLines, Music, Workflow, ScrollText, Wand2,
-  ImagePlus, Sparkles, Square, Download,
+  ImagePlus, Sparkles, Square, Download, Save,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
@@ -141,6 +141,26 @@ type StoryLib = {
   library_meta?: { name?: string; count?: number };
   books?: StoryBook[];
   [k: string]: unknown;
+};
+type StoryProjectBackup = {
+  format: "tbbook-story-project";
+  version: 1;
+  exportedAt: string;
+  lib: StoryLib;
+  scripts: {
+    input: string;
+    preview: string;
+    parsed: string;
+  };
+  state: {
+    bookIdx: number;
+    section: "chars" | "cuts";
+    activeChar: number;
+    cutFilter: string | number;
+  };
+  images?: {
+    byKey?: Record<string, string>;
+  };
 };
 type PromptKind = "char" | "scene" | "cover";
 
@@ -389,6 +409,53 @@ function normalizeLib(obj: StoryLib | StoryBook | null): StoryLib | null {
   return { ...lib, books: (lib.books || []).map(normalizeBook) };
 }
 
+function collectStoryImageKeys(lib: StoryLib | null): string[] {
+  const keys = new Set<string>();
+  (lib?.books || []).forEach((b) => {
+    (b.characters || []).forEach((c) => {
+      if (typeof c.imageKey === "string" && c.imageKey) keys.add(c.imageKey);
+    });
+    (b.cuts || []).forEach((c) => {
+      if (typeof c.imageKey === "string" && c.imageKey) keys.add(c.imageKey);
+    });
+    (b.covers || []).forEach((c) => {
+      if (typeof c.imageKey === "string" && c.imageKey) keys.add(c.imageKey);
+    });
+  });
+  return [...keys];
+}
+
+function replaceStoryImageKeys(lib: StoryLib, keyMap: Record<string, string>): StoryLib {
+  const walk = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(walk);
+    if (!value || typeof value !== "object") return value;
+    const out: Record<string, unknown> = {};
+    Object.entries(value).forEach(([k, v]) => {
+      out[k] = k === "imageKey" && typeof v === "string" && keyMap[v]
+        ? keyMap[v]
+        : walk(v);
+    });
+    return out;
+  };
+  return walk(lib) as StoryLib;
+}
+
+function storyBackupName(lib: StoryLib | null): string {
+  const title = lib?.books?.[0]?.meta?.title || "story-project";
+  const safeTitle = String(title).replace(/[\\/:*?"<>|]+/g, "_").trim() || "story-project";
+  const day = new Date().toISOString().slice(0, 10);
+  return `${safeTitle}_${day}.json`;
+}
+
+function isStoryProjectBackup(value: unknown): value is StoryProjectBackup {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    (value as { format?: unknown }).format === "tbbook-story-project" &&
+    (value as { lib?: unknown }).lib,
+  );
+}
+
 export default function StoryPage() {
   const router = useRouter();
   const [sendBusy, setSendBusy] = useState(false);
@@ -402,6 +469,8 @@ export default function StoryPage() {
   const [jsonText, setJsonText] = useState("");
   const [jsonErr, setJsonErr] = useState("");
   const [jsonDragOver, setJsonDragOver] = useState(false);
+  const [projectSaveBusy, setProjectSaveBusy] = useState(false);
+  const [projectRestoreBusy, setProjectRestoreBusy] = useState(false);
   const [matchModalOpen, setMatchModalOpen] = useState(false);
   const [scriptModalOpen, setScriptModalOpen] = useState(false);
   const [scriptInput, setScriptInput] = useState("");
@@ -415,6 +484,7 @@ export default function StoryPage() {
   // Per-cover image display URLs, keyed by `${bookIdx}:cover:${type}`.
   const [coverImageUrls, setCoverImageUrls] = useState<Record<string, string>>({});
   const modalFileRef = useRef<HTMLInputElement | null>(null);
+  const projectRestoreRef = useRef<HTMLInputElement | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 초기 로드: localStorage 캐시가 있으면 그것을, 없으면 샘플을 fetch.
@@ -688,8 +758,7 @@ export default function StoryPage() {
 
   // 생성 엔진(ChatGPT/Flow) — localStorage 에 저장되고 모든 생성 버튼(단건/전체)에
   // 적용된다. generateViaChatGpt 가 호출 시점에 현재 값을 읽는다.
-  const [genEngine, setGenEngineState] = useState<ExtEngine>("chatgpt");
-  useEffect(() => { setGenEngineState(getGenEngine()); }, []);
+  const [genEngine, setGenEngineState] = useState<ExtEngine>(() => getGenEngine());
   const pickEngine = (e: ExtEngine) => { setGenEngine(e); setGenEngineState(e); };
 
   // The extension is self-distributed (no Chrome Web Store / no auto-update), so
@@ -996,6 +1065,9 @@ export default function StoryPage() {
   function loadLib(obj: StoryLib | StoryBook) {
     const norm = normalizeLib(obj);
     if (!norm) return;
+    setImageUrls({});
+    setCutImageUrls({});
+    setCoverImageUrls({});
     setLib(norm);
     setBookIdx(0);
     setActiveChar(0);
@@ -1003,6 +1075,112 @@ export default function StoryPage() {
     setCutFilter("all");
     try { localStorage.setItem(CACHE_KEY, JSON.stringify(norm)); } catch {}
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function saveProjectBackup() {
+    if (!lib || projectSaveBusy) return;
+    setProjectSaveBusy(true);
+    try {
+      const keys = collectStoryImageKeys(lib);
+      let byKey: Record<string, string> = {};
+      if (keys.length) {
+        const r = await fetch("/api/story/image-data", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ keys }),
+        });
+        const d = await r.json().catch(() => ({}));
+        byKey = d.dataUrls || {};
+      }
+      const payload: StoryProjectBackup = {
+        format: "tbbook-story-project",
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        lib,
+        scripts: {
+          input: scriptInput,
+          preview: scriptPreview,
+          parsed: scriptParsed,
+        },
+        state: { bookIdx, section, activeChar, cutFilter },
+        images: { byKey },
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = storyBackupName(lib);
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast(keys.length ? `저장했어요! 이미지 ${Object.keys(byKey).length}/${keys.length}장 포함` : "저장했어요!");
+    } catch (e) {
+      showToast("저장 실패: " + ((e as Error)?.message || ""));
+    } finally {
+      setProjectSaveBusy(false);
+    }
+  }
+
+  async function restoreProjectBackupText(text: string) {
+    setProjectRestoreBusy(true);
+    try {
+      const obj = JSON.parse(text);
+      if (!isStoryProjectBackup(obj)) {
+        loadLib(obj);
+        showToast("기존 JSON을 불러왔어요");
+        return;
+      }
+      let restoredLib = normalizeLib(obj.lib);
+      if (!restoredLib) throw new Error("복원할 책 데이터가 없어요.");
+
+      const embedded = obj.images?.byKey || {};
+      const keyMap: Record<string, string> = {};
+      const entries = Object.entries(embedded).filter(([, dataUrl]) => typeof dataUrl === "string" && dataUrl.startsWith("data:image/"));
+      if (entries.length) {
+        await Promise.all(entries.map(async ([oldKey, dataUrl]) => {
+          try {
+            const r = await fetch("/api/story/save-image", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ dataUrl }),
+            });
+            const d = await r.json().catch(() => ({}));
+            if (r.ok && typeof d.key === "string") keyMap[oldKey] = d.key;
+          } catch {}
+        }));
+      }
+      if (Object.keys(keyMap).length) restoredLib = replaceStoryImageKeys(restoredLib, keyMap);
+
+      setImageUrls({});
+      setCutImageUrls({});
+      setCoverImageUrls({});
+      setLib(restoredLib);
+      setBookIdx(Math.max(0, Math.min(obj.state?.bookIdx || 0, (restoredLib.books || []).length - 1)));
+      setSection(obj.state?.section === "cuts" ? "cuts" : "chars");
+      setActiveChar(Math.max(0, obj.state?.activeChar || 0));
+      setCutFilter(obj.state?.cutFilter ?? "all");
+      setScriptInput(obj.scripts?.input || "");
+      setScriptPreview(obj.scripts?.preview || obj.scripts?.parsed || "");
+      setScriptParsed(obj.scripts?.parsed || "");
+      try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify(restoredLib));
+        localStorage.setItem(SCRIPT_KEY, obj.scripts?.parsed || "");
+        localStorage.setItem(SCRIPT_INPUT_KEY, obj.scripts?.input || "");
+      } catch {}
+      showToast(entries.length ? `복원했어요! 이미지 ${Object.keys(keyMap).length}/${entries.length}장 복원` : "복원했어요!");
+    } catch (e) {
+      showToast("복원 실패: " + ((e as Error)?.message || ""));
+    } finally {
+      setProjectRestoreBusy(false);
+    }
+  }
+
+  function handleProjectRestoreFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const r = new FileReader();
+    r.onload = () => restoreProjectBackupText(String(r.result));
+    r.readAsText(f);
+    e.target.value = "";
   }
 
   function showToast(msg = "복사됐어요!") {
@@ -1166,6 +1344,31 @@ export default function StoryPage() {
           <button type="button" className="story-btn story-btn--ghost" onClick={resetToSample} title="책장을 초기 상태로 되돌리기">
             초기화
           </button>
+          <button
+            type="button"
+            className="story-btn"
+            onClick={saveProjectBackup}
+            disabled={projectSaveBusy || !lib}
+            title="현재 책장, 프롬프트, 대본, 이미지 원본을 JSON 파일로 저장"
+          >
+            <Save size={15} /> {projectSaveBusy ? "저장 중…" : "저장"}
+          </button>
+          <button
+            type="button"
+            className="story-btn"
+            onClick={() => projectRestoreRef.current?.click()}
+            disabled={projectRestoreBusy}
+            title="저장한 스토리구성 백업 JSON을 복원"
+          >
+            <FolderOpen size={15} /> {projectRestoreBusy ? "복원 중…" : "복원"}
+          </button>
+          <input
+            ref={projectRestoreRef}
+            type="file"
+            accept=".json,application/json"
+            hidden
+            onChange={handleProjectRestoreFile}
+          />
           <button
             type="button"
             className="story-btn"
