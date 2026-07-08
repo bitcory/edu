@@ -27,6 +27,7 @@ const AUTHOR_PORTRAIT_BY_USER_ID: Record<string, string> = {
 };
 
 function portraitFor(author: AuthorCard) {
+  if (author.avatarUrl) return author.avatarUrl;
   const assignedPortrait = AUTHOR_PORTRAIT_BY_USER_ID[author.userId];
   if (assignedPortrait) return assignedPortrait;
 
@@ -141,13 +142,18 @@ export default function AuthorPickerModal({
                   aria-label={`${a.displayName} 작가 페이지 보기`}
                 >
                   <span className="apick-card__portrait">
-                    <Image
-                      src={portraitFor(a)}
-                      alt={`${a.displayName} 작가 프로필`}
-                      width={640}
-                      height={640}
-                      sizes="(max-width: 640px) 72vw, 240px"
-                    />
+                    {a.avatarUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={a.avatarUrl} alt={`${a.displayName} 작가 프로필`} />
+                    ) : (
+                      <Image
+                        src={portraitFor(a)}
+                        alt={`${a.displayName} 작가 프로필`}
+                        width={640}
+                        height={640}
+                        sizes="(max-width: 640px) 72vw, 240px"
+                      />
+                    )}
                   </span>
                   <span className="apick-card__name">{a.displayName}</span>
                   {a.intro && (

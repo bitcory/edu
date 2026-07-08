@@ -468,6 +468,21 @@ export async function updateBookMeta(
   return getBookById(id);
 }
 
+/** Sync the current owner's display name across existing books. */
+export async function renameOwnerBooks(
+  ownerId: string,
+  _oldName: string | null | undefined,
+  newName: string,
+): Promise<void> {
+  await ensureSchema();
+  const clean = newName.trim();
+  if (!clean) return;
+  await db.execute({
+    sql: `UPDATE books SET owner_name = ?, author = ? WHERE owner_id = ?`,
+    args: [clean, clean, ownerId],
+  });
+}
+
 export async function deleteBook(id: string): Promise<void> {
   await ensureSchema();
   await db.execute({ sql: `DELETE FROM books WHERE id = ?`, args: [id] });

@@ -758,7 +758,10 @@ export default function StoryPage() {
 
   // 생성 엔진(ChatGPT/Flow) — localStorage 에 저장되고 모든 생성 버튼(단건/전체)에
   // 적용된다. generateViaChatGpt 가 호출 시점에 현재 값을 읽는다.
-  const [genEngine, setGenEngineState] = useState<ExtEngine>(() => getGenEngine());
+  const [genEngine, setGenEngineState] = useState<ExtEngine>("chatgpt");
+  useEffect(() => {
+    Promise.resolve().then(() => setGenEngineState(getGenEngine()));
+  }, []);
   const pickEngine = (e: ExtEngine) => { setGenEngine(e); setGenEngineState(e); };
 
   // The extension is self-distributed (no Chrome Web Store / no auto-update), so
@@ -1341,12 +1344,12 @@ export default function StoryPage() {
               Flow
             </button>
           </div>
-          <button type="button" className="story-btn story-btn--ghost" onClick={resetToSample} title="책장을 초기 상태로 되돌리기">
+          <button type="button" className="story-btn story-btn--reset" onClick={resetToSample} title="책장을 초기 상태로 되돌리기">
             초기화
           </button>
           <button
             type="button"
-            className="story-btn"
+            className="story-btn story-btn--save"
             onClick={saveProjectBackup}
             disabled={projectSaveBusy || !lib}
             title="현재 책장, 프롬프트, 대본, 이미지 원본을 JSON 파일로 저장"
@@ -1355,7 +1358,7 @@ export default function StoryPage() {
           </button>
           <button
             type="button"
-            className="story-btn"
+            className="story-btn story-btn--restore"
             onClick={() => projectRestoreRef.current?.click()}
             disabled={projectRestoreBusy}
             title="저장한 스토리구성 백업 JSON을 복원"
@@ -1371,18 +1374,18 @@ export default function StoryPage() {
           />
           <button
             type="button"
-            className="story-btn"
+            className="story-btn story-btn--script"
             onClick={() => setScriptModalOpen(true)}
             title="본문 대본을 붙여넣어 넘버링을 제거하고 빈 줄 두 번으로 파싱"
           >
             본문대본
           </button>
-          <button type="button" className="story-btn" onClick={() => setJsonModalOpen(true)}>
+          <button type="button" className="story-btn story-btn--json" onClick={() => setJsonModalOpen(true)}>
             JSON 불러오기
           </button>
           <button
             type="button"
-            className="story-btn story-btn--apply"
+            className="story-btn story-btn--apply story-btn--book"
             onClick={sendToEditor}
             disabled={sendBusy || !book}
             title="생성된 이미지로 책만들기 페이지를 자동 구성 (앞표지·본문·뒷표지)"

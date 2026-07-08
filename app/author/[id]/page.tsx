@@ -150,7 +150,11 @@ export default function AuthorPage() {
         <>
           <section className="author-hero">
             <div className="author-hero__avatar" aria-hidden>
-              {author.displayName.slice(0, 1)}
+              {author.avatarUrl ? (
+                <img src={author.avatarUrl} alt="" />
+              ) : (
+                author.displayName.slice(0, 1)
+              )}
             </div>
             <div className="author-hero__info">
               <h2 className="author-hero__name">

@@ -12,6 +12,7 @@ import {
   Upload,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useUser } from "@clerk/nextjs";
 import BookViewer from "../components/BookViewer";
 import UserChip from "../components/auth/UserChip";
 import SubmitBookModal, {
@@ -62,6 +63,7 @@ type Reader = {
 };
 
 export default function LibraryPage() {
+  const { user } = useUser();
   const [books, setBooks] = useState<StoreBook[] | null>(null);
   const [reader, setReader] = useState<Reader | null>(null);
   const [busy, setBusy] = useState(false);
@@ -208,6 +210,42 @@ export default function LibraryPage() {
     (b) => b.status === "draft" && b.kind === "editor",
   );
 
+  // Adopt a cloud draft as the publish target (converted in place on confirm).
+  // The draft's pages live in R2 now, so hydrate the full snapshot first.
+  const pickDraft = useCallback(
+    async (d: StoreBook) => {
+      setPickerOpen(false);
+      setBusy(true);
+      try {
+        const full = (await getBook(d.id)) ?? d;
+        // Keep a custom cover if one was set; otherwise render a crisp cover
+        // from page 0. Never reuse its blurry 0.2× thumb as the cover.
+        const cover =
+          d.coverThumb ??
+          (await renderCoverThumb(full.pages[0], full.pageW ?? 800));
+        setPublishTarget({
+          pages: full.pages,
+          pageW: full.pageW ?? 800,
+          layout: full.layout ?? "spread",
+          draftId: d.id,
+          storyText: full.storyText,
+          initial: {
+            title: d.title && d.title !== "제목 없는 책" ? d.title : undefined,
+            author: d.author ?? author?.displayName,
+            description: d.description,
+            category: d.category,
+            cover,
+          },
+        });
+      } catch (err) {
+        alert((err as Error).message);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [author],
+  );
+
   const openSubmit = useCallback(async () => {
     if (author?.status !== "approved") {
       setAuthorOpen(true);
@@ -245,55 +283,37 @@ export default function LibraryPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [author, books]);
 
-  // Adopt a cloud draft as the publish target (converted in place on confirm).
-  // The draft's pages live in R2 now, so hydrate the full snapshot first.
-  const pickDraft = useCallback(
-    async (d: StoreBook) => {
-      setPickerOpen(false);
-      setBusy(true);
-      try {
-        const full = (await getBook(d.id)) ?? d;
-        // Keep a custom cover if one was set; otherwise render a crisp cover
-        // from page 0. Never reuse its blurry 0.2× thumb as the cover.
-        const cover =
-          d.coverThumb ??
-          (await renderCoverThumb(full.pages[0], full.pageW ?? 800));
-        setPublishTarget({
-          pages: full.pages,
-          pageW: full.pageW ?? 800,
-          layout: full.layout ?? "spread",
-          draftId: d.id,
-          storyText: full.storyText,
-          initial: {
-            title: d.title && d.title !== "제목 없는 책" ? d.title : undefined,
-            author: d.author ?? author?.displayName,
-            description: d.description,
-            category: d.category,
-            cover,
-          },
-        });
-      } catch (err) {
-        alert((err as Error).message);
-      } finally {
-        setBusy(false);
-      }
-    },
-    [author],
-  );
-
   const confirmAuthorApply = useCallback(async (input: AuthorApplyInput) => {
     setBusy(true);
     try {
+      const oldName =
+        author?.displayName ||
+        user?.firstName ||
+        user?.username ||
+        user?.fullName ||
+        user?.primaryEmailAddress?.emailAddress?.split("@")[0] ||
+        "";
+      if (user && input.displayName) {
+        await user.update({ firstName: input.displayName, lastName: "" });
+        await user.reload();
+      }
       const a = await applyAuthor(input);
+      const rename = await fetch("/api/me/rename", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ oldName, newName: input.displayName }),
+      });
+      if (!rename.ok) throw new Error("기존 책의 작가명 갱신에 실패했어요.");
       setAuthor(a);
-      alert("작가 등록을 신청했어요. 관리자 승인 후 책을 올릴 수 있어요.");
+      await listMyBooks().then(setBooks);
+      alert(a.status === "approved" ? "작가 정보를 수정했어요." : "작가 등록을 신청했어요. 관리자 승인 후 책을 올릴 수 있어요.");
     } catch (err) {
       alert((err as Error).message);
     } finally {
       setBusy(false);
       setAuthorOpen(false);
     }
-  }, []);
+  }, [author, user]);
 
   const confirmSubmit = useCallback(
     async (values: SubmitValues) => {
@@ -587,6 +607,7 @@ export default function LibraryPage() {
                   displayName: author.displayName,
                   businessName: author.businessName,
                   intro: author.intro,
+                  avatarDataUrl: author.avatarUrl,
                 }
               : undefined
           }
@@ -610,10 +631,23 @@ function AuthorBanner({
   if (author?.status === "approved") {
     return (
       <div className="author-banner author-banner--ok">
-        <span>
-          승인된 작가 ✓ {author.displayName}
-          {author.type === "business" ? " · 개인사업자" : " · 개인"}
+        <span className="author-banner__identity">
+          <span className="author-banner__avatar" aria-hidden>
+            {author.avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={author.avatarUrl} alt="" />
+            ) : (
+              author.displayName.slice(0, 1)
+            )}
+          </span>
+          <span>
+            승인된 작가 ✓ {author.displayName}
+            {author.type === "business" ? " · 개인사업자" : " · 개인"}
+          </span>
         </span>
+        <button type="button" className="author-banner__btn" onClick={onRegister}>
+          작가 정보 수정
+        </button>
       </div>
     );
   }

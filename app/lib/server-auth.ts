@@ -17,9 +17,9 @@ export async function getServerUser(): Promise<ServerUser | null> {
   if (!u) return null;
   const email = u.primaryEmailAddress?.emailAddress ?? null;
   const name =
-    u.fullName ||
     u.firstName ||
     u.username ||
+    u.fullName ||
     email?.split("@")[0] ||
     "사용자";
   return { id: u.id, name, email, isAdmin: isAdminEmail(email) };

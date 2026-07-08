@@ -12,12 +12,14 @@ export default function UserChip() {
 
   const email = user.primaryEmailAddress?.emailAddress;
   const name =
-    user.fullName || user.firstName || user.username || email?.split("@")[0] || "사용자";
+    user.firstName || user.username || user.fullName || email?.split("@")[0] || "사용자";
   const admin = isAdminEmail(email);
 
   return (
     <div className="user-chip">
-      <span className="user-chip__name">{name}</span>
+      <Link href="/library" className="user-chip__name" title="내 서재">
+        {name}
+      </Link>
       {admin && (
         <Link href="/admin" className="user-chip__admin" title="관리자 페이지">
           <Shield size={12} /> 관리자

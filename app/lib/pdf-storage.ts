@@ -269,6 +269,37 @@ export async function presignStoryDownload(
   );
 }
 
+/** Store a square author avatar data URL under authors/<uuid>.<ext>. */
+export async function saveAuthorAvatarFromDataUrl(dataUrl: string): Promise<string | null> {
+  const m = /^data:(image\/[\w.+-]+);base64,(.+)$/.exec(dataUrl);
+  if (!m) return null;
+  const ext = (m[1].split("/")[1] || "png").split("+")[0];
+  const { client, bucket } = r2();
+  const key = `authors/${globalThis.crypto.randomUUID()}.${ext}`;
+  await client.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: Buffer.from(m[2], "base64"),
+      ContentType: m[1],
+    }),
+  );
+  return key;
+}
+
+export async function presignAuthorAvatarDownload(
+  key: string,
+  expiresInSeconds = 3600,
+): Promise<string> {
+  if (!key.startsWith("authors/")) throw new Error("invalid author avatar key");
+  const { client, bucket } = r2();
+  return getSignedUrl(
+    client,
+    new GetObjectCommand({ Bucket: bucket, Key: key }),
+    { expiresIn: expiresInSeconds },
+  );
+}
+
 export async function savePdf(id: string, bytes: Uint8Array): Promise<void> {
   const { client, bucket } = r2();
   await client.send(

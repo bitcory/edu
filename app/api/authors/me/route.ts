@@ -40,6 +40,7 @@ export async function POST(req: NextRequest) {
     type: body.type,
     businessName: body.businessName,
     intro: body.intro,
+    avatarDataUrl: body.avatarDataUrl,
     consentPII: body.consentPII === true,
     rrn: body.rrn,
     bizNo: body.bizNo,

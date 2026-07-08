@@ -1,4 +1,8 @@
 import { db, ensureSchema, type Row } from "./db";
+import {
+  presignAuthorAvatarDownload,
+  saveAuthorAvatarFromDataUrl,
+} from "./pdf-storage";
 import type {
   Author,
   AuthorApplyInput,
@@ -17,6 +21,7 @@ function rowToAuthor(row: Row): Author {
     businessName:
       row.business_name == null ? undefined : String(row.business_name),
     intro: row.intro == null ? undefined : String(row.intro),
+    avatarKey: row.avatar_key == null ? undefined : String(row.avatar_key),
     status: String(row.status) as AuthorStatus,
     appliedAt: Number(row.applied_at),
     reviewedAt: row.reviewed_at == null ? undefined : Number(row.reviewed_at),
@@ -33,6 +38,15 @@ function rowToAuthor(row: Row): Author {
   };
 }
 
+async function withAvatarUrl<T extends { avatarKey?: string; avatarUrl?: string }>(
+  author: T,
+): Promise<T> {
+  if (author.avatarKey) {
+    author.avatarUrl = await presignAuthorAvatarDownload(author.avatarKey);
+  }
+  return author;
+}
+
 export async function getAuthor(userId: string): Promise<Author | null> {
   await ensureSchema();
   const res = await db.execute({
@@ -40,7 +54,7 @@ export async function getAuthor(userId: string): Promise<Author | null> {
     args: [userId],
   });
   const row = res.rows[0];
-  return row ? rowToAuthor(row) : null;
+  return row ? withAvatarUrl(rowToAuthor(row)) : null;
 }
 
 /** Public profile (PII-free) for an APPROVED author — null otherwise. Safe to
@@ -50,20 +64,21 @@ export async function getPublicAuthor(
 ): Promise<import("./author-types").PublicAuthor | null> {
   await ensureSchema();
   const res = await db.execute({
-    sql: `SELECT user_id, display_name, type, business_name, intro
+    sql: `SELECT user_id, display_name, type, business_name, intro, avatar_key
           FROM authors WHERE user_id = ? AND status = 'approved'`,
     args: [userId],
   });
   const row = res.rows[0];
   if (!row) return null;
-  return {
+  return withAvatarUrl({
     userId: String(row.user_id),
     displayName: String(row.display_name),
     type: String(row.type) as AuthorType,
     businessName:
       row.business_name == null ? undefined : String(row.business_name),
     intro: row.intro == null ? undefined : String(row.intro),
-  };
+    avatarKey: row.avatar_key == null ? undefined : String(row.avatar_key),
+  });
 }
 
 /** Directory of all APPROVED authors (PII-free) with aggregates over their
@@ -73,7 +88,7 @@ export async function listPublicAuthors(): Promise<
 > {
   await ensureSchema();
   const res = await db.execute({
-    sql: `SELECT a.user_id, a.display_name, a.intro,
+    sql: `SELECT a.user_id, a.display_name, a.intro, a.avatar_key,
             (SELECT COUNT(*) FROM books b
                WHERE b.owner_id = a.user_id AND b.status = 'approved') AS book_count,
             (SELECT COUNT(*) FROM likes l JOIN books b ON l.book_id = b.id
@@ -83,13 +98,18 @@ export async function listPublicAuthors(): Promise<
           ORDER BY total_likes DESC, book_count DESC, a.display_name ASC`,
     args: [],
   });
-  return res.rows.map((row) => ({
-    userId: String(row.user_id),
-    displayName: String(row.display_name),
-    intro: row.intro == null ? undefined : String(row.intro),
-    bookCount: Number(row.book_count ?? 0),
-    totalLikes: Number(row.total_likes ?? 0),
-  }));
+  return Promise.all(
+    res.rows.map((row) =>
+      withAvatarUrl({
+        userId: String(row.user_id),
+        displayName: String(row.display_name),
+        intro: row.intro == null ? undefined : String(row.intro),
+        avatarKey: row.avatar_key == null ? undefined : String(row.avatar_key),
+        bookCount: Number(row.book_count ?? 0),
+        totalLikes: Number(row.total_likes ?? 0),
+      }),
+    ),
+  );
 }
 
 export async function isApprovedAuthor(userId: string): Promise<boolean> {
@@ -111,6 +131,11 @@ export async function applyAuthor(
   const bankName = consent ? input.bankName?.trim() : "";
   const bankAccount = consent ? input.bankAccount?.trim() : "";
   const accountHolder = consent ? input.accountHolder?.trim() : "";
+  const existing = await getAuthor(userId);
+  const avatarKey = input.avatarDataUrl
+    ? (await saveAuthorAvatarFromDataUrl(input.avatarDataUrl)) ?? existing?.avatarKey
+    : existing?.avatarKey;
+  const nextStatus = existing?.status === "approved" ? "approved" : "pending";
 
   const author: Author = {
     userId,
@@ -122,8 +147,10 @@ export async function applyAuthor(
         ? input.businessName?.trim() || undefined
         : undefined,
     intro: input.intro?.trim() || undefined,
-    status: "pending",
+    avatarKey,
+    status: nextStatus,
     appliedAt: Date.now(),
+    reviewedAt: nextStatus === "approved" ? existing?.reviewedAt : undefined,
     consentPII: consent,
     rrn: rrn || undefined,
     bizNo: bizNo || undefined,
@@ -133,18 +160,19 @@ export async function applyAuthor(
   };
   await db.execute({
     sql: `INSERT INTO authors
-            (user_id, email, display_name, type, business_name, intro, status, applied_at, reviewed_at, reject_reason,
+            (user_id, email, display_name, type, business_name, intro, avatar_key, status, applied_at, reviewed_at, reject_reason,
              consent_pii, rrn, biz_no, bank_name, bank_account, account_holder)
-          VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, NULL, NULL, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(user_id) DO UPDATE SET
             email = excluded.email,
             display_name = excluded.display_name,
             type = excluded.type,
             business_name = excluded.business_name,
             intro = excluded.intro,
-            status = 'pending',
+            avatar_key = excluded.avatar_key,
+            status = excluded.status,
             applied_at = excluded.applied_at,
-            reviewed_at = NULL,
+            reviewed_at = excluded.reviewed_at,
             reject_reason = NULL,
             consent_pii = excluded.consent_pii,
             rrn = excluded.rrn,
@@ -159,7 +187,10 @@ export async function applyAuthor(
       author.type,
       author.businessName ?? null,
       author.intro ?? null,
+      author.avatarKey ?? null,
+      author.status,
       author.appliedAt,
+      author.reviewedAt ?? null,
       consent ? 1 : 0,
       author.rrn ?? null,
       author.bizNo ?? null,
@@ -168,7 +199,7 @@ export async function applyAuthor(
       author.accountHolder ?? null,
     ],
   });
-  return author;
+  return withAvatarUrl(author);
 }
 
 export async function listAuthors(
@@ -183,7 +214,7 @@ export async function listAuthors(
     sql: `SELECT * FROM authors WHERE status = ? ORDER BY ${order}`,
     args: [status],
   });
-  return res.rows.map(rowToAuthor);
+  return Promise.all(res.rows.map((row) => withAvatarUrl(rowToAuthor(row))));
 }
 
 export async function listPendingAuthors(): Promise<Author[]> {
@@ -222,5 +253,30 @@ export async function setAuthorStatus(
   await db.execute({
     sql: `UPDATE authors SET status = ?, reviewed_at = ?, reject_reason = ? WHERE user_id = ?`,
     args: [status, Date.now(), rejectReason?.trim() || null, userId],
+  });
+}
+
+export async function renameAuthorDisplayName(
+  userId: string,
+  oldName: string | null | undefined,
+  newName: string,
+): Promise<void> {
+  await ensureSchema();
+  const clean = newName.trim();
+  if (!clean) return;
+  const previous = oldName?.trim();
+  if (!previous || previous === clean) {
+    await db.execute({
+      sql: `UPDATE authors SET display_name = ? WHERE user_id = ?`,
+      args: [clean, userId],
+    });
+    return;
+  }
+  await db.execute({
+    sql: `UPDATE authors
+          SET display_name = ?
+          WHERE user_id = ?
+            AND display_name = ?`,
+    args: [clean, userId, previous],
   });
 }

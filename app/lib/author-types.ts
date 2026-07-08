@@ -22,6 +22,8 @@ export type Author = {
   type: AuthorType;
   businessName?: string; // 개인사업자 상호
   intro?: string;
+  avatarKey?: string;
+  avatarUrl?: string;
   status: AuthorStatus;
   appliedAt: number;
   reviewedAt?: number;
@@ -33,6 +35,7 @@ export type AuthorApplyInput = {
   type: AuthorType;
   businessName?: string;
   intro?: string;
+  avatarDataUrl?: string;
 } & Partial<AuthorPayoutInfo>;
 
 // Public, PII-free author profile shown on the bookstore author page. Never
@@ -43,6 +46,7 @@ export type PublicAuthor = {
   type: AuthorType;
   businessName?: string;
   intro?: string;
+  avatarUrl?: string;
 };
 
 // A compact author card for the "작가 선택" directory: public name/intro plus
@@ -51,6 +55,7 @@ export type AuthorCard = {
   userId: string;
   displayName: string;
   intro?: string;
+  avatarUrl?: string;
   bookCount: number;
   totalLikes: number;
 };

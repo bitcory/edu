@@ -115,6 +115,7 @@ export function ensureSchema(): Promise<void> {
           type           TEXT NOT NULL,
           business_name  TEXT,
           intro          TEXT,
+          avatar_key     TEXT,
           status         TEXT NOT NULL,
           applied_at     BIGINT NOT NULL,
           reviewed_at    BIGINT,
@@ -134,6 +135,7 @@ export function ensureSchema(): Promise<void> {
         `ADD COLUMN IF NOT EXISTS bank_name TEXT`,
         `ADD COLUMN IF NOT EXISTS bank_account TEXT`,
         `ADD COLUMN IF NOT EXISTS account_holder TEXT`,
+        `ADD COLUMN IF NOT EXISTS avatar_key TEXT`,
         // Revenue share: percent (0–100) of this author's earnings paid to the
         // author; the platform keeps the rest. Default 80 (author-favourable).
         `ADD COLUMN IF NOT EXISTS revenue_share INTEGER NOT NULL DEFAULT 80`,
