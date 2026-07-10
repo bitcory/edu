@@ -46,3 +46,4 @@ next-env.d.ts
 # local DB backup (contains PII) — never commit
 neon-backup.json
 *-backup.json
+scripts/journal-*.json
