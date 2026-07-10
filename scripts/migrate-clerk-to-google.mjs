@@ -121,6 +121,24 @@ async function main() {
     console.log(`   ${Object.entries(counts).map(([t, n]) => `${t}:${n}`).join("  ") || "(행 없음)"}`);
   }
 
+  // 컷오버 전 새 구글 세션이 이미 만든 sub 행(authors 등) — apply 가 지우고
+  // Clerk 원본을 승계한다. dry-run 에서 미리 보여준다.
+  for (const { clerkId, sub, email } of plan) {
+    const dup = await sql.query(
+      `SELECT display_name FROM authors WHERE user_id = $1`,
+      [sub],
+    );
+    if (dup.length) {
+      const orig = await sql.query(
+        `SELECT display_name FROM authors WHERE user_id = $1`,
+        [clerkId],
+      );
+      console.log(
+        `⚠️ ${email}: sub 로 자동 생성된 authors 행 발견("${dup[0].display_name}") — apply 시 삭제하고 원본("${orig[0]?.display_name}") 승계`,
+      );
+    }
+  }
+
   if (mode !== "apply") {
     console.log("\n(dry-run — 변경 없음. 적용하려면 --apply)");
     return;
@@ -134,8 +152,32 @@ async function main() {
 
   // Neon HTTP 드라이버 비대화형 트랜잭션 — 쿼리는 await 없이 만들어 배열로 넘긴다
   // (neon()의 쿼리는 lazy — transaction 이 한 번에 실행).
+  //
+  // PK 충돌 방어: 컷오버 전에 새 구글 세션으로 접속한 사용자는 authors(PK
+  // user_id) 등에 sub 로 된 행이 자동 생성돼 있을 수 있다 (예: /library 방문이
+  // ensureApprovedAuthor 를 태움). 이 행들은 방금 만들어진 빈 껍데기고, Clerk
+  // 시절 행이 커스텀 작가명·상태의 원본이므로 sub 행을 지우고 원본을 승계한다.
+  // likes/reads 는 (book, user[, period]) 복합 PK — 같은 책에 양쪽 id 행이 다
+  // 있으면 sub 쪽(신규)을 지워 UPDATE 충돌을 막는다.
   const queries = [];
   for (const { clerkId, sub } of plan) {
+    queries.push(
+      sql.query(
+        `DELETE FROM authors WHERE user_id = $1
+           AND EXISTS (SELECT 1 FROM authors WHERE user_id = $2)`,
+        [sub, clerkId],
+      ),
+      sql.query(
+        `DELETE FROM likes l WHERE l.user_id = $1
+           AND EXISTS (SELECT 1 FROM likes x WHERE x.user_id = $2 AND x.book_id = l.book_id)`,
+        [sub, clerkId],
+      ),
+      sql.query(
+        `DELETE FROM reads r WHERE r.user_id = $1
+           AND EXISTS (SELECT 1 FROM reads x WHERE x.user_id = $2 AND x.book_id = r.book_id AND x.period = r.period)`,
+        [sub, clerkId],
+      ),
+    );
     for (const [table, col] of ID_COLUMNS) {
       queries.push(sql.query(`UPDATE ${table} SET ${col} = $1 WHERE ${col} = $2`, [sub, clerkId]));
     }
