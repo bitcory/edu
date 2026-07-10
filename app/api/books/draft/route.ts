@@ -5,6 +5,7 @@ import {
   updateBookSnapshot,
 } from "../../../lib/books-repo";
 import { getServerUser } from "../../../lib/server-auth";
+import { resolveUserName } from "../../../lib/user-name";
 import { resolvePagesFromBody } from "../../../lib/snapshot-body";
 
 export const runtime = "nodejs";
@@ -75,7 +76,7 @@ export async function POST(req: NextRequest) {
         pages,
         storyText: body.storyText,
       },
-      { id: user.id, name: user.name },
+      { id: user.id, name: await resolveUserName(user) },
       "draft",
       id,
     );
@@ -93,7 +94,7 @@ export async function POST(req: NextRequest) {
       pages,
       storyText: body.storyText,
     },
-    { id: user.id, name: user.name },
+    { id: user.id, name: await resolveUserName(user) },
     "draft",
   );
   return Response.json({ book }, { status: 201 });

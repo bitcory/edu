@@ -2,17 +2,16 @@
 
 import Link from "next/link";
 import { LogOut, Shield } from "lucide-react";
-import { useClerk, useUser } from "@clerk/nextjs";
+import { signOut, useSession } from "next-auth/react";
 import { isAdminEmail } from "../../lib/admin-emails";
 
 export default function UserChip() {
-  const { user, isLoaded } = useUser();
-  const { signOut } = useClerk();
-  if (!isLoaded || !user) return null;
+  const { data: session, status } = useSession();
+  const user = session?.user;
+  if (status === "loading" || !user) return null;
 
-  const email = user.primaryEmailAddress?.emailAddress;
-  const name =
-    user.firstName || user.username || user.fullName || email?.split("@")[0] || "사용자";
+  const email = user.email ?? undefined;
+  const name = user.name || email?.split("@")[0] || "사용자";
   const admin = isAdminEmail(email);
 
   return (
@@ -28,7 +27,7 @@ export default function UserChip() {
       <button
         type="button"
         className="user-chip__logout"
-        onClick={() => void signOut({ redirectUrl: "/sign-in" })}
+        onClick={() => void signOut({ redirectTo: "/sign-in" })}
         title="로그아웃"
         aria-label="로그아웃"
       >

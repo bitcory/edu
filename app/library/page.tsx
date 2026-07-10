@@ -12,7 +12,7 @@ import {
   Upload,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useUser } from "@clerk/nextjs";
+import { useSession } from "next-auth/react";
 import BookViewer from "../components/BookViewer";
 import UserChip from "../components/auth/UserChip";
 import SubmitBookModal, {
@@ -63,7 +63,7 @@ type Reader = {
 };
 
 export default function LibraryPage() {
-  const { user } = useUser();
+  const user = useSession().data?.user;
   const [books, setBooks] = useState<StoreBook[] | null>(null);
   const [reader, setReader] = useState<Reader | null>(null);
   const [busy, setBusy] = useState(false);
@@ -286,17 +286,13 @@ export default function LibraryPage() {
   const confirmAuthorApply = useCallback(async (input: AuthorApplyInput) => {
     setBusy(true);
     try {
+      // 커스텀 작가명의 원천은 DB(authors.display_name)다 — Clerk 시절의
+      // 프로필 이름 변경(user.update)은 구글 로그인에선 불가능하고 불필요.
       const oldName =
         author?.displayName ||
-        user?.firstName ||
-        user?.username ||
-        user?.fullName ||
-        user?.primaryEmailAddress?.emailAddress?.split("@")[0] ||
+        user?.name ||
+        user?.email?.split("@")[0] ||
         "";
-      if (user && input.displayName) {
-        await user.update({ firstName: input.displayName, lastName: "" });
-        await user.reload();
-      }
       const a = await applyAuthor(input);
       const rename = await fetch("/api/me/rename", {
         method: "POST",

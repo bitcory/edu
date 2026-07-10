@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
-import { ClerkProvider } from "@clerk/nextjs";
+import { SessionProvider } from "next-auth/react";
+import { auth } from "../auth";
 import "./globals.css";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://tbbook.aitoolb.com";
@@ -51,16 +52,18 @@ export const viewport: Viewport = {
   userScalable: false,
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // 세션을 서버에서 넣어주면 클라 첫 렌더의 /api/auth/session fetch 깜빡임이 없다.
+  const session = await auth();
   return (
-    <ClerkProvider>
+    <SessionProvider session={session}>
       <html lang="ko" suppressHydrationWarning>
         <body suppressHydrationWarning>{children}</body>
       </html>
-    </ClerkProvider>
+    </SessionProvider>
   );
 }

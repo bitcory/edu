@@ -2,6 +2,7 @@ import { type NextRequest } from "next/server";
 import { insertPdfBook } from "../../../lib/books-repo";
 import { presignPdfUpload } from "../../../lib/pdf-storage";
 import { getServerUser } from "../../../lib/server-auth";
+import { resolveUserName } from "../../../lib/user-name";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,7 +38,7 @@ export async function POST(req: NextRequest) {
 
   const book = await insertPdfBook(
     { title, author, coverThumb, description, category, price },
-    { id: user.id, name: user.name },
+    { id: user.id, name: await resolveUserName(user) },
   );
   const uploadUrl = await presignPdfUpload(book.id);
 

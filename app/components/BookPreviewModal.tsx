@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { BookOpen, Heart, Send, Trash2, X } from "lucide-react";
-import { useUser } from "@clerk/nextjs";
+import { useSession } from "next-auth/react";
 import { useIsAdmin } from "./auth/useIsAdmin";
 import { formatPrice } from "../lib/format-price";
 import {
@@ -27,7 +27,7 @@ export default function BookPreviewModal({
   onRead,
   onLikeChange,
 }: Props) {
-  const { user } = useUser();
+  const user = useSession().data?.user;
   const { isAdmin } = useIsAdmin();
   // Seed from the card's count so opening the modal doesn't flash 0 → real
   // value before getBookSocial resolves; the effect below refines it.

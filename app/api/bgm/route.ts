@@ -2,6 +2,7 @@ import { type NextRequest } from "next/server";
 import { insertBgmTrack, listBgmTracks } from "../../lib/bgm-repo";
 import { presignBgmDownload, presignBgmUpload } from "../../lib/pdf-storage";
 import { getServerUser } from "../../lib/server-auth";
+import { resolveUserName } from "../../lib/user-name";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,7 +41,7 @@ export async function POST(req: NextRequest) {
   // Row's key is bgm/<id>.mp3; presignBgmUpload(id) targets the same key.
   const track = await insertBgmTrack(
     { name },
-    { id: user.id, name: user.name },
+    { id: user.id, name: await resolveUserName(user) },
   );
   const { url } = await presignBgmUpload(track.id);
   return Response.json({ track, uploadUrl: url }, { status: 201 });

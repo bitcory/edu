@@ -5,6 +5,7 @@ import {
   getComment,
 } from "../../../../lib/social-repo";
 import { getServerUser } from "../../../../lib/server-auth";
+import { resolveUserName } from "../../../../lib/user-name";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,7 +24,7 @@ export async function POST(
   if (!text) {
     return Response.json({ error: "댓글을 입력해 주세요." }, { status: 400 });
   }
-  const comment = await addComment(id, { id: user.id, name: user.name }, text);
+  const comment = await addComment(id, { id: user.id, name: await resolveUserName(user) }, text);
   return Response.json({ comment }, { status: 201 });
 }
 

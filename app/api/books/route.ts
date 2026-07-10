@@ -3,6 +3,7 @@ import { insertBook, listBooks } from "../../lib/books-repo";
 import { isApprovedAuthor } from "../../lib/authors-repo";
 import { OPEN_PUBLISH } from "../../lib/publish-policy";
 import { getServerUser } from "../../lib/server-auth";
+import { resolveUserName } from "../../lib/user-name";
 import { resolvePagesFromBody } from "../../lib/snapshot-body";
 import type { BookScope } from "../../lib/book-types";
 
@@ -56,7 +57,7 @@ export async function POST(req: NextRequest) {
       coverThumb: body.coverThumb,
       storyText: body.storyText,
     },
-    { id: user.id, name: user.name },
+    { id: user.id, name: await resolveUserName(user) },
   );
   return Response.json({ book }, { status: 201 });
 }

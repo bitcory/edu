@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Music, Trash2, Upload, X } from "lucide-react";
-import { useUser } from "@clerk/nextjs";
+import { useSession } from "next-auth/react";
 import { useIsAdmin } from "./auth/useIsAdmin";
 import {
   deleteBgmTrack,
@@ -21,7 +21,7 @@ type Props = {
  * without its own music is opened.
  */
 export default function BgmPoolModal({ onClose }: Props) {
-  const { user } = useUser();
+  const user = useSession().data?.user;
   const { isAdmin } = useIsAdmin();
   const [tracks, setTracks] = useState<BgmPoolTrack[] | null>(null);
   const [busy, setBusy] = useState(false);

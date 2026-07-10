@@ -1,4 +1,4 @@
-import { currentUser } from "@clerk/nextjs/server";
+import { auth } from "../../auth";
 import { isAdminEmail } from "./admin-emails";
 
 export type ServerUser = {
@@ -9,18 +9,15 @@ export type ServerUser = {
 };
 
 /**
- * Authoritative current user from the Clerk session (server-side). Returns null
- * when not signed in. Replaces the old `x-mock-user` header trust.
+ * Authoritative current user from the Auth.js session (server-side). Returns
+ * null when not signed in. `id` is the Google sub — DB rows were migrated from
+ * Clerk ids by scripts/migrate-clerk-to-google.mjs.
  */
 export async function getServerUser(): Promise<ServerUser | null> {
-  const u = await currentUser();
-  if (!u) return null;
-  const email = u.primaryEmailAddress?.emailAddress ?? null;
-  const name =
-    u.firstName ||
-    u.username ||
-    u.fullName ||
-    email?.split("@")[0] ||
-    "사용자";
+  const session = await auth();
+  const u = session?.user;
+  if (!u?.id) return null;
+  const email = u.email ?? null;
+  const name = u.name || email?.split("@")[0] || "사용자";
   return { id: u.id, name, email, isAdmin: isAdminEmail(email) };
 }

@@ -1,16 +1,8 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+export { auth as proxy } from "./auth";
 
-// Next 16 renamed `middleware` → `proxy`. clerkMiddleware() runs on every
-// matched request so server-side auth() works, and gates the whole app.
-
-// Everything except the sign-in flow requires login (full-login scope).
-const isPublic = createRouteMatcher(["/sign-in(.*)"]);
-
-export default clerkMiddleware(async (auth, req) => {
-  if (!isPublic(req)) {
-    await auth.protect();
-  }
-});
+// Next 16 renamed `middleware` → `proxy`. Auth.js 의 auth 를 proxy 로 내보내면
+// 매 요청마다 auth.ts 의 authorized 콜백이 돌아 전체 앱을 로그인으로 게이트한다
+// (/sign-in, /api/auth 만 공개 — auth.ts 참조).
 
 export const config = {
   matcher: [
