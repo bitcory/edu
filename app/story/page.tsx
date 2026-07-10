@@ -25,6 +25,9 @@ import {
   type Aspect, type Engine, type ExtEngine, type GenHandle,
 } from "./imagegen";
 import { buildBookPages } from "./handoff";
+import {
+  saveStoryImage, fetchStoryImagesAsDataUrls, buildStoryImagesZip,
+} from "./story-images";
 import { saveDraft } from "../lib/store";
 import { PAGE_W } from "../lib/editor-types";
 import {
@@ -540,14 +543,10 @@ export default function StoryPage() {
     const ck = charKeyOf(bookIdx, cc, activeIdx);
     setImageUrls((m) => ({ ...m, [ck]: dataUrl })); // optimistic (instant)
     try {
-      const r = await fetch("/api/story/save-image", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ dataUrl }),
-      });
-      const d = await r.json().catch(() => ({}));
-      if (!r.ok || !d.key) return; // keep the optimistic data URL on failure
-      setImageUrls((m) => ({ ...m, [ck]: d.url || dataUrl }));
+      // Presigned PUT — bytes go browser→R2 directly (no function in the path).
+      const saved = await saveStoryImage(dataUrl);
+      if (!saved) return; // keep the optimistic data URL on failure
+      setImageUrls((m) => ({ ...m, [ck]: saved.url || dataUrl }));
       setLib((prev) => {
         if (!prev?.books) return prev;
         const books = [...prev.books];
@@ -556,7 +555,7 @@ export default function StoryPage() {
         const characters = [...(bk.characters || [])];
         const target = characters[activeIdx];
         if (!target) return prev;
-        characters[activeIdx] = { ...target, imageKey: d.key };
+        characters[activeIdx] = { ...target, imageKey: saved.key };
         books[bookIdx] = { ...bk, characters };
         const next = { ...prev, books };
         try { localStorage.setItem(CACHE_KEY, JSON.stringify(next)); } catch {}
@@ -574,14 +573,9 @@ export default function StoryPage() {
     const ck = cutKeyOf(bookIdx, cc, cutIdx);
     setCutImageUrls((m) => ({ ...m, [ck]: dataUrl }));
     try {
-      const r = await fetch("/api/story/save-image", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ dataUrl }),
-      });
-      const d = await r.json().catch(() => ({}));
-      if (!r.ok || !d.key) return;
-      setCutImageUrls((m) => ({ ...m, [ck]: d.url || dataUrl }));
+      const saved = await saveStoryImage(dataUrl);
+      if (!saved) return;
+      setCutImageUrls((m) => ({ ...m, [ck]: saved.url || dataUrl }));
       setLib((prev) => {
         if (!prev?.books) return prev;
         const books = [...prev.books];
@@ -590,7 +584,7 @@ export default function StoryPage() {
         const cuts = [...(bk.cuts || [])];
         const target = cuts[cutIdx];
         if (!target) return prev;
-        cuts[cutIdx] = { ...target, imageKey: d.key };
+        cuts[cutIdx] = { ...target, imageKey: saved.key };
         books[bookIdx] = { ...bk, cuts };
         const next = { ...prev, books };
         try { localStorage.setItem(CACHE_KEY, JSON.stringify(next)); } catch {}
@@ -627,14 +621,9 @@ export default function StoryPage() {
     const ck = coverKeyOf(bookIdx, cc, coverIdx);
     setCoverImageUrls((m) => ({ ...m, [ck]: dataUrl }));
     try {
-      const r = await fetch("/api/story/save-image", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ dataUrl }),
-      });
-      const d = await r.json().catch(() => ({}));
-      if (!r.ok || !d.key) return;
-      setCoverImageUrls((m) => ({ ...m, [ck]: d.url || dataUrl }));
+      const saved = await saveStoryImage(dataUrl);
+      if (!saved) return;
+      setCoverImageUrls((m) => ({ ...m, [ck]: saved.url || dataUrl }));
       setLib((prev) => {
         if (!prev?.books) return prev;
         const books = [...prev.books];
@@ -643,7 +632,7 @@ export default function StoryPage() {
         const covers = [...(bk.covers || [])];
         const target = covers[coverIdx];
         if (!target) return prev;
-        covers[coverIdx] = { ...target, imageKey: d.key };
+        covers[coverIdx] = { ...target, imageKey: saved.key };
         books[bookIdx] = { ...bk, covers };
         const next = { ...prev, books };
         try { localStorage.setItem(CACHE_KEY, JSON.stringify(next)); } catch {}
@@ -674,16 +663,14 @@ export default function StoryPage() {
     }
     if (!keys.length) return { images: [], names: [], missing };
     try {
-      const r = await fetch("/api/story/image-data", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ keys }),
-      });
-      const d = await r.json().catch(() => ({}));
+      // Bytes come straight from R2 (presigned GET) — the function only
+      // presigns. The old image-data route piped every reference image
+      // through the function as base64 on EVERY cut generation.
+      const dataUrls = await fetchStoryImagesAsDataUrls(keys);
       const images: string[] = [];
       const outNames: string[] = [];
       keys.forEach((k, i) => {
-        const u = d.dataUrls?.[k];
+        const u = dataUrls[k];
         if (u) { images.push(u); outNames.push(names[i]); }
       });
       return { images, names: outNames, missing };
@@ -861,20 +848,17 @@ export default function StoryPage() {
     if (!items.length) { showToast("저장된 이미지가 없어요"); return; }
     setZipBusy(true);
     try {
-      const r = await fetch("/api/story/download-zip", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ items }),
-      });
-      if (!r.ok) { showToast("ZIP 생성 실패"); return; }
-      const blob = await r.blob();
-      const url = URL.createObjectURL(blob);
+      // Images download from R2 and zip in the browser — the old route read
+      // every image server-side and streamed the zip through the function.
+      const zip = await buildStoryImagesZip(items);
+      if (!zip) { showToast("ZIP 생성 실패"); return; }
+      const url = URL.createObjectURL(zip.blob);
       const a = document.createElement("a");
       a.href = url;
       a.download = `${lib?.books?.[bookIdx]?.meta?.title || "characters"}.zip`;
       a.click();
       URL.revokeObjectURL(url);
-      showToast(`ZIP 다운로드 시작! (${items.length}장)`);
+      showToast(`ZIP 다운로드 시작! (${zip.count}장)`);
     } catch {
       showToast("ZIP 다운로드 실패");
     } finally {
@@ -1000,20 +984,15 @@ export default function StoryPage() {
     if (!items.length) { showToast("저장된 컷/표지 이미지가 없어요"); return; }
     setCutZipBusy(true);
     try {
-      const r = await fetch("/api/story/download-zip", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ items }),
-      });
-      if (!r.ok) { showToast("ZIP 생성 실패"); return; }
-      const blob = await r.blob();
-      const url = URL.createObjectURL(blob);
+      const zip = await buildStoryImagesZip(items);
+      if (!zip) { showToast("ZIP 생성 실패"); return; }
+      const url = URL.createObjectURL(zip.blob);
       const a = document.createElement("a");
       a.href = url;
       a.download = `${lib?.books?.[bookIdx]?.meta?.title || "cuts"}_cuts.zip`;
       a.click();
       URL.revokeObjectURL(url);
-      showToast(`ZIP 다운로드 시작! (${items.length}장)`);
+      showToast(`ZIP 다운로드 시작! (${zip.count}장)`);
     } catch {
       showToast("ZIP 다운로드 실패");
     } finally {
@@ -1040,13 +1019,7 @@ export default function StoryPage() {
     showToast("책만들기로 보내는 중…");
     try {
       const allKeys = [frontKey, ...cutKeys, backKey].filter(Boolean) as string[];
-      const r = await fetch("/api/story/image-data", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ keys: allKeys }),
-      });
-      const d = await r.json().catch(() => ({}));
-      const map: Record<string, string> = d.dataUrls || {};
+      const map = await fetchStoryImagesAsDataUrls(allKeys);
       const front = frontKey ? map[frontKey] : undefined;
       const back = backKey ? map[backKey] : undefined;
       const cuts = cutKeys.map((k) => map[k]).filter(Boolean) as string[];
@@ -1086,15 +1059,7 @@ export default function StoryPage() {
     try {
       const keys = collectStoryImageKeys(lib);
       let byKey: Record<string, string> = {};
-      if (keys.length) {
-        const r = await fetch("/api/story/image-data", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ keys }),
-        });
-        const d = await r.json().catch(() => ({}));
-        byKey = d.dataUrls || {};
-      }
+      if (keys.length) byKey = await fetchStoryImagesAsDataUrls(keys);
       const payload: StoryProjectBackup = {
         format: "tbbook-story-project",
         version: 1,
@@ -1141,13 +1106,8 @@ export default function StoryPage() {
       if (entries.length) {
         await Promise.all(entries.map(async ([oldKey, dataUrl]) => {
           try {
-            const r = await fetch("/api/story/save-image", {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({ dataUrl }),
-            });
-            const d = await r.json().catch(() => ({}));
-            if (r.ok && typeof d.key === "string") keyMap[oldKey] = d.key;
+            const saved = await saveStoryImage(dataUrl);
+            if (saved) keyMap[oldKey] = saved.key;
           } catch {}
         }));
       }
@@ -1354,7 +1314,7 @@ export default function StoryPage() {
             disabled={projectSaveBusy || !lib}
             title="현재 책장, 프롬프트, 대본, 이미지 원본을 JSON 파일로 저장"
           >
-            <Save size={15} /> {projectSaveBusy ? "저장 중…" : "저장"}
+            <Save size={15} /> {projectSaveBusy ? "백업 중…" : "백업"}
           </button>
           <button
             type="button"
@@ -1363,7 +1323,7 @@ export default function StoryPage() {
             disabled={projectRestoreBusy}
             title="저장한 스토리구성 백업 JSON을 복원"
           >
-            <FolderOpen size={15} /> {projectRestoreBusy ? "복원 중…" : "복원"}
+            <FolderOpen size={15} /> {projectRestoreBusy ? "불러오는 중…" : "백업 불러오기"}
           </button>
           <input
             ref={projectRestoreRef}
@@ -1390,7 +1350,7 @@ export default function StoryPage() {
             disabled={sendBusy || !book}
             title="생성된 이미지로 책만들기 페이지를 자동 구성 (앞표지·본문·뒷표지)"
           >
-            <BookOpen size={16} /> {sendBusy ? "보내는 중…" : "책만들기로 보내기"}
+            <BookOpen size={16} /> {sendBusy ? "보내는 중…" : "책만들기로"}
           </button>
         </div>
       </header>

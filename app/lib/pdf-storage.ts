@@ -214,37 +214,25 @@ export async function deleteCover(key: string): Promise<void> {
   }
 }
 
-/** Store a generated/uploaded story image (data URL) under story/<uuid>.<ext>.
- * Returns the R2 key, or null if the value isn't a base64 image data URL. */
-export async function saveStoryImageFromDataUrl(dataUrl: string): Promise<string | null> {
-  const m = /^data:(image\/[\w.+-]+);base64,(.+)$/.exec(dataUrl);
-  if (!m) return null;
-  const ext = (m[1].split("/")[1] || "png").split("+")[0];
+/** Presigned PUT for a story image under story/<uuid>.<ext> — the browser
+ * uploads straight to R2 so image bytes never pass through a Vercel Function
+ * (they used to arrive base64-encoded in the save-image body, which counted
+ * the whole image against Fast Origin Transfer). */
+export async function presignStoryUpload(
+  contentType: string,
+  expiresInSeconds = 600,
+): Promise<{ key: string; url: string }> {
+  const m = /^image\/([\w.+-]+)$/.exec(contentType);
+  if (!m) throw new Error("invalid image content type");
+  const ext = (m[1] || "png").split("+")[0];
   const { client, bucket } = r2();
   const key = `story/${globalThis.crypto.randomUUID()}.${ext}`;
-  await client.send(
-    new PutObjectCommand({
-      Bucket: bucket,
-      Key: key,
-      Body: Buffer.from(m[2], "base64"),
-      ContentType: m[1],
-    }),
+  const url = await getSignedUrl(
+    client,
+    new PutObjectCommand({ Bucket: bucket, Key: key, ContentType: contentType }),
+    { expiresIn: expiresInSeconds },
   );
-  return key;
-}
-
-/** Read a story image's raw bytes from R2 (for server-side ZIP packaging). */
-export async function readStoryImage(key: string): Promise<Buffer | null> {
-  if (!key.startsWith("story/")) return null;
-  try {
-    const { client, bucket } = r2();
-    const r = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
-    if (!r.Body) return null;
-    const bytes = await r.Body.transformToByteArray();
-    return Buffer.from(bytes);
-  } catch {
-    return null;
-  }
+  return { key, url };
 }
 
 /** Presigned GET URL for a story image (story/ prefix only). Pass downloadName
