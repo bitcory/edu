@@ -14,7 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Library, UsersRound, Clapperboard,
-  Menu, FileInput, FolderOpen, X, BookOpen, ArrowLeft, Ruler,
+  Menu, FileInput, FolderOpen, X, BookOpen, Ruler,
   ExternalLink, MessageSquare, AudioLines, Music, Workflow, ScrollText, Wand2,
   ImagePlus, Sparkles, Square, Download, Save, RotateCcw,
 } from "lucide-react";
@@ -1276,8 +1276,8 @@ export default function StoryPage() {
           <Menu size={20} />
         </button>
         <div className="story-brand">
-          <Link href="/" className="story-back-btn" aria-label="홈으로">
-            <ArrowLeft size={16} /> 홈
+          <Link href="/" className="story-back-btn" aria-label="홈으로" title="홈으로">
+            <img src="/home-button-art.png" alt="" aria-hidden="true" />
           </Link>
           <span className="story-kicker">스토리구성 · 그림책</span>
           <span className="story-lib-name">{libName}</span>
@@ -1589,7 +1589,6 @@ export default function StoryPage() {
                     </div>
                   </div>
                   {bulkStatus && <div className="story-bulk-status">{bulkStatus}</div>}
-                  <div className="story-sec-sub">{chars.length}종 · 탭으로 캐릭터를 선택하세요</div>
                   <div className="story-char-tabs">
                     {chars.map((c, i) => (
                       <button
@@ -1681,7 +1680,6 @@ export default function StoryPage() {
                     </div>
                   </div>
                   {cutBulkStatus && <div className="story-bulk-status">{cutBulkStatus}</div>}
-                  <div className="story-sec-sub">{cuts.length}컷{covers.length ? ` · 표지 ${covers.length}` : ""} · 번호/표지 탭을 누르면 해당 항목만 보기 · ref 태그를 누르면 해당 캐릭터로 이동</div>
                   <div className="story-filterbar">
                     <button
                       type="button"
