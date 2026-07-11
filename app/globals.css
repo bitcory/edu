@@ -2679,7 +2679,7 @@ textarea.ed-input {
 .store-shell {
   flex: 1;
   min-height: 100vh;
-  padding: 72px clamp(16px, 4vw, 40px) 48px;
+  padding: 18px clamp(16px, 4vw, 40px) 48px;
   background: radial-gradient(ellipse at top, var(--bg-2), var(--bg) 60%);
 }
 
@@ -2687,15 +2687,22 @@ textarea.ed-input {
   position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 12px;
   max-width: none;
   margin: 0 auto 28px;
-  padding-left: 56px;
+}
+
+.store-header .home-btn {
+  position: static;
+  z-index: auto;
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
 }
 
 .store-title {
-  margin: 0;
+  margin: 0 auto 0 0;
   font-size: clamp(24px, 4vw, 34px);
   font-weight: 800;
   color: #3a2a1d;
@@ -4146,12 +4153,17 @@ textarea.ed-input {
 /* ---------- Store / library: mobile ---------- */
 @media (max-width: 720px) {
   .store-shell {
-    padding: 64px 14px 40px;
+    padding: 16px 14px 40px;
   }
   .store-header {
     flex-wrap: wrap;
+    align-items: center;
     row-gap: 10px;
     margin-bottom: 18px;
+  }
+  .store-header .home-btn {
+    width: 46px;
+    height: 46px;
   }
   /* Keep chrome text on a single line; let whole items wrap instead of the
      text breaking mid-label into two lines. */
@@ -7954,6 +7966,8 @@ a.store-banner:hover {
     font-size: 0.86rem;
     white-space: nowrap;
   }
+  /* 모바일: 사이드바+본문 2칼럼 그리드를 1칼럼으로 접는다 (없으면 본문이 깨짐) */
+  .story-root .story-layout { grid-template-columns: 1fr; gap: 16px; padding: 16px 18px 60px; z-index: auto; }
   .story-root .story-menu-toggle { display: inline-flex; }
   .story-root .story-sidebar {
     position: fixed;
