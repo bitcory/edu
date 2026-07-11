@@ -235,6 +235,50 @@ export async function presignStoryUpload(
   return { key, url };
 }
 
+/** Presigned PUT for a store home event banner image under banners/<uuid>.<ext>
+ * — admin only (라우트에서 가드), browser → R2 direct upload. */
+export async function presignBannerUpload(
+  contentType: string,
+  expiresInSeconds = 600,
+): Promise<{ key: string; url: string }> {
+  const m = /^image\/([\w.+-]+)$/.exec(contentType);
+  if (!m) throw new Error("invalid image content type");
+  const ext = (m[1] || "png").split("+")[0];
+  const { client, bucket } = r2();
+  const key = `banners/${globalThis.crypto.randomUUID()}.${ext}`;
+  const url = await getSignedUrl(
+    client,
+    new PutObjectCommand({ Bucket: bucket, Key: key, ContentType: contentType }),
+    { expiresIn: expiresInSeconds },
+  );
+  return { key, url };
+}
+
+/** Presigned GET URL for a banner image (banners/ prefix only). */
+export async function presignBannerDownload(
+  key: string,
+  expiresInSeconds = 3600,
+): Promise<string> {
+  if (!key.startsWith("banners/")) throw new Error("invalid banner key");
+  const { client, bucket } = r2();
+  return getSignedUrl(
+    client,
+    new GetObjectCommand({ Bucket: bucket, Key: key }),
+    { expiresIn: expiresInSeconds },
+  );
+}
+
+/** Delete a banner image object (row deletion 시 함께 호출). */
+export async function deleteBannerImage(key: string): Promise<void> {
+  if (!key.startsWith("banners/")) return;
+  try {
+    const { client, bucket } = r2();
+    await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+  } catch {
+    /* ignore */
+  }
+}
+
 /** Presigned GET URL for a story image (story/ prefix only). Pass downloadName
  * to force a browser download via Content-Disposition (no CORS needed). */
 export async function presignStoryDownload(

@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import {
+  ArrowDown,
+  ArrowUp,
   BookCheck,
   BookOpen,
   Ban,
@@ -11,10 +13,15 @@ import {
   Eye,
   FilePenLine,
   Globe2,
+  Image as ImageIcon,
+  Megaphone,
   Pencil,
   PencilRuler,
+  Pin,
   RotateCcw,
+  Star,
   Store,
+  Trash2,
   UserCheck,
   X,
 } from "lucide-react";
@@ -24,6 +31,18 @@ import BookInfoModal, { type InfoValues } from "../components/BookInfoModal";
 import UserChip from "../components/auth/UserChip";
 import { useIsAdmin } from "../components/auth/useIsAdmin";
 import {
+  adminCreateBanner,
+  adminCreateNotice,
+  adminDeleteBanner,
+  adminDeleteNotice,
+  adminListBanners,
+  adminListFeatured,
+  adminListNotices,
+  adminSetFeatured,
+  adminUnsetFeatured,
+  adminUpdateBanner,
+  adminUpdateNotice,
+  adminUploadBannerImage,
   approveBook,
   getBook,
   getBookAudioUrl,
@@ -36,8 +55,11 @@ import {
   rejectBook,
   setAuthorShare,
   updateBookInfo,
+  type AdminBanner,
+  type FeaturedEntry,
   type Settlement,
   type StoreBook,
+  type StoreNotice,
 } from "../lib/store";
 import { approveAuthor, fetchAuthors, rejectAuthor } from "../lib/author-store";
 import type { Author, AuthorStatus } from "../lib/author-types";
@@ -54,7 +76,13 @@ type Reader = {
   audioUrl?: string;
   narrationUrls?: (string | null)[];
 };
-type Section = "books" | "authors" | "settlement";
+type Section =
+  | "books"
+  | "authors"
+  | "settlement"
+  | "notices"
+  | "banners"
+  | "featured";
 type Tab = "pending" | "approved" | "rejected" | "drafts";
 
 const TABS: { key: Tab; label: string }[] = [
@@ -93,10 +121,11 @@ export default function AdminPage() {
     if (section === "books") {
       setBooks(null);
       FETCHERS[tab]().then(setBooks);
-    } else {
+    } else if (section === "authors") {
       setAuthors(null);
       fetchAuthors(authorTab).then(setAuthors);
     }
+    // notices/banners/featured 뷰는 각자 fetch 를 소유한다.
   }, [section, tab, authorTab]);
   useEffect(() => {
     if (isAdmin) refresh();
@@ -298,9 +327,42 @@ export default function AdminPage() {
           <CircleDollarSign size={16} aria-hidden="true" />
           정산
         </button>
+        <button
+          type="button"
+          className={`admin-tab${section === "notices" ? " is-active" : ""}`}
+          aria-pressed={section === "notices"}
+          onClick={() => setSection("notices")}
+        >
+          <Megaphone size={16} aria-hidden="true" />
+          공지
+        </button>
+        <button
+          type="button"
+          className={`admin-tab${section === "banners" ? " is-active" : ""}`}
+          aria-pressed={section === "banners"}
+          onClick={() => setSection("banners")}
+        >
+          <ImageIcon size={16} aria-hidden="true" />
+          배너
+        </button>
+        <button
+          type="button"
+          className={`admin-tab${section === "featured" ? " is-active" : ""}`}
+          aria-pressed={section === "featured"}
+          onClick={() => setSection("featured")}
+        >
+          <Star size={16} aria-hidden="true" />
+          추천
+        </button>
       </div>
 
-      {section === "settlement" ? (
+      {section === "notices" ? (
+        <NoticesView />
+      ) : section === "banners" ? (
+        <BannersView />
+      ) : section === "featured" ? (
+        <FeaturedView />
+      ) : section === "settlement" ? (
         <SettlementView />
       ) : section === "authors" ? (
         <AuthorsView
@@ -980,6 +1042,465 @@ function SettlementView() {
           </p>
         </>
       )}
+    </div>
+  );
+}
+
+/* ---------- 스토어 홈 관리: 공지 ---------- */
+
+function NoticesView() {
+  const [notices, setNotices] = useState<StoreNotice[] | null>(null);
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [pinned, setPinned] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    setNotices(null);
+    adminListNotices().then(setNotices);
+  }, []);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const resetForm = () => {
+    setTitle("");
+    setBody("");
+    setPinned(false);
+    setEditingId(null);
+  };
+
+  const submit = async () => {
+    if (!title.trim()) return alert("제목을 입력하세요.");
+    setBusy(true);
+    try {
+      if (editingId) await adminUpdateNotice(editingId, { title, body, pinned });
+      else await adminCreateNotice({ title, body, pinned });
+      resetForm();
+      load();
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async (n: StoreNotice) => {
+    if (!window.confirm(`공지 “${n.title}”를 삭제할까요?`)) return;
+    setBusy(true);
+    try {
+      await adminDeleteNotice(n.id);
+      if (editingId === n.id) resetForm();
+      load();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div>
+      <div className="admin-form">
+        <div className="admin-form__title">
+          {editingId ? "공지 수정" : "새 공지 작성"}
+        </div>
+        <input
+          type="text"
+          className="admin-form__input"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="제목"
+          maxLength={120}
+        />
+        <textarea
+          className="admin-form__input admin-form__textarea"
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          placeholder="내용 (줄바꿈 그대로 표시돼요)"
+          rows={4}
+        />
+        <label className="admin-form__check">
+          <input
+            type="checkbox"
+            checked={pinned}
+            onChange={(e) => setPinned(e.target.checked)}
+          />
+          <Pin size={13} /> 상단 고정
+        </label>
+        <div className="admin-form__actions">
+          {editingId && (
+            <button type="button" className="admin-btn admin-btn--preview" onClick={resetForm} disabled={busy}>
+              취소
+            </button>
+          )}
+          <button type="button" className="admin-btn admin-btn--approve" onClick={() => void submit()} disabled={busy}>
+            <Check size={16} /> {editingId ? "수정 저장" : "등록"}
+          </button>
+        </div>
+      </div>
+
+      {notices === null ? (
+        <p className="store-empty">불러오는 중…</p>
+      ) : notices.length === 0 ? (
+        <div className="store-empty"><p>등록된 공지가 없어요.</p></div>
+      ) : (
+        <ul className="admin-list">
+          {notices.map((n) => (
+            <li key={n.id} className="admin-row">
+              <div className="admin-row__meta">
+                <div className="admin-row__title">
+                  {n.pinned && <Pin size={14} style={{ verticalAlign: "-2px", marginRight: 4 }} />}
+                  {n.title}
+                </div>
+                <div className="admin-row__author">
+                  {new Date(n.createdAt).toLocaleDateString("ko-KR")}
+                  {n.updatedAt ? " · 수정됨" : ""}
+                </div>
+                {n.body && <div className="admin-row__desc">{n.body}</div>}
+              </div>
+              <div className="admin-row__actions">
+                <button
+                  type="button"
+                  className="admin-btn admin-btn--preview"
+                  disabled={busy}
+                  onClick={() => {
+                    setEditingId(n.id);
+                    setTitle(n.title);
+                    setBody(n.body);
+                    setPinned(n.pinned);
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                >
+                  <Pencil size={16} /> 수정
+                </button>
+                <button
+                  type="button"
+                  className="admin-btn admin-btn--reject"
+                  disabled={busy}
+                  onClick={() => void remove(n)}
+                >
+                  <Trash2 size={16} /> 삭제
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/* ---------- 스토어 홈 관리: 이벤트 배너 ---------- */
+
+function BannersView() {
+  const [banners, setBanners] = useState<AdminBanner[] | null>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [linkUrl, setLinkUrl] = useState("");
+  const [startsAt, setStartsAt] = useState(""); // datetime-local, 빈 값 = 즉시
+  const [endsAt, setEndsAt] = useState(""); // 빈 값 = 무기한
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    setBanners(null);
+    adminListBanners().then(setBanners);
+  }, []);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const submit = async () => {
+    if (!file) return alert("배너 이미지를 선택하세요.");
+    setBusy(true);
+    try {
+      const imageKey = await adminUploadBannerImage(file);
+      await adminCreateBanner({
+        imageKey,
+        linkUrl: linkUrl.trim() || null,
+        startsAt: startsAt ? new Date(startsAt).getTime() : null,
+        endsAt: endsAt ? new Date(endsAt).getTime() : null,
+        sort: (banners?.length ?? 0) + 1,
+      });
+      setFile(null);
+      setLinkUrl("");
+      setStartsAt("");
+      setEndsAt("");
+      load();
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const bumpSort = async (b: AdminBanner, delta: number) => {
+    setBusy(true);
+    try {
+      await adminUpdateBanner(b.id, { sort: b.sort + delta });
+      load();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const takeDown = async (b: AdminBanner) => {
+    if (!window.confirm("이 배너를 지금 내릴까요? (종료 시각을 현재로)")) return;
+    setBusy(true);
+    try {
+      await adminUpdateBanner(b.id, { endsAt: Date.now() });
+      load();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async (b: AdminBanner) => {
+    if (!window.confirm("배너를 삭제할까요? (이미지도 함께 삭제)")) return;
+    setBusy(true);
+    try {
+      await adminDeleteBanner(b.id);
+      load();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const statusOf = (b: AdminBanner): string => {
+    const now = Date.now();
+    if (b.startsAt && b.startsAt > now) return "예약";
+    if (b.endsAt && b.endsAt < now) return "종료";
+    return b.startsAt || b.endsAt ? "진행중" : "상시";
+  };
+
+  return (
+    <div>
+      <div className="admin-form">
+        <div className="admin-form__title">새 배너 등록</div>
+        <input
+          type="file"
+          accept="image/*"
+          className="admin-form__input"
+          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+        />
+        <input
+          type="url"
+          className="admin-form__input"
+          value={linkUrl}
+          onChange={(e) => setLinkUrl(e.target.value)}
+          placeholder="클릭 시 이동할 링크 (선택 — 예: /store/all?cat=그림책 또는 https://…)"
+        />
+        <div className="admin-form__row">
+          <label className="admin-form__label">
+            시작
+            <input
+              type="datetime-local"
+              className="admin-form__input"
+              value={startsAt}
+              onChange={(e) => setStartsAt(e.target.value)}
+            />
+          </label>
+          <label className="admin-form__label">
+            종료
+            <input
+              type="datetime-local"
+              className="admin-form__input"
+              value={endsAt}
+              onChange={(e) => setEndsAt(e.target.value)}
+            />
+          </label>
+        </div>
+        <div className="admin-form__hint">기간을 비우면 상시 노출돼요. 권장 비율 16:6 (예: 1600×600)</div>
+        <div className="admin-form__actions">
+          <button type="button" className="admin-btn admin-btn--approve" onClick={() => void submit()} disabled={busy || !file}>
+            <Check size={16} /> 등록
+          </button>
+        </div>
+      </div>
+
+      {banners === null ? (
+        <p className="store-empty">불러오는 중…</p>
+      ) : banners.length === 0 ? (
+        <div className="store-empty"><p>등록된 배너가 없어요.</p></div>
+      ) : (
+        <ul className="admin-list">
+          {banners.map((b) => (
+            <li key={b.id} className="admin-row">
+              <div className="admin-row__cover admin-row__cover--wide">
+                <img src={b.imageUrl} alt="배너" />
+              </div>
+              <div className="admin-row__meta">
+                <div className="admin-row__title">
+                  <span className={`admin-badge admin-badge--${statusOf(b) === "종료" ? "off" : "on"}`}>
+                    {statusOf(b)}
+                  </span>{" "}
+                  정렬 {b.sort}
+                </div>
+                <div className="admin-row__author">
+                  {b.startsAt ? new Date(b.startsAt).toLocaleString("ko-KR") : "즉시"} ~{" "}
+                  {b.endsAt ? new Date(b.endsAt).toLocaleString("ko-KR") : "무기한"}
+                </div>
+                {b.linkUrl && <div className="admin-row__desc">링크: {b.linkUrl}</div>}
+              </div>
+              <div className="admin-row__actions">
+                <button type="button" className="admin-btn admin-btn--preview" disabled={busy} onClick={() => void bumpSort(b, -1)} title="앞으로">
+                  <ArrowUp size={16} />
+                </button>
+                <button type="button" className="admin-btn admin-btn--preview" disabled={busy} onClick={() => void bumpSort(b, 1)} title="뒤로">
+                  <ArrowDown size={16} />
+                </button>
+                {statusOf(b) !== "종료" && (
+                  <button type="button" className="admin-btn admin-btn--preview" disabled={busy} onClick={() => void takeDown(b)}>
+                    지금 내리기
+                  </button>
+                )}
+                <button type="button" className="admin-btn admin-btn--reject" disabled={busy} onClick={() => void remove(b)}>
+                  <Trash2 size={16} /> 삭제
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/* ---------- 스토어 홈 관리: 금주의 추천 ---------- */
+
+const FEATURED_LIMIT = 3;
+
+function FeaturedView() {
+  const [books, setBooks] = useState<StoreBook[] | null>(null);
+  const [featured, setFeatured] = useState<FeaturedEntry[] | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    setBooks(null);
+    setFeatured(null);
+    void Promise.all([listStoreBooks(), adminListFeatured()]).then(([b, f]) => {
+      setBooks(b);
+      setFeatured(f);
+    });
+  }, []);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const byId = new Map((books ?? []).map((b) => [b.id, b]));
+  const current = (featured ?? [])
+    .map((f) => ({ entry: f, book: byId.get(f.bookId) }))
+    .filter((x): x is { entry: FeaturedEntry; book: StoreBook } => !!x.book);
+  const currentIds = new Set(current.map((c) => c.book.id));
+
+  const setPick = async (book: StoreBook) => {
+    const note = window.prompt(`“${book.title}” 추천사 (선택)`, "");
+    if (note === null) return;
+    setBusy(true);
+    try {
+      await adminSetFeatured(book.id, note.trim() || null, current.length);
+      load();
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const editNote = async (book: StoreBook, prev: string | null) => {
+    const note = window.prompt(`“${book.title}” 추천사 수정`, prev ?? "");
+    if (note === null) return;
+    setBusy(true);
+    try {
+      await adminSetFeatured(book.id, note.trim() || null);
+      load();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const unset = async (book: StoreBook) => {
+    setBusy(true);
+    try {
+      await adminUnsetFeatured(book.id);
+      load();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (books === null || featured === null) {
+    return <p className="store-empty">불러오는 중…</p>;
+  }
+
+  return (
+    <div>
+      <div className="admin-form">
+        <div className="admin-form__title">
+          현재 추천 ({current.length}/{FEATURED_LIMIT})
+        </div>
+        <div className="admin-form__hint">
+          지정이 {FEATURED_LIMIT}권보다 적으면 나머지는 인기 점수(좋아요×3+조회수) 상위 책이 자동으로 채워져요.
+        </div>
+        {current.length === 0 ? (
+          <div className="admin-row__desc">지정된 추천이 없어요 — 홈에는 인기 상위 3권이 자동 노출 중.</div>
+        ) : (
+          <ul className="admin-list">
+            {current.map(({ entry, book }) => (
+              <li key={book.id} className="admin-row">
+                <div className="admin-row__cover">
+                  {book.coverThumb ? <img src={book.coverThumb} alt={book.title} /> : <span>표지</span>}
+                </div>
+                <div className="admin-row__meta">
+                  <div className="admin-row__title">{book.title}</div>
+                  <div className="admin-row__author">{book.author ?? book.ownerName}</div>
+                  <div className="admin-row__desc">
+                    {entry.note || <em>추천사 없음 (책 소개로 대체)</em>}
+                  </div>
+                </div>
+                <div className="admin-row__actions">
+                  <button type="button" className="admin-btn admin-btn--preview" disabled={busy} onClick={() => void editNote(book, entry.note)}>
+                    <Pencil size={16} /> 추천사
+                  </button>
+                  <button type="button" className="admin-btn admin-btn--reject" disabled={busy} onClick={() => void unset(book)}>
+                    <X size={16} /> 해제
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="admin-form__title" style={{ margin: "18px 0 8px" }}>공개 중인 책</div>
+      <ul className="admin-list">
+        {books.map((b) => (
+          <li key={b.id} className="admin-row">
+            <div className="admin-row__cover">
+              {b.coverThumb ? <img src={b.coverThumb} alt={b.title} /> : <span>표지</span>}
+            </div>
+            <div className="admin-row__meta">
+              <div className="admin-row__title">{b.title}</div>
+              <div className="admin-row__author">
+                {b.author ?? b.ownerName} · ❤ {b.likeCount ?? 0} · 👁 {b.viewCount ?? 0}
+              </div>
+            </div>
+            <div className="admin-row__actions">
+              {currentIds.has(b.id) ? (
+                <span className="admin-badge admin-badge--on">추천 중</span>
+              ) : (
+                <button
+                  type="button"
+                  className="admin-btn admin-btn--approve"
+                  disabled={busy || current.length >= FEATURED_LIMIT}
+                  title={current.length >= FEATURED_LIMIT ? `추천은 최대 ${FEATURED_LIMIT}권 — 먼저 해제하세요` : undefined}
+                  onClick={() => void setPick(b)}
+                >
+                  <Star size={16} /> 추천 지정
+                </button>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

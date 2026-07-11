@@ -198,6 +198,46 @@ export function ensureSchema(): Promise<void> {
           created_at BIGINT NOT NULL
         )`,
       );
+
+      // ---- 스토어 포털 홈 (공지 / 이벤트 배너 / 금주의 추천) ----
+
+      // 관리자가 작성하는 스토어 공지·소식. body 는 plain text (pre-wrap 렌더).
+      await db.execute(
+        `CREATE TABLE IF NOT EXISTS store_notices (
+          id         TEXT PRIMARY KEY,
+          title      TEXT NOT NULL,
+          body       TEXT NOT NULL,
+          pinned     INTEGER NOT NULL DEFAULT 0,
+          created_at BIGINT NOT NULL,
+          updated_at BIGINT
+        )`,
+      );
+
+      // 이벤트 배너 — image_key 는 R2 'banners/<uuid>.<ext>'. 기간(starts/ends)이
+      // NULL 이면 무제한. sort 오름차순 노출.
+      await db.execute(
+        `CREATE TABLE IF NOT EXISTS store_banners (
+          id         TEXT PRIMARY KEY,
+          image_key  TEXT NOT NULL,
+          link_url   TEXT,
+          starts_at  BIGINT,
+          ends_at    BIGINT,
+          sort       INTEGER NOT NULL DEFAULT 0,
+          created_at BIGINT NOT NULL
+        )`,
+      );
+
+      // 금주의 추천 책 — book_id PK 라 중복 지정 불가. note 는 추천사.
+      // books 와 FK 없음(likes/reads 와 같은 관례) — 조회 시 승인 목록에 없는
+      // book_id 는 조용히 스킵한다.
+      await db.execute(
+        `CREATE TABLE IF NOT EXISTS featured_books (
+          book_id    TEXT PRIMARY KEY,
+          note       TEXT,
+          sort       INTEGER NOT NULL DEFAULT 0,
+          created_at BIGINT NOT NULL
+        )`,
+      );
     })();
   }
   return schemaReady;

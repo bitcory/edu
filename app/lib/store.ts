@@ -528,3 +528,180 @@ async function errorMessage(res: Response, fallback: string): Promise<string> {
     return fallback;
   }
 }
+
+// ---------- 스토어 포털 홈 (공지 / 배너 / 금주의 추천 / 신간 선반) ----------
+
+export type StoreNotice = {
+  id: string;
+  title: string;
+  body: string;
+  pinned: boolean;
+  createdAt: number;
+  updatedAt?: number;
+};
+
+export type StoreBanner = {
+  id: string;
+  imageUrl: string;
+  linkUrl: string | null;
+};
+
+/** 관리 화면용 배너 (기간·정렬 등 원본 필드 포함). */
+export type AdminBanner = StoreBanner & {
+  imageKey: string;
+  startsAt: number | null;
+  endsAt: number | null;
+  sort: number;
+  createdAt: number;
+};
+
+export type FeaturedBook = StoreBook & { featuredNote: string | null };
+
+export type StoreShelf = { category: string; total: number; books: StoreBook[] };
+
+export type StoreHome = {
+  notices: StoreNotice[];
+  banners: StoreBanner[];
+  featured: FeaturedBook[];
+  shelves: StoreShelf[];
+};
+
+export async function fetchStoreHome(): Promise<StoreHome | null> {
+  const res = await fetch("/api/store/home", { cache: "no-store" });
+  if (!res.ok) return null;
+  return (await res.json()) as StoreHome;
+}
+
+// ---- admin: 공지 CRUD ----
+
+export async function adminListNotices(): Promise<StoreNotice[]> {
+  const res = await fetch("/api/admin/notices", { cache: "no-store" });
+  if (!res.ok) return [];
+  return ((await res.json()) as { notices: StoreNotice[] }).notices ?? [];
+}
+
+export async function adminCreateNotice(input: {
+  title: string;
+  body: string;
+  pinned?: boolean;
+}): Promise<void> {
+  const res = await fetch("/api/admin/notices", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error(await errorMessage(res, "공지 등록에 실패했어요."));
+}
+
+export async function adminUpdateNotice(
+  id: string,
+  patch: { title?: string; body?: string; pinned?: boolean },
+): Promise<void> {
+  const res = await fetch(`/api/admin/notices/${id}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw new Error(await errorMessage(res, "공지 수정에 실패했어요."));
+}
+
+export async function adminDeleteNotice(id: string): Promise<void> {
+  const res = await fetch(`/api/admin/notices/${id}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(await errorMessage(res, "공지 삭제에 실패했어요."));
+}
+
+// ---- admin: 배너 CRUD ----
+
+export async function adminListBanners(): Promise<AdminBanner[]> {
+  const res = await fetch("/api/admin/banners", { cache: "no-store" });
+  if (!res.ok) return [];
+  return ((await res.json()) as { banners: AdminBanner[] }).banners ?? [];
+}
+
+/** 배너 이미지 업로드 3단계: presign → 브라우저가 R2 에 직접 PUT → key 반환. */
+export async function adminUploadBannerImage(file: File): Promise<string> {
+  const res = await fetch("/api/admin/banners/upload-url", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ contentType: file.type }),
+  });
+  if (!res.ok) throw new Error(await errorMessage(res, "업로드 준비에 실패했어요."));
+  const { key, uploadUrl } = (await res.json()) as { key: string; uploadUrl: string };
+  const put = await fetch(uploadUrl, {
+    method: "PUT",
+    body: file,
+    headers: { "content-type": file.type },
+  });
+  if (!put.ok) throw new Error("배너 이미지 업로드에 실패했어요.");
+  return key;
+}
+
+export async function adminCreateBanner(input: {
+  imageKey: string;
+  linkUrl?: string | null;
+  startsAt?: number | null;
+  endsAt?: number | null;
+  sort?: number;
+}): Promise<void> {
+  const res = await fetch("/api/admin/banners", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error(await errorMessage(res, "배너 등록에 실패했어요."));
+}
+
+export async function adminUpdateBanner(
+  id: string,
+  patch: {
+    linkUrl?: string | null;
+    startsAt?: number | null;
+    endsAt?: number | null;
+    sort?: number;
+  },
+): Promise<void> {
+  const res = await fetch(`/api/admin/banners/${id}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw new Error(await errorMessage(res, "배너 수정에 실패했어요."));
+}
+
+export async function adminDeleteBanner(id: string): Promise<void> {
+  const res = await fetch(`/api/admin/banners/${id}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(await errorMessage(res, "배너 삭제에 실패했어요."));
+}
+
+// ---- admin: 금주의 추천 ----
+
+export type FeaturedEntry = {
+  bookId: string;
+  note: string | null;
+  sort: number;
+  createdAt: number;
+};
+
+export async function adminListFeatured(): Promise<FeaturedEntry[]> {
+  const res = await fetch("/api/admin/featured", { cache: "no-store" });
+  if (!res.ok) return [];
+  return ((await res.json()) as { featured: FeaturedEntry[] }).featured ?? [];
+}
+
+export async function adminSetFeatured(
+  bookId: string,
+  note: string | null,
+  sort = 0,
+): Promise<void> {
+  const res = await fetch("/api/admin/featured", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ bookId, note, sort }),
+  });
+  if (!res.ok) throw new Error(await errorMessage(res, "추천 지정에 실패했어요."));
+}
+
+export async function adminUnsetFeatured(bookId: string): Promise<void> {
+  const res = await fetch(`/api/admin/featured/${bookId}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(await errorMessage(res, "추천 해제에 실패했어요."));
+}
