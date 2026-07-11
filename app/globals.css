@@ -5247,6 +5247,8 @@ a.store-banner:hover {
 
 .store-shelf__row > .store-card {
   flex: 0 0 180px;
+  /* nowrap 제목의 min-content 가 카드 폭을 밀어내지 않게 (긴 제목은 …) */
+  min-width: 0;
   scroll-snap-align: start;
 }
 
