@@ -16,7 +16,7 @@ import {
   Library, UsersRound, Clapperboard,
   Menu, FileInput, FolderOpen, X, BookOpen, ArrowLeft, Ruler,
   ExternalLink, MessageSquare, AudioLines, Music, Workflow, ScrollText, Wand2,
-  ImagePlus, Sparkles, Square, Download, Save,
+  ImagePlus, Sparkles, Square, Download, Save, RotateCcw,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
@@ -1281,6 +1281,26 @@ export default function StoryPage() {
           </Link>
           <span className="story-kicker">스토리구성 · 그림책</span>
           <span className="story-lib-name">{libName}</span>
+          <span className="story-backup-toggle" aria-label="프로젝트 백업과 복원">
+            <button
+              type="button"
+              className="story-backup-toggle__btn story-backup-toggle__btn--save"
+              onClick={saveProjectBackup}
+              disabled={projectSaveBusy || !lib}
+              title="현재 책장, 프롬프트, 대본, 이미지 원본을 JSON 파일로 저장"
+            >
+              <Save size={14} /> {projectSaveBusy ? "저장 중…" : "백업"}
+            </button>
+            <button
+              type="button"
+              className="story-backup-toggle__btn story-backup-toggle__btn--restore"
+              onClick={() => projectRestoreRef.current?.click()}
+              disabled={projectRestoreBusy}
+              title="저장한 스토리구성 백업 JSON을 복원"
+            >
+              <FolderOpen size={14} /> {projectRestoreBusy ? "복원 중…" : "복원"}
+            </button>
+          </span>
         </div>
         <div className="story-top-actions">
           <div
@@ -1304,27 +1324,6 @@ export default function StoryPage() {
               Flow
             </button>
           </div>
-          <button type="button" className="story-btn story-btn--reset" onClick={resetToSample} title="책장을 초기 상태로 되돌리기">
-            초기화
-          </button>
-          <button
-            type="button"
-            className="story-btn story-btn--save"
-            onClick={saveProjectBackup}
-            disabled={projectSaveBusy || !lib}
-            title="현재 책장, 프롬프트, 대본, 이미지 원본을 JSON 파일로 저장"
-          >
-            <Save size={15} /> {projectSaveBusy ? "백업 중…" : "백업"}
-          </button>
-          <button
-            type="button"
-            className="story-btn story-btn--restore"
-            onClick={() => projectRestoreRef.current?.click()}
-            disabled={projectRestoreBusy}
-            title="저장한 스토리구성 백업 JSON을 복원"
-          >
-            <FolderOpen size={15} /> {projectRestoreBusy ? "불러오는 중…" : "백업 불러오기"}
-          </button>
           <input
             ref={projectRestoreRef}
             type="file"
@@ -1338,10 +1337,10 @@ export default function StoryPage() {
             onClick={() => setScriptModalOpen(true)}
             title="본문 대본을 붙여넣어 넘버링을 제거하고 빈 줄 두 번으로 파싱"
           >
-            본문대본
+            대본
           </button>
           <button type="button" className="story-btn story-btn--json" onClick={() => setJsonModalOpen(true)}>
-            JSON 불러오기
+            JSON
           </button>
           <button
             type="button"
@@ -1350,7 +1349,16 @@ export default function StoryPage() {
             disabled={sendBusy || !book}
             title="생성된 이미지로 책만들기 페이지를 자동 구성 (앞표지·본문·뒷표지)"
           >
-            <BookOpen size={16} /> {sendBusy ? "보내는 중…" : "책만들기로"}
+            <BookOpen size={16} /> {sendBusy ? "보내는 중…" : "책 만들기"}
+          </button>
+          <button
+            type="button"
+            className="story-btn story-btn--reset story-btn--icon"
+            onClick={resetToSample}
+            aria-label="초기화"
+            title="책장을 초기 상태로 되돌리기"
+          >
+            <RotateCcw size={17} />
           </button>
         </div>
       </header>

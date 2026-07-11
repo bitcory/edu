@@ -6927,6 +6927,81 @@ a.store-banner:hover {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.story-root .story-backup-toggle {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0;
+  padding: 3px;
+  border: 1px solid rgba(188, 151, 93, 0.36);
+  border-radius: 999px;
+  background: #fff7df;
+  overflow: hidden;
+  box-shadow:
+    inset 0 1px 2px rgba(70, 45, 20, 0.08),
+    0 8px 18px -16px rgba(70, 45, 20, 0.28);
+}
+.story-root .story-backup-toggle::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc((100% - 6px) / 2);
+  border-radius: 999px;
+  background: linear-gradient(180deg, #5aa0ef, #3f79c5);
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.3),
+    inset 0 -2px 0 rgba(36, 73, 124, 0.14);
+  transition: transform 0.18s ease;
+}
+.story-root .story-backup-toggle:has(.story-backup-toggle__btn--restore:hover)::before {
+  transform: translateX(100%);
+}
+.story-root .story-backup-toggle__btn {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 26px;
+  padding: 4px 11px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #7b6041;
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 900;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: none;
+  text-shadow: none;
+  transition: background 0.15s ease, color 0.15s ease, filter 0.15s ease;
+}
+.story-root .story-backup-toggle__btn--save {
+  background: transparent;
+  color: #fff;
+}
+.story-root .story-backup-toggle__btn--restore {
+  color: #7b6041;
+}
+.story-root .story-backup-toggle:has(.story-backup-toggle__btn--restore:hover) .story-backup-toggle__btn--save {
+  color: #7b6041;
+}
+.story-root .story-backup-toggle__btn--restore:hover {
+  background: transparent;
+  color: #fff;
+}
+.story-root .story-backup-toggle__btn--save:hover {
+  color: #fff;
+}
+.story-root .story-backup-toggle__btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
 .story-root .story-top-actions {
   display: flex;
   align-items: center;
@@ -6956,55 +7031,58 @@ a.store-banner:hover {
 .story-root .story-btn--apply { background: var(--st-gold); border-color: var(--st-gold-deep); box-shadow: 0 3px 0 var(--st-gold-deep); color: #4a3410; }
 .story-root .story-btn--ghost { font-size: 0.85rem; padding: 5px 12px; color: var(--st-ink-soft); }
 .story-root .story-btn--reset {
-  background: #fff2ef;
-  color: #9f3528;
-  border-color: #f3b0a5;
-  box-shadow: 0 3px 0 #e28d80;
+  background: linear-gradient(180deg, #ff7a68, #ec5d4d);
+  color: #fff;
+  border-color: #de5143;
+  box-shadow: 0 8px 18px -12px rgba(236, 93, 77, 0.8);
 }
 .story-root .story-btn--save {
-  background: #e9f8ef;
-  color: #226b3b;
-  border-color: #94d6a8;
-  box-shadow: 0 3px 0 #6fbc86;
+  background: linear-gradient(180deg, #4fc878, #2f9f58);
+  color: #fff;
+  border-color: #2b934f;
+  box-shadow: 0 8px 18px -12px rgba(47, 159, 88, 0.8);
 }
 .story-root .story-btn--restore {
-  background: #eef5ff;
-  color: #245f9f;
-  border-color: #9fc7ef;
-  box-shadow: 0 3px 0 #75a8dc;
+  background: linear-gradient(180deg, #5aa0ef, #3f79c5);
+  color: #fff;
+  border-color: #376caf;
+  box-shadow: 0 8px 18px -12px rgba(63, 121, 197, 0.8);
 }
 .story-root .story-btn--script {
-  background: #fff5dc;
-  color: #8a5b0c;
-  border-color: #efc56c;
-  box-shadow: 0 3px 0 #d8a940;
+  background: linear-gradient(180deg, #f0b84f, #d18a22);
+  color: #fff;
+  border-color: #bf7b1f;
+  box-shadow: 0 8px 18px -12px rgba(209, 138, 34, 0.85);
 }
 .story-root .story-btn--json {
-  background: #f4efff;
-  color: #62409a;
-  border-color: #c8b4ed;
-  box-shadow: 0 3px 0 #aa92d5;
+  background: linear-gradient(180deg, #9b78ea, #7854c8);
+  color: #fff;
+  border-color: #6846b4;
+  box-shadow: 0 8px 18px -12px rgba(120, 84, 200, 0.85);
 }
 .story-root .story-btn--book {
-  background: #e9fbfb;
-  color: #11646a;
-  border-color: #8fd6dc;
-  box-shadow: 0 3px 0 #5db6bf;
+  background: linear-gradient(180deg, #3ec2c8, #238f98);
+  color: #fff;
+  border-color: #207f88;
+  box-shadow: 0 8px 18px -12px rgba(35, 143, 152, 0.85);
 }
 .story-root .story-btn:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
 .story-root .story-top-actions .story-btn {
   border-radius: 9px;
+  color: #fff;
+  text-shadow: 0 1px 1px rgba(55, 38, 20, 0.22);
   box-shadow:
-    inset 0 1.5px 0 rgba(255, 255, 255, 0.9),
-    inset 0 -2px 0 rgba(70, 45, 20, 0.13);
-  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.46), rgba(255, 255, 255, 0) 48%, rgba(70, 45, 20, 0.035));
+    0 9px 18px -14px rgba(60, 42, 24, 0.55),
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.32),
+    inset 0 -2px 0 rgba(70, 45, 20, 0.16);
   transform: translateY(0);
 }
 .story-root .story-top-actions .story-btn:hover {
   box-shadow:
-    inset 0 2px 0 rgba(255, 255, 255, 0.95),
-    inset 0 -2px 0 rgba(70, 45, 20, 0.16);
-  filter: saturate(1.04) brightness(1.01);
+    0 10px 20px -14px rgba(60, 42, 24, 0.65),
+    inset 0 2px 0 rgba(255, 255, 255, 0.38),
+    inset 0 -2px 0 rgba(70, 45, 20, 0.18);
+  filter: saturate(1.06) brightness(1.03);
   transform: translateY(0);
 }
 .story-root .story-top-actions .story-btn:active {
@@ -7013,6 +7091,12 @@ a.store-banner:hover {
     inset 0 -1px 0 rgba(255, 255, 255, 0.55);
   filter: brightness(0.98);
   transform: translateY(0);
+}
+.story-root .story-top-actions .story-btn--icon {
+  width: 40px;
+  min-width: 40px;
+  justify-content: center;
+  padding: 7px;
 }
 .story-root .story-top-actions .story-btn:disabled {
   box-shadow:
@@ -7943,6 +8027,7 @@ a.store-banner:hover {
   .story-root .story-brand {
     flex: 1 1 calc(100% - 54px);
     align-items: center;
+    flex-wrap: wrap;
     min-height: 40px;
     gap: 8px;
   }
@@ -7999,6 +8084,19 @@ a.store-banner:hover {
   .story-root .story-lib-name {
     font-size: 1rem;
   }
+  .story-root .story-backup-toggle {
+    order: 4;
+    width: fit-content;
+  }
+  .story-root .story-backup-toggle__btn {
+    min-height: 26px;
+    padding: 3px 8px;
+    font-size: 0.75rem;
+  }
+  .story-root .story-backup-toggle__btn svg {
+    width: 13px;
+    height: 13px;
+  }
   .story-root .story-top-actions .story-btn {
     min-height: 32px;
     padding: 5px 10px;
@@ -8007,6 +8105,11 @@ a.store-banner:hover {
   .story-root .story-top-actions .story-btn svg {
     width: 14px;
     height: 14px;
+  }
+  .story-root .story-top-actions .story-btn--icon {
+    width: 34px;
+    min-width: 34px;
+    padding: 5px;
   }
   .story-root .story-layout { padding: 14px 12px 60px; }
   .story-root .story-sec-sub,
