@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { BookOpen, Eye, Heart, Library, Search, Users } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import BookViewer from "../components/BookViewer";
 import BookPreviewModal from "../components/BookPreviewModal";
 import AuthorPickerModal from "../components/AuthorPickerModal";
@@ -35,8 +35,15 @@ export default function StorePage() {
   const [opening, setOpening] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [cat, setCat] = useState<string | null>(null); // null = 전체
+  const [sort, setSort] = useState<"latest" | "popular">("latest");
   const [preview, setPreview] = useState<StoreBook | null>(null);
   const [authorPicker, setAuthorPicker] = useState(false);
+  // 점진 렌더: 처음엔 PAGE_SIZE 권만 카드로 그리고, 하단 센티널이 화면에
+  // 들어오면 PAGE_SIZE 씩 늘린다. 커버 <img loading="lazy"> 와 함께 —
+  // 전체 커버를 한 번에 내려받아 스토어 첫 화면이 느리던 문제의 해법.
+  const PAGE_SIZE = 12;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     listStoreBooks().then(setBooks);
@@ -48,7 +55,7 @@ export default function StorePage() {
     if (!books) return null;
     const norm = (s: string) => s.toLowerCase().normalize("NFC");
     const q = norm(query.trim());
-    return books.filter((b) => {
+    const list = books.filter((b) => {
       if (cat && (b.category ?? "") !== cat) return false;
       if (!q) return true;
       return (
@@ -56,7 +63,44 @@ export default function StorePage() {
         norm(b.author ?? b.ownerName).includes(q)
       );
     });
-  }, [books, query, cat]);
+    if (sort === "popular") {
+      // 인기순: 좋아요를 크게, 조회수를 작게 가중 (서버 순서는 최신순이라
+      // 동점이면 자연스럽게 최신이 앞에 온다).
+      return [...list].sort(
+        (a, b) =>
+          (b.likeCount ?? 0) * 3 + (b.viewCount ?? 0) -
+          ((a.likeCount ?? 0) * 3 + (a.viewCount ?? 0)),
+      );
+    }
+    return list;
+  }, [books, query, cat, sort]);
+
+  // 검색어·카테고리·정렬이 바뀌면 점진 렌더를 처음부터 다시 시작.
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [query, cat, sort]);
+
+  const visible = useMemo(
+    () => (filtered ? filtered.slice(0, visibleCount) : null),
+    [filtered, visibleCount],
+  );
+  const hasMore = !!filtered && filtered.length > visibleCount;
+
+  // 하단 센티널이 보이면 다음 묶음 렌더 (무한 스크롤).
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || !hasMore) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setVisibleCount((v) => v + PAGE_SIZE);
+        }
+      },
+      { rootMargin: "600px 0px" }, // 스크롤이 닿기 전에 미리 로드
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [hasMore]);
 
   // Show the full category menu (so it's always navigable). Categories with no
   // books just land on an empty state — existing books predate the category
@@ -137,6 +181,25 @@ export default function StorePage() {
         </div>
       )}
 
+      {books && books.length > 0 && (
+        <div className="store-cats" role="tablist" aria-label="정렬">
+          <button
+            type="button"
+            className={`store-cat${sort === "latest" ? " is-active" : ""}`}
+            onClick={() => setSort("latest")}
+          >
+            최신순
+          </button>
+          <button
+            type="button"
+            className={`store-cat${sort === "popular" ? " is-active" : ""}`}
+            onClick={() => setSort("popular")}
+          >
+            인기순
+          </button>
+        </div>
+      )}
+
       {activeCats.length > 0 && (
         <div className="store-cats" role="tablist" aria-label="카테고리">
           <button
@@ -188,7 +251,7 @@ export default function StorePage() {
         </div>
       ) : (
         <div className="store-grid">
-          {(filtered ?? []).map((b) => (
+          {(visible ?? []).map((b) => (
             <div key={b.id} className="store-card">
               <button
                 type="button"
@@ -198,7 +261,7 @@ export default function StorePage() {
               >
                 <div className="store-card__cover">
                   {b.coverThumb ? (
-                    <img src={b.coverThumb} alt={b.title} />
+                    <img src={b.coverThumb} alt={b.title} loading="lazy" decoding="async" />
                   ) : (
                     <span>표지</span>
                   )}
@@ -238,6 +301,15 @@ export default function StorePage() {
               </button>
             </div>
           ))}
+          {hasMore && (
+            <div
+              ref={sentinelRef}
+              className="store-sentinel"
+              aria-hidden
+              // grid 한 줄을 통째로 차지해 관찰이 안정적이도록.
+              style={{ gridColumn: "1 / -1", height: 1 }}
+            />
+          )}
         </div>
       )}
 
