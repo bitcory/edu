@@ -6893,25 +6893,46 @@ a.store-banner:hover {
 .story-root .story-ext-update a.story-mini { text-decoration: none; }
 .story-root .story-brand {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 12px;
   min-width: 0;
   flex: 1;
 }
 .story-root .story-back-btn {
-  font-size: 0.88rem;
-  color: var(--st-ink-soft);
-  text-decoration: none;
+  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 5px 12px;
-  border-radius: 999px;
-  border: 1px solid var(--st-line);
-  background: var(--st-card);
-  transition: transform 0.12s;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  box-sizing: border-box;
+  border: 2px solid rgba(123, 76, 30, 0.52);
+  border-radius: 50%;
+  background: linear-gradient(180deg, #fff8df, #ffd98f);
+  color: #3a2415;
+  text-decoration: none;
+  overflow: hidden;
+  box-shadow:
+    0 8px 18px -10px rgba(79, 45, 16, 0.46),
+    0 0 0 3px rgba(255, 246, 209, 0.54),
+    inset 0 0 0 1px rgba(255, 244, 204, 0.72);
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
-.story-root .story-back-btn:hover { transform: translateY(-1px); }
+.story-root .story-back-btn img {
+  display: block;
+  width: 112%;
+  height: 112%;
+  object-fit: cover;
+  pointer-events: none;
+}
+.story-root .story-back-btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(103, 62, 23, 0.66);
+  box-shadow:
+    0 10px 22px -10px rgba(79, 45, 16, 0.54),
+    0 0 0 4px rgba(255, 246, 209, 0.68),
+    inset 0 0 0 1px rgba(255, 244, 204, 0.82);
+}
 .story-root .story-kicker {
   font-size: 0.78rem;
   font-weight: 700;
@@ -7068,7 +7089,7 @@ a.store-banner:hover {
 }
 .story-root .story-btn:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
 .story-root .story-top-actions .story-btn {
-  border-radius: 9px;
+  border-radius: 14px;
   color: #fff;
   text-shadow: 0 1px 1px rgba(55, 38, 20, 0.22);
   box-shadow:
@@ -8078,8 +8099,8 @@ a.store-banner:hover {
   .story-root .story-kicker { display: none; }
   .story-root .story-btn--ghost { display: none; }
   .story-root .story-back-btn {
-    padding: 5px 9px;
-    font-size: 0.82rem;
+    width: 40px;
+    height: 40px;
   }
   .story-root .story-lib-name {
     font-size: 1rem;
