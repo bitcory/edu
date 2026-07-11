@@ -2922,10 +2922,13 @@ textarea.ed-input {
 }
 
 .preview-title {
+  /* absolute 포지션인 닫기(X) 버튼과 겹치지 않게 오른쪽 여백 확보 */
   margin: 0 0 4px;
+  padding-right: 44px;
   font-size: 20px;
   font-weight: 800;
   color: #3a2a1d;
+  word-break: keep-all;
 }
 
 .preview-author {
