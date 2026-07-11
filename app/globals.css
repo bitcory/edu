@@ -4161,8 +4161,23 @@ textarea.ed-input {
     white-space: nowrap;
   }
   .store-header__right {
-    flex-wrap: wrap;
-    justify-content: flex-end;
+    /* 버튼들을 항상 한 줄로 — 좁으면 가로 스크롤 (스크롤바 숨김) */
+    flex-wrap: nowrap;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    justify-content: flex-start;
+  }
+  .store-header__right::-webkit-scrollbar {
+    display: none;
+  }
+  .store-header__right > * {
+    flex-shrink: 0;
+  }
+  .store-navlink {
+    padding: 6px 10px;
+    font-size: 12px;
   }
   .store-grid {
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -7903,7 +7918,42 @@ a.store-banner:hover {
 
 /* RESPONSIVE */
 @media (max-width: 900px) {
-  .story-root .story-layout { grid-template-columns: 1fr; gap: 16px; padding: 16px 18px 60px; z-index: auto; }
+  .story-root { --st-topbar-h: 108px; }
+  .story-root .story-topbar {
+    height: auto;
+    min-height: var(--st-topbar-h);
+    align-content: flex-start;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 8px 10px;
+    padding: 10px 18px 8px;
+  }
+  .story-root .story-brand {
+    flex: 1 1 calc(100% - 54px);
+    align-items: center;
+    min-height: 40px;
+    gap: 8px;
+  }
+  .story-root .story-top-actions {
+    flex: 1 0 100%;
+    gap: 8px;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 2px 0 5px;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+  }
+  .story-root .story-top-actions .story-btn,
+  .story-root .story-engine-top {
+    flex: 0 0 auto;
+  }
+  .story-root .story-top-actions .story-btn {
+    min-height: 34px;
+    padding: 6px 12px;
+    font-size: 0.86rem;
+    white-space: nowrap;
+  }
   .story-root .story-menu-toggle { display: inline-flex; }
   .story-root .story-sidebar {
     position: fixed;
@@ -7924,10 +7974,26 @@ a.store-banner:hover {
   .story-modal-backdrop .story-script-col textarea { min-height: 220px; }
 }
 @media (max-width: 560px) {
-  .story-root { --st-topbar-h: 54px; }
-  .story-root .story-topbar { padding: 0 12px; }
+  .story-root { --st-topbar-h: 104px; }
+  .story-root .story-topbar { padding: 8px 12px 7px; }
   .story-root .story-kicker { display: none; }
   .story-root .story-btn--ghost { display: none; }
+  .story-root .story-back-btn {
+    padding: 5px 9px;
+    font-size: 0.82rem;
+  }
+  .story-root .story-lib-name {
+    font-size: 1rem;
+  }
+  .story-root .story-top-actions .story-btn {
+    min-height: 32px;
+    padding: 5px 10px;
+    font-size: 0.82rem;
+  }
+  .story-root .story-top-actions .story-btn svg {
+    width: 14px;
+    height: 14px;
+  }
   .story-root .story-layout { padding: 14px 12px 60px; }
   .story-root .story-sec-sub,
   .story-root .story-filterbar,
