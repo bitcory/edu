@@ -12,9 +12,11 @@ import type { StoreBook } from "../../../lib/book-types";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const SHELF_SIZE = 6;
+const SHELF_SIZE = 12; // 와이드 화면에서도 선반이 꽉 차 보이게 (가로 스크롤)
 const FEATURED_MAX = 3;
 const NOTICE_MAX = 5;
+const BOOKSTORE_BANNER_KEY = "banners/5810fe83-54e8-4b88-9346-caa9245624f9.png";
+const BOOKSTORE_BANNER_IMAGE = "/store-bookstore-banner.png";
 
 const popScore = (b: StoreBook) => (b.likeCount ?? 0) * 3 + (b.viewCount ?? 0);
 
@@ -56,8 +58,12 @@ export async function GET() {
   const bannerOut = await Promise.all(
     banners.map(async (b) => ({
       id: b.id,
-      linkUrl: b.linkUrl,
-      imageUrl: await presignBannerDownload(b.imageKey),
+      linkUrl:
+        b.imageKey === BOOKSTORE_BANNER_KEY ? (b.linkUrl ?? "/store/all") : b.linkUrl,
+      imageUrl:
+        b.imageKey === BOOKSTORE_BANNER_KEY
+          ? BOOKSTORE_BANNER_IMAGE
+          : await presignBannerDownload(b.imageKey),
     })),
   );
 

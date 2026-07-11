@@ -286,6 +286,7 @@ function NoticeModal({
 /* ---------- 이벤트 배너 ---------- */
 
 const BANNERS_PER_VIEW = 2;
+const BOOKSTORE_BANNER_IMAGE = "/store-bookstore-banner.png";
 
 function BannerStrip({ banners }: { banners: StoreBanner[] }) {
   const [page, setPage] = useState(0);
@@ -295,9 +296,26 @@ function BannerStrip({ banners }: { banners: StoreBanner[] }) {
     (page + 1) * BANNERS_PER_VIEW,
   );
 
-  const body = (b: StoreBanner) => (
-    <img className="store-banner__img" src={b.imageUrl} alt="이벤트 배너" />
-  );
+  const body = (b: StoreBanner) => {
+    const isBookstoreBanner = b.imageUrl === BOOKSTORE_BANNER_IMAGE;
+
+    return (
+      <>
+        <img
+          className="store-banner__img"
+          src={b.imageUrl}
+          alt={isBookstoreBanner ? "북스토어 추천 배너" : "이벤트 배너"}
+        />
+        {isBookstoreBanner && (
+          <span className="store-banner-copy" aria-hidden="true">
+            <span className="store-banner-copy__eyebrow">TB Book Store</span>
+            <span className="store-banner-copy__title">새로운 그림책을 만나보세요</span>
+            <span className="store-banner-copy__body">아이와 함께 읽기 좋은 이야기 모음</span>
+          </span>
+        )}
+      </>
+    );
+  };
 
   return (
     <section className="store-banners-wrap" aria-label="이벤트">

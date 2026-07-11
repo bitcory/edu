@@ -4864,6 +4864,26 @@ textarea.ed-input {
   cursor: pointer;
 }
 
+/* 전체 책 → 북스토어 홈 뒤로가기 (제목 옆, 눈에 띄게) */
+.store-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 14px 8px 8px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #d08646, #bd6a30);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+  box-shadow: 0 4px 12px -4px rgba(189, 106, 48, 0.6);
+  transition: transform 0.12s ease;
+}
+
+.store-back:hover {
+  transform: translateY(-1px);
+}
+
 .store-section {
   max-width: none;
   margin: 0 auto 26px;
@@ -4994,6 +5014,7 @@ textarea.ed-input {
 }
 
 .store-banner {
+  position: relative;
   display: block;
   border-radius: 18px;
   overflow: hidden;
@@ -5012,6 +5033,47 @@ a.store-banner:hover {
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+.store-banner-copy {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: flex;
+  width: min(58%, 520px);
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  padding: clamp(18px, 3vw, 34px);
+  color: #fffaf1;
+  text-shadow: 0 2px 12px rgba(52, 31, 18, 0.42);
+  pointer-events: none;
+}
+
+.store-banner-copy__eyebrow {
+  width: fit-content;
+  border-radius: 999px;
+  background: rgba(34, 116, 101, 0.82);
+  padding: 5px 10px;
+  font-size: clamp(10px, 1.2vw, 12px);
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.store-banner-copy__title {
+  max-width: 10em;
+  font-size: clamp(23px, 3vw, 40px);
+  font-weight: 900;
+  line-height: 1.12;
+  word-break: keep-all;
+}
+
+.store-banner-copy__body {
+  max-width: 18em;
+  color: #fff3d6;
+  font-size: clamp(12px, 1.35vw, 16px);
+  font-weight: 800;
+  line-height: 1.35;
+  word-break: keep-all;
 }
 
 .store-banners__nav {
@@ -5203,6 +5265,18 @@ a.store-banner:hover {
   }
   .store-banner {
     aspect-ratio: 16 / 9;
+  }
+  .store-banner-copy {
+    width: 66%;
+    padding: 18px;
+    gap: 5px;
+  }
+  .store-banner-copy__title {
+    max-width: 8em;
+    font-size: clamp(22px, 7vw, 34px);
+  }
+  .store-banner-copy__body {
+    max-width: 14em;
   }
   .store-featured {
     grid-template-columns: 1fr;

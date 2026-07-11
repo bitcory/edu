@@ -173,6 +173,9 @@ function StoreAllPage() {
     <main className="store-shell">
       <header className="store-header">
         <Link href="/" className="home-btn" aria-label="처음으로" title="처음으로" />
+        <Link href="/store" className="store-back" title="북스토어 홈으로">
+          <ChevronLeft size={17} /> 북스토어
+        </Link>
         <h1 className="store-title">전체 책</h1>
         <div className="store-header__right">
           <Link href="/store" className="store-navlink">
