@@ -1,7 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { BookOpen, Eye, Heart, Library, Search, Users } from "lucide-react";
+import {
+  BookOpen, ChevronLeft, ChevronRight, Eye, Flame, Heart, Library, Search,
+  Sparkles, Users,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import BookViewer from "../components/BookViewer";
 import BookPreviewModal from "../components/BookPreviewModal";
@@ -38,12 +41,11 @@ export default function StorePage() {
   const [sort, setSort] = useState<"latest" | "popular">("latest");
   const [preview, setPreview] = useState<StoreBook | null>(null);
   const [authorPicker, setAuthorPicker] = useState(false);
-  // 점진 렌더: 처음엔 PAGE_SIZE 권만 카드로 그리고, 하단 센티널이 화면에
-  // 들어오면 PAGE_SIZE 씩 늘린다. 커버 <img loading="lazy"> 와 함께 —
+  // 페이지네이션: 한 페이지 PAGE_SIZE 권. 커버 <img loading="lazy"> 와 함께 —
   // 전체 커버를 한 번에 내려받아 스토어 첫 화면이 느리던 문제의 해법.
   const PAGE_SIZE = 12;
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const [page, setPage] = useState(0);
+  const gridTopRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     listStoreBooks().then(setBooks);
@@ -75,32 +77,23 @@ export default function StorePage() {
     return list;
   }, [books, query, cat, sort]);
 
-  // 검색어·카테고리·정렬이 바뀌면 점진 렌더를 처음부터 다시 시작.
+  // 검색어·카테고리·정렬이 바뀌면 1페이지로 복귀.
   useEffect(() => {
-    setVisibleCount(PAGE_SIZE);
+    setPage(0);
   }, [query, cat, sort]);
 
+  const pageCount = filtered ? Math.max(1, Math.ceil(filtered.length / PAGE_SIZE)) : 1;
+  const safePage = Math.min(page, pageCount - 1);
   const visible = useMemo(
-    () => (filtered ? filtered.slice(0, visibleCount) : null),
-    [filtered, visibleCount],
+    () => (filtered ? filtered.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE) : null),
+    [filtered, safePage],
   );
-  const hasMore = !!filtered && filtered.length > visibleCount;
 
-  // 하단 센티널이 보이면 다음 묶음 렌더 (무한 스크롤).
-  useEffect(() => {
-    const el = sentinelRef.current;
-    if (!el || !hasMore) return;
-    const io = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((e) => e.isIntersecting)) {
-          setVisibleCount((v) => v + PAGE_SIZE);
-        }
-      },
-      { rootMargin: "600px 0px" }, // 스크롤이 닿기 전에 미리 로드
-    );
-    io.observe(el);
-    return () => io.disconnect();
-  }, [hasMore]);
+  const goPage = useCallback((p: number) => {
+    setPage(p);
+    // 페이지를 넘기면 그리드 첫 줄이 보이게 스크롤 복귀.
+    gridTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
 
   // Show the full category menu (so it's always navigable). Categories with no
   // books just land on an empty state — existing books predate the category
@@ -182,21 +175,30 @@ export default function StorePage() {
       )}
 
       {books && books.length > 0 && (
-        <div className="store-cats" role="tablist" aria-label="정렬">
-          <button
-            type="button"
-            className={`store-cat${sort === "latest" ? " is-active" : ""}`}
-            onClick={() => setSort("latest")}
-          >
-            최신순
-          </button>
-          <button
-            type="button"
-            className={`store-cat${sort === "popular" ? " is-active" : ""}`}
-            onClick={() => setSort("popular")}
-          >
-            인기순
-          </button>
+        <div className="store-toolbar">
+          <div className="store-sorts" role="tablist" aria-label="정렬">
+            <button
+              type="button"
+              className={`store-sort${sort === "latest" ? " is-active" : ""}`}
+              onClick={() => setSort("latest")}
+            >
+              <Sparkles size={14} /> 최신순
+            </button>
+            <button
+              type="button"
+              className={`store-sort${sort === "popular" ? " is-active" : ""}`}
+              onClick={() => setSort("popular")}
+              title="좋아요와 조회수가 많은 순"
+            >
+              <Flame size={14} /> 인기순
+            </button>
+          </div>
+          <span className="store-count">
+            {cat ? `‘${cat}’ ` : ""}공개된 책 <b>{filtered?.length ?? 0}</b>권
+            {pageCount > 1 && (
+              <span className="store-count__page"> · {safePage + 1}/{pageCount} 페이지</span>
+            )}
+          </span>
         </div>
       )}
 
@@ -250,7 +252,7 @@ export default function StorePage() {
           </p>
         </div>
       ) : (
-        <div className="store-grid">
+        <div className="store-grid" ref={gridTopRef}>
           {(visible ?? []).map((b) => (
             <div key={b.id} className="store-card">
               <button
@@ -301,16 +303,41 @@ export default function StorePage() {
               </button>
             </div>
           ))}
-          {hasMore && (
-            <div
-              ref={sentinelRef}
-              className="store-sentinel"
-              aria-hidden
-              // grid 한 줄을 통째로 차지해 관찰이 안정적이도록.
-              style={{ gridColumn: "1 / -1", height: 1 }}
-            />
-          )}
         </div>
+      )}
+
+      {filtered && pageCount > 1 && (
+        <nav className="store-pager" aria-label="페이지">
+          <button
+            type="button"
+            className="store-pager__nav"
+            disabled={safePage === 0}
+            onClick={() => goPage(safePage - 1)}
+            aria-label="이전 페이지"
+          >
+            <ChevronLeft size={16} />
+          </button>
+          {Array.from({ length: pageCount }, (_, i) => (
+            <button
+              key={i}
+              type="button"
+              className={`store-pager__num${i === safePage ? " is-active" : ""}`}
+              onClick={() => goPage(i)}
+              aria-current={i === safePage ? "page" : undefined}
+            >
+              {i + 1}
+            </button>
+          ))}
+          <button
+            type="button"
+            className="store-pager__nav"
+            disabled={safePage === pageCount - 1}
+            onClick={() => goPage(safePage + 1)}
+            aria-label="다음 페이지"
+          >
+            <ChevronRight size={16} />
+          </button>
+        </nav>
       )}
 
       {authorPicker && (
