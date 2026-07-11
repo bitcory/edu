@@ -1279,7 +1279,6 @@ export default function StoryPage() {
           <Link href="/" className="story-back-btn" aria-label="홈으로" title="홈으로">
             <img src="/home-button-art.png" alt="" aria-hidden="true" />
           </Link>
-          <span className="story-kicker">스토리구성 · 그림책</span>
           <span className="story-lib-name">{libName}</span>
           <span className="story-backup-toggle" aria-label="프로젝트 백업과 복원">
             <button
@@ -1646,17 +1645,6 @@ export default function StoryPage() {
                         disabled={cutZipBusy}
                       >
                         <Download size={14} /> {cutZipBusy ? "ZIP 준비 중…" : "전체 다운로드"}
-                      </button>
-                      <button
-                        type="button"
-                        className="story-mini story-mini--ghost story-match-btn"
-                        title={scriptParsed ? "파싱된 본문 대본 복사" : "먼저 우측 상단 본문대본 버튼으로 대본을 등록하세요"}
-                        onClick={() => {
-                          if (scriptParsed) copyText(scriptParsed);
-                          else setScriptModalOpen(true);
-                        }}
-                      >
-                        <ScrollText size={14} /> 대본추출
                       </button>
                       <button
                         type="button"
