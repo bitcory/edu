@@ -1,14 +1,13 @@
 import { redirect } from "next/navigation";
 import { auth } from "../../auth";
-import CredentialsSignInForm from "./CredentialsSignInForm";
+import SignUpForm from "./SignUpForm";
 
-export default async function SignInPage({
+export default async function SignUpPage({
   searchParams,
 }: {
   searchParams: Promise<{ callbackUrl?: string }>;
 }) {
   const { callbackUrl } = await searchParams;
-  // 이미 로그인 상태면 통과.
   const session = await auth();
   if (session) redirect(callbackUrl || "/");
 
@@ -16,9 +15,9 @@ export default async function SignInPage({
     <main className="auth-shell">
       <div className="auth-card">
         <span className="auth-cover-band" />
-        <h1 className="auth-title">MAGIC BOOK</h1>
-        <p className="auth-sub">로그인하고 그림책을 펼쳐 보세요.</p>
-        <CredentialsSignInForm callbackUrl={callbackUrl || "/"} />
+        <h1 className="auth-title">회원가입</h1>
+        <p className="auth-sub">아이디와 비밀번호만 있으면 시작할 수 있어요.</p>
+        <SignUpForm callbackUrl={callbackUrl || "/"} />
       </div>
     </main>
   );

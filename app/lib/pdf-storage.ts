@@ -1,43 +1,143 @@
-import {
-  S3Client,
-  PutObjectCommand,
-  GetObjectCommand,
-  DeleteObjectCommand,
-} from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import path from "node:path";
 
 /**
- * PDF blob storage on Cloudflare R2 via the S3-compatible API. The DB only
- * holds the book row + id; the PDF bytes live in R2 under `pdfs/<id>.pdf`.
+ * Blob storage on the local filesystem. This app is self-hosted (Mac mini +
+ * cloudflared), so object storage buys nothing — the bytes live under
+ * STORAGE_DIR using the same key layout R2 used (`pdfs/<id>.pdf`,
+ * `snapshots/<id>.json`, …), which keeps every key already recorded in the DB
+ * valid. Server-only; do NOT import from client components.
  *
- * Env (set in .env.local / host): R2_ACCOUNT_ID, R2_ACCESS_KEY_ID,
- * R2_SECRET_ACCESS_KEY, R2_BUCKET. The client is created lazily so the module
- * can be imported even before R2 is configured — ops throw a clear error then.
- * Server-only; do NOT import from client components.
+ * The `presign*` functions keep their old contract on purpose: they return a
+ * URL the browser can GET (or PUT to) without extra headers. Instead of an S3
+ * signature the URL carries an HMAC over `mode|key|expiry|filename`, verified
+ * by app/api/files/[...key]/route.ts. Same capability-URL semantics as before —
+ * holding the URL grants access to that one key until it expires — so callers
+ * and all 23 consumer modules did not have to change.
+ *
+ * NOTE: that route is deliberately excluded from proxy.ts's matcher. With proxy
+ * active Next buffers the whole request body in memory (10MB default) and
+ * SILENTLY TRUNCATES beyond it — which would corrupt large PDF/MP3 uploads.
+ * The route authenticates via the URL signature instead of the session.
  */
 
-let _client: S3Client | null = null;
-let _bucket: string | null = null;
+/** Key prefixes this module is allowed to touch — guards path traversal. */
+const ALLOWED_PREFIXES = [
+  "pdfs/",
+  "snapshots/",
+  "covers/",
+  "story/",
+  "banners/",
+  "authors/",
+  "audio/",
+  "narration/",
+  "bgm/",
+] as const;
 
-function r2(): { client: S3Client; bucket: string } {
-  if (_client && _bucket) return { client: _client, bucket: _bucket };
-  const accountId = process.env.R2_ACCOUNT_ID;
-  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-  const bucket = process.env.R2_BUCKET;
-  if (!accountId || !accessKeyId || !secretAccessKey || !bucket) {
+export function storageRoot(): string {
+  const dir = process.env.STORAGE_DIR;
+  if (!dir) {
     throw new Error(
-      "R2 is not configured. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, " +
-        "R2_SECRET_ACCESS_KEY, R2_BUCKET in .env.local.",
+      "STORAGE_DIR is not set. Point it at the blob storage root in .env.local (and the host's env).",
     );
   }
-  _client = new S3Client({
-    region: "auto",
-    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
-    credentials: { accessKeyId, secretAccessKey },
-  });
-  _bucket = bucket;
-  return { client: _client, bucket: _bucket };
+  return dir;
+}
+
+/** Reject anything that could escape the storage root or hit an unknown area. */
+export function assertValidKey(key: string): void {
+  if (
+    !key ||
+    key.startsWith("/") ||
+    key.includes("..") ||
+    key.includes("\0") ||
+    !ALLOWED_PREFIXES.some((p) => key.startsWith(p))
+  ) {
+    throw new Error(`invalid storage key: ${key}`);
+  }
+}
+
+function fileFor(key: string): string {
+  assertValidKey(key);
+  return path.join(storageRoot(), key);
+}
+
+function signingSecret(): string {
+  const s = process.env.FILE_SIGNING_SECRET;
+  if (!s) {
+    throw new Error(
+      "FILE_SIGNING_SECRET is not set. Add it to .env.local (and the host's env).",
+    );
+  }
+  return s;
+}
+
+type Mode = "r" | "w";
+
+function signature(mode: Mode, key: string, exp: number, dl: string): string {
+  return createHmac("sha256", signingSecret())
+    .update(`${mode}|${key}|${exp}|${dl}`)
+    .digest("base64url");
+}
+
+/** Constant-time check used by the file route. Never throws on bad input. */
+export function verifySignature(
+  mode: Mode,
+  key: string,
+  exp: number,
+  dl: string,
+  sig: string,
+): boolean {
+  if (!Number.isFinite(exp) || exp < Date.now()) return false;
+  let expected: string;
+  try {
+    expected = signature(mode, key, exp, dl);
+  } catch {
+    return false;
+  }
+  const a = Buffer.from(expected);
+  const b = Buffer.from(sig);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/** Build the capability URL the browser uses to read or write one key. */
+function signUrl(
+  mode: Mode,
+  key: string,
+  expiresInSeconds: number,
+  downloadName = "",
+): string {
+  assertValidKey(key);
+  const exp = Date.now() + expiresInSeconds * 1000;
+  const sig = signature(mode, key, exp, downloadName);
+  const params = new URLSearchParams({ m: mode, exp: String(exp), sig });
+  if (downloadName) params.set("dl", downloadName);
+  const encoded = key.split("/").map(encodeURIComponent).join("/");
+  return `/api/files/${encoded}?${params.toString()}`;
+}
+
+async function writeKey(key: string, body: Buffer | string): Promise<void> {
+  const file = fileFor(key);
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, body);
+}
+
+async function readKey(key: string): Promise<Buffer | null> {
+  try {
+    return await readFile(fileFor(key));
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException)?.code === "ENOENT") return null;
+    throw err;
+  }
+}
+
+async function deleteKey(key: string): Promise<void> {
+  try {
+    await rm(fileFor(key), { force: true });
+  } catch {
+    /* best-effort cleanup */
+  }
 }
 
 function keyFor(id: string): string {
@@ -45,45 +145,26 @@ function keyFor(id: string): string {
   return `pdfs/${id}.pdf`;
 }
 
-/**
- * Presigned PUT URL so the browser can upload the PDF *directly* to R2,
- * bypassing the serverless function body limit (Vercel caps request bodies at
- * ~4.5MB). The URL is short-lived and scoped to this one object key. No
- * ContentType is signed, so the client may PUT the bytes with no special
- * headers. Requires bucket CORS to allow PUT from the app origin.
- */
+/** Short-lived PUT URL so the browser can upload the PDF for this one key. */
 export async function presignPdfUpload(
   id: string,
   expiresInSeconds = 300,
 ): Promise<string> {
-  const { client, bucket } = r2();
-  return getSignedUrl(
-    client,
-    new PutObjectCommand({ Bucket: bucket, Key: keyFor(id) }),
-    { expiresIn: expiresInSeconds },
-  );
+  return signUrl("w", keyFor(id), expiresInSeconds);
 }
 
 /**
- * Editor snapshots (Fabric JSON with embedded images) can exceed Vercel's
- * ~4.5MB request-body limit. So the client uploads big snapshots straight to
- * R2 (presigned PUT under `snapshots/<uuid>.json`) and the write routes read
- * them back server-side (no request-body limit there) before storing in the
- * DB — read paths stay unchanged. The key is an unguessable UUID; reads are
- * restricted to the `snapshots/` prefix so this can't be used to fetch PDFs.
+ * Editor snapshots (Fabric JSON with embedded images) are uploaded to their own
+ * temp key first, then read back server-side by the write routes before being
+ * stored on the row. The key is an unguessable UUID; reads are restricted to
+ * the `snapshots/` prefix so this can't be used to fetch PDFs.
  */
 export async function presignSnapshotUpload(): Promise<{
   key: string;
   url: string;
 }> {
-  const { client, bucket } = r2();
-  const key = `snapshots/${globalThis.crypto.randomUUID()}.json`;
-  const url = await getSignedUrl(
-    client,
-    new PutObjectCommand({ Bucket: bucket, Key: key }),
-    { expiresIn: 300 },
-  );
-  return { key, url };
+  const key = `snapshots/${randomUUID()}.json`;
+  return { key, url: signUrl("w", key, 300) };
 }
 
 /** Read an uploaded snapshot JSON back (server-side). Returns null if absent. */
@@ -91,24 +172,11 @@ export async function readSnapshotJson(key: string): Promise<string | null> {
   if (!key.startsWith("snapshots/")) {
     throw new Error("invalid snapshot key");
   }
-  const { client, bucket } = r2();
-  try {
-    const res = await client.send(
-      new GetObjectCommand({ Bucket: bucket, Key: key }),
-    );
-    if (!res.Body) return null;
-    return await res.Body.transformToString();
-  } catch (err: unknown) {
-    const e = err as { name?: string; $metadata?: { httpStatusCode?: number } };
-    if (e?.name === "NoSuchKey" || e?.$metadata?.httpStatusCode === 404) {
-      return null;
-    }
-    throw err;
-  }
+  const buf = await readKey(key);
+  return buf ? buf.toString("utf8") : null;
 }
 
-/** Presigned GET URL so the browser can fetch a book's snapshot JSON straight
- * from R2 (free egress, no Vercel proxy). Requires bucket CORS to allow GET. */
+/** GET URL so the browser can fetch a book's snapshot JSON directly. */
 export async function presignSnapshotDownload(
   key: string,
   expiresInSeconds = 300,
@@ -116,23 +184,13 @@ export async function presignSnapshotDownload(
   if (!key.startsWith("snapshots/")) {
     throw new Error("invalid snapshot key");
   }
-  const { client, bucket } = r2();
-  return getSignedUrl(
-    client,
-    new GetObjectCommand({ Bucket: bucket, Key: key }),
-    { expiresIn: expiresInSeconds },
-  );
+  return signUrl("r", key, expiresInSeconds);
 }
 
-/** Best-effort cleanup of a temp snapshot object after it's stored in the DB. */
+/** Best-effort cleanup of a temp snapshot file after it's stored in the DB. */
 export async function deleteSnapshot(key: string): Promise<void> {
   if (!key.startsWith("snapshots/")) return;
-  try {
-    const { client, bucket } = r2();
-    await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
-  } catch {
-    /* ignore */
-  }
+  await deleteKey(key);
 }
 
 /** Stable per-book snapshot key — overwritten on each save (no key churn). */
@@ -140,30 +198,22 @@ export function bookSnapshotKey(bookId: string): string {
   return `snapshots/${bookId}.json`;
 }
 
-/** Server-side write of a book's page snapshot JSON to R2 under its stable key.
+/** Server-side write of a book's page snapshot JSON under its stable key.
  * Returns the key so the caller can record it on the row. */
 export async function saveSnapshot(
   bookId: string,
   json: string,
 ): Promise<string> {
-  const { client, bucket } = r2();
   const key = bookSnapshotKey(bookId);
-  await client.send(
-    new PutObjectCommand({
-      Bucket: bucket,
-      Key: key,
-      Body: json,
-      ContentType: "application/json",
-    }),
-  );
+  await writeKey(key, json);
   return key;
 }
 
 /**
  * Book cover images. Covers used to be base64 data URLs stored in the DB and
- * inlined into every list response (~140KB × every book × every store visit,
- * all billed Vercel origin transfer). Now the bytes live in R2 under a stable
- * per-book key and responses carry a presigned GET URL instead.
+ * inlined into every list response (~140KB × every book × every store visit).
+ * Now the bytes live on disk under a stable per-book key and responses carry a
+ * signed GET URL instead.
  */
 function coverKeyFor(bookId: string): string {
   return `covers/${bookId}.jpg`;
@@ -177,47 +227,26 @@ export async function saveCoverFromDataUrl(
 ): Promise<string | null> {
   const m = /^data:(image\/[\w.+-]+);base64,(.+)$/.exec(dataUrl);
   if (!m) return null;
-  const { client, bucket } = r2();
   const key = coverKeyFor(bookId);
-  await client.send(
-    new PutObjectCommand({
-      Bucket: bucket,
-      Key: key,
-      Body: Buffer.from(m[2], "base64"),
-      ContentType: m[1],
-    }),
-  );
+  await writeKey(key, Buffer.from(m[2], "base64"));
   return key;
 }
 
-/** Presigned GET URL for a cover image. 1h: list pages render <img> tags that
- * may be (re)loaded well after the fetch, so don't cut it too close. */
+/** GET URL for a cover image. 1h: list pages render <img> tags that may be
+ * (re)loaded well after the fetch, so don't cut it too close. */
 export async function presignCoverDownload(
   key: string,
   expiresInSeconds = 3600,
 ): Promise<string> {
-  const { client, bucket } = r2();
-  return getSignedUrl(
-    client,
-    new GetObjectCommand({ Bucket: bucket, Key: key }),
-    { expiresIn: expiresInSeconds },
-  );
+  return signUrl("r", key, expiresInSeconds);
 }
 
 export async function deleteCover(key: string): Promise<void> {
   if (!key.startsWith("covers/")) return;
-  try {
-    const { client, bucket } = r2();
-    await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
-  } catch {
-    /* ignore */
-  }
+  await deleteKey(key);
 }
 
-/** Presigned PUT for a story image under story/<uuid>.<ext> — the browser
- * uploads straight to R2 so image bytes never pass through a Vercel Function
- * (they used to arrive base64-encoded in the save-image body, which counted
- * the whole image against Fast Origin Transfer). */
+/** PUT URL for a story image under story/<uuid>.<ext>. */
 export async function presignStoryUpload(
   contentType: string,
   expiresInSeconds = 600,
@@ -225,18 +254,12 @@ export async function presignStoryUpload(
   const m = /^image\/([\w.+-]+)$/.exec(contentType);
   if (!m) throw new Error("invalid image content type");
   const ext = (m[1] || "png").split("+")[0];
-  const { client, bucket } = r2();
-  const key = `story/${globalThis.crypto.randomUUID()}.${ext}`;
-  const url = await getSignedUrl(
-    client,
-    new PutObjectCommand({ Bucket: bucket, Key: key, ContentType: contentType }),
-    { expiresIn: expiresInSeconds },
-  );
-  return { key, url };
+  const key = `story/${randomUUID()}.${ext}`;
+  return { key, url: signUrl("w", key, expiresInSeconds) };
 }
 
-/** Presigned PUT for a store home event banner image under banners/<uuid>.<ext>
- * — admin only (라우트에서 가드), browser → R2 direct upload. */
+/** PUT URL for a store home event banner image under banners/<uuid>.<ext>
+ * — admin only (라우트에서 가드). */
 export async function presignBannerUpload(
   contentType: string,
   expiresInSeconds = 600,
@@ -244,78 +267,45 @@ export async function presignBannerUpload(
   const m = /^image\/([\w.+-]+)$/.exec(contentType);
   if (!m) throw new Error("invalid image content type");
   const ext = (m[1] || "png").split("+")[0];
-  const { client, bucket } = r2();
-  const key = `banners/${globalThis.crypto.randomUUID()}.${ext}`;
-  const url = await getSignedUrl(
-    client,
-    new PutObjectCommand({ Bucket: bucket, Key: key, ContentType: contentType }),
-    { expiresIn: expiresInSeconds },
-  );
-  return { key, url };
+  const key = `banners/${randomUUID()}.${ext}`;
+  return { key, url: signUrl("w", key, expiresInSeconds) };
 }
 
-/** Presigned GET URL for a banner image (banners/ prefix only). */
+/** GET URL for a banner image (banners/ prefix only). */
 export async function presignBannerDownload(
   key: string,
   expiresInSeconds = 3600,
 ): Promise<string> {
   if (!key.startsWith("banners/")) throw new Error("invalid banner key");
-  const { client, bucket } = r2();
-  return getSignedUrl(
-    client,
-    new GetObjectCommand({ Bucket: bucket, Key: key }),
-    { expiresIn: expiresInSeconds },
-  );
+  return signUrl("r", key, expiresInSeconds);
 }
 
-/** Delete a banner image object (row deletion 시 함께 호출). */
+/** Delete a banner image (row deletion 시 함께 호출). */
 export async function deleteBannerImage(key: string): Promise<void> {
   if (!key.startsWith("banners/")) return;
-  try {
-    const { client, bucket } = r2();
-    await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
-  } catch {
-    /* ignore */
-  }
+  await deleteKey(key);
 }
 
-/** Presigned GET URL for a story image (story/ prefix only). Pass downloadName
- * to force a browser download via Content-Disposition (no CORS needed). */
+/** GET URL for a story image (story/ prefix only). Pass downloadName to force
+ * a browser download via Content-Disposition. */
 export async function presignStoryDownload(
   key: string,
   expiresInSeconds = 3600,
   downloadName?: string,
 ): Promise<string> {
   if (!key.startsWith("story/")) throw new Error("invalid story key");
-  const { client, bucket } = r2();
-  return getSignedUrl(
-    client,
-    new GetObjectCommand({
-      Bucket: bucket,
-      Key: key,
-      ...(downloadName
-        ? { ResponseContentDisposition: `attachment; filename="${downloadName}"` }
-        : {}),
-    }),
-    { expiresIn: expiresInSeconds },
-  );
+  return signUrl("r", key, expiresInSeconds, downloadName ?? "");
 }
 
 /** Store a square author avatar data URL under authors/<uuid>.<ext>. */
-export async function saveAuthorAvatarFromDataUrl(dataUrl: string): Promise<string | null> {
+export async function saveAuthorAvatarFromDataUrl(
+  dataUrl: string,
+): Promise<string | null> {
   const m = /^data:(image\/[\w.+-]+);base64,(.+)$/.exec(dataUrl);
   if (!m) return null;
   const ext = (m[1].split("/")[1] || "png").split("+")[0];
-  const { client, bucket } = r2();
-  const key = `authors/${globalThis.crypto.randomUUID()}.${ext}`;
-  await client.send(
-    new PutObjectCommand({
-      Bucket: bucket,
-      Key: key,
-      Body: Buffer.from(m[2], "base64"),
-      ContentType: m[1],
-    }),
-  );
+  const key = `authors/${randomUUID()}.${ext}`;
+  await writeKey(key, Buffer.from(m[2], "base64"));
   return key;
 }
 
@@ -324,55 +314,24 @@ export async function presignAuthorAvatarDownload(
   expiresInSeconds = 3600,
 ): Promise<string> {
   if (!key.startsWith("authors/")) throw new Error("invalid author avatar key");
-  const { client, bucket } = r2();
-  return getSignedUrl(
-    client,
-    new GetObjectCommand({ Bucket: bucket, Key: key }),
-    { expiresIn: expiresInSeconds },
-  );
+  return signUrl("r", key, expiresInSeconds);
 }
 
 export async function savePdf(id: string, bytes: Uint8Array): Promise<void> {
-  const { client, bucket } = r2();
-  await client.send(
-    new PutObjectCommand({
-      Bucket: bucket,
-      Key: keyFor(id),
-      Body: bytes,
-      ContentType: "application/pdf",
-    }),
-  );
+  await writeKey(keyFor(id), Buffer.from(bytes));
 }
 
-/** Presigned GET URL so the browser can download the PDF straight from R2
- * (free egress, no Vercel proxy). Requires bucket CORS to allow GET. */
+/** GET URL so the browser can download the PDF directly. */
 export async function presignPdfDownload(
   id: string,
   expiresInSeconds = 300,
 ): Promise<string> {
-  const { client, bucket } = r2();
-  return getSignedUrl(
-    client,
-    new GetObjectCommand({ Bucket: bucket, Key: keyFor(id) }),
-    { expiresIn: expiresInSeconds },
-  );
+  return signUrl("r", keyFor(id), expiresInSeconds);
 }
 
 export async function readPdf(id: string): Promise<Uint8Array | null> {
-  const { client, bucket } = r2();
-  try {
-    const res = await client.send(
-      new GetObjectCommand({ Bucket: bucket, Key: keyFor(id) }),
-    );
-    if (!res.Body) return null;
-    return await res.Body.transformToByteArray();
-  } catch (err: unknown) {
-    const e = err as { name?: string; $metadata?: { httpStatusCode?: number } };
-    if (e?.name === "NoSuchKey" || e?.$metadata?.httpStatusCode === 404) {
-      return null;
-    }
-    throw err;
-  }
+  const buf = await readKey(keyFor(id));
+  return buf ? new Uint8Array(buf) : null;
 }
 
 // ---- Background music (MP3) per book, at audio/<id>.mp3 ----
@@ -380,50 +339,25 @@ function audioKeyFor(id: string): string {
   return `audio/${id}.mp3`;
 }
 
-/** Presigned PUT so the browser uploads the MP3 straight to R2. */
+/** PUT URL so the browser uploads the MP3 for this book. */
 export async function presignAudioUpload(
   id: string,
 ): Promise<{ key: string; url: string }> {
-  const { client, bucket } = r2();
   const key = audioKeyFor(id);
-  const url = await getSignedUrl(
-    client,
-    new PutObjectCommand({ Bucket: bucket, Key: key }),
-    { expiresIn: 300 },
-  );
-  return { key, url };
+  return { key, url: signUrl("w", key, 300) };
 }
 
-/** Presigned GET so an <audio> element can stream it (no CORS needed). */
+/** GET URL so an <audio> element can stream it (Range supported by the route). */
 export async function presignAudioDownload(key: string): Promise<string> {
-  const { client, bucket } = r2();
-  return getSignedUrl(
-    client,
-    new GetObjectCommand({ Bucket: bucket, Key: key }),
-    { expiresIn: 3600 },
-  );
+  return signUrl("r", key, 3600);
 }
 
 export async function deleteAudio(id: string): Promise<void> {
-  try {
-    const { client, bucket } = r2();
-    await client.send(
-      new DeleteObjectCommand({ Bucket: bucket, Key: audioKeyFor(id) }),
-    );
-  } catch {
-    /* ignore */
-  }
+  await deleteKey(audioKeyFor(id));
 }
 
 export async function deletePdf(id: string): Promise<void> {
-  try {
-    const { client, bucket } = r2();
-    await client.send(
-      new DeleteObjectCommand({ Bucket: bucket, Key: keyFor(id) }),
-    );
-  } catch {
-    /* ignore — best-effort cleanup */
-  }
+  await deleteKey(keyFor(id));
 }
 
 // ---- Per-page narration (MP3), at narration/<bookId>/<pageIndex>.mp3 ----
@@ -431,38 +365,23 @@ export function narrationKeyFor(bookId: string, index: number): string {
   return `narration/${bookId}/${index}.mp3`;
 }
 
-/** Presigned PUT so the browser uploads a page's narration straight to R2. */
+/** PUT URL so the browser uploads a page's narration. */
 export async function presignNarrationUpload(
   bookId: string,
   index: number,
 ): Promise<{ key: string; url: string }> {
-  const { client, bucket } = r2();
   const key = narrationKeyFor(bookId, index);
-  const url = await getSignedUrl(
-    client,
-    new PutObjectCommand({ Bucket: bucket, Key: key }),
-    { expiresIn: 300 },
-  );
-  return { key, url };
+  return { key, url: signUrl("w", key, 300) };
 }
 
-/** Presigned GET so an <audio> element can stream a page's narration. */
+/** GET URL so an <audio> element can stream a page's narration. */
 export async function presignNarrationDownload(key: string): Promise<string> {
-  const { client, bucket } = r2();
-  return getSignedUrl(
-    client,
-    new GetObjectCommand({ Bucket: bucket, Key: key }),
-    { expiresIn: 3600 },
-  );
+  return signUrl("r", key, 3600);
 }
 
 export async function deleteNarration(key: string): Promise<void> {
-  try {
-    const { client, bucket } = r2();
-    await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
-  } catch {
-    /* ignore */
-  }
+  if (!key.startsWith("narration/")) return;
+  await deleteKey(key);
 }
 
 // ---- Shared background-music pool (MP3), at bgm/<trackId>.mp3 ----
@@ -470,35 +389,20 @@ function bgmKeyFor(id: string): string {
   return `bgm/${id}.mp3`;
 }
 
-/** Presigned PUT so an author uploads a pool track straight to R2. */
+/** PUT URL so an author uploads a pool track. */
 export async function presignBgmUpload(
   id: string,
 ): Promise<{ key: string; url: string }> {
-  const { client, bucket } = r2();
   const key = bgmKeyFor(id);
-  const url = await getSignedUrl(
-    client,
-    new PutObjectCommand({ Bucket: bucket, Key: key }),
-    { expiresIn: 300 },
-  );
-  return { key, url };
+  return { key, url: signUrl("w", key, 300) };
 }
 
-/** Presigned GET so an <audio> element can stream a pool track. */
+/** GET URL so an <audio> element can stream a pool track. */
 export async function presignBgmDownload(key: string): Promise<string> {
-  const { client, bucket } = r2();
-  return getSignedUrl(
-    client,
-    new GetObjectCommand({ Bucket: bucket, Key: key }),
-    { expiresIn: 3600 },
-  );
+  return signUrl("r", key, 3600);
 }
 
 export async function deleteBgm(key: string): Promise<void> {
-  try {
-    const { client, bucket } = r2();
-    await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
-  } catch {
-    /* ignore */
-  }
+  if (!key.startsWith("bgm/")) return;
+  await deleteKey(key);
 }

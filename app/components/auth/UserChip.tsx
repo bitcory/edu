@@ -3,16 +3,14 @@
 import Link from "next/link";
 import { LogOut, Shield } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
-import { isAdminEmail } from "../../lib/admin-emails";
 
 export default function UserChip() {
   const { data: session, status } = useSession();
   const user = session?.user;
   if (status === "loading" || !user) return null;
 
-  const email = user.email ?? undefined;
-  const name = user.name || email?.split("@")[0] || "사용자";
-  const admin = isAdminEmail(email);
+  const name = user.name || user.username || "사용자";
+  const admin = user.isAdmin === true;
 
   return (
     <div className="user-chip">

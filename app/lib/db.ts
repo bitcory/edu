@@ -1,9 +1,11 @@
-import { neon } from "@neondatabase/serverless";
+import { Pool } from "pg";
 
 /**
- * Server-only Postgres (Neon) access. Set DATABASE_URL to the Neon *pooled*
- * connection string (host contains `-pooler`). The HTTP driver runs each query
- * as a single stateless request — ideal for serverless (Vercel).
+ * Server-only Postgres access over a local connection pool. Set DATABASE_URL to
+ * the local instance, e.g. `postgresql://toolb@127.0.0.1:5432/edu`.
+ *
+ * This app is self-hosted (Mac mini + cloudflared), not serverless, so a normal
+ * long-lived TCP pool is the right driver — no per-query HTTP round trip.
  *
  * To keep the repos backend-agnostic, `db.execute()` mimics the old libSQL
  * interface: it takes `?`-style placeholders and `{ rows }` out, converting
@@ -13,21 +15,25 @@ import { neon } from "@neondatabase/serverless";
 export type Row = Record<string, unknown>;
 export type ExecuteResult = { rows: Row[] };
 
-// Lazy client: the env check + connection are deferred to the first query, so
+// Lazy pool: the env check + connection are deferred to the first query, so
 // importing this module during `next build` (page-data collection) never throws
 // even if DATABASE_URL is absent at build time. The error only surfaces at
 // runtime if a query actually runs without the var set.
-let _sql: ReturnType<typeof neon> | null = null;
-function getSql(): ReturnType<typeof neon> {
-  if (_sql) return _sql;
+//
+// Cached on globalThis because `next dev` re-evaluates modules on HMR — a
+// module-local variable would leak a new pool (and its sockets) per edit.
+const globalForPool = globalThis as unknown as { _eduPool?: Pool };
+
+function getPool(): Pool {
+  if (globalForPool._eduPool) return globalForPool._eduPool;
   const url = process.env.DATABASE_URL;
   if (!url) {
     throw new Error(
-      "DATABASE_URL is not set. Add the Neon pooled connection string to .env.local (and to the host's env).",
+      "DATABASE_URL is not set. Add the local Postgres connection string to .env.local (and to the host's env).",
     );
   }
-  _sql = neon(url);
-  return _sql;
+  globalForPool._eduPool = new Pool({ connectionString: url, max: 10 });
+  return globalForPool._eduPool;
 }
 
 /** Rewrite SQLite-style `?` placeholders to Postgres `$1, $2, …`. */
@@ -40,13 +46,13 @@ export const db = {
   async execute(
     query: string | { sql: string; args?: unknown[] },
   ): Promise<ExecuteResult> {
-    const sql = getSql();
+    const pool = getPool();
     if (typeof query === "string") {
-      const rows = (await sql.query(query)) as Row[];
-      return { rows };
+      const res = await pool.query(query);
+      return { rows: res.rows as Row[] };
     }
-    const rows = (await sql.query(toPg(query.sql), query.args ?? [])) as Row[];
-    return { rows };
+    const res = await pool.query(toPg(query.sql), query.args ?? []);
+    return { rows: res.rows as Row[] };
   },
 };
 
@@ -55,6 +61,20 @@ let schemaReady: Promise<void> | null = null;
 export function ensureSchema(): Promise<void> {
   if (!schemaReady) {
     schemaReady = (async () => {
+      // Local accounts (아이디 + 비밀번호). There is no external identity
+      // provider — see app/lib/users-repo.ts. `user_id` is the id every other
+      // table's owner_id / user_id column refers to.
+      await db.execute(
+        `CREATE TABLE IF NOT EXISTS users (
+          user_id       TEXT PRIMARY KEY,
+          username      TEXT NOT NULL UNIQUE,
+          password_hash TEXT NOT NULL,
+          display_name  TEXT NOT NULL,
+          is_admin      INTEGER NOT NULL DEFAULT 0,
+          created_at    BIGINT NOT NULL
+        )`,
+      );
+
       // NOTE: timestamps use BIGINT — they hold Date.now() (epoch ms, ~1.7e12),
       // which overflows Postgres' 4-byte INTEGER (max ~2.1e9).
       await db.execute(

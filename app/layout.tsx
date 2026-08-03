@@ -2,8 +2,10 @@ import type { Metadata, Viewport } from "next";
 import { SessionProvider } from "next-auth/react";
 import { auth } from "../auth";
 import "./globals.css";
+import PwaSetup from "./components/PwaSetup";
+import OrientationGate from "./components/OrientationGate";
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://tbbook.aitoolb.com";
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://kid.toolb.kr";
 const title = "우리 책장";
 const description = "PDF를 업로드해서 책처럼 넘겨 볼 수 있는 어린이 그림책 뷰어";
 const socialImage = "/social-thumbnail-20260529.png";
@@ -43,6 +45,13 @@ export const metadata: Metadata = {
     ],
     apple: [{ url: "/apple-icon.png", sizes: "180x180", type: "image/png" }],
   },
+  manifest: "/manifest.webmanifest",
+  // iOS "홈 화면에 추가" → 주소창 없는 전체화면 실행.
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title,
+  },
 };
 
 export const viewport: Viewport = {
@@ -50,6 +59,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
+  themeColor: "#f06f5f",
 };
 
 export default async function RootLayout({
@@ -62,7 +72,11 @@ export default async function RootLayout({
   return (
     <SessionProvider session={session}>
       <html lang="ko" suppressHydrationWarning>
-        <body suppressHydrationWarning>{children}</body>
+        <body suppressHydrationWarning>
+          {children}
+          <OrientationGate />
+          <PwaSetup />
+        </body>
       </html>
     </SessionProvider>
   );

@@ -732,27 +732,29 @@ body {
 }
 
 /* Phones / small tablets in LANDSCAPE (wide but short). The spread is limited
-   by height, so trim top/bottom padding to keep the book as tall (= big) as the
-   short height allows. Sides stay symmetric so it's centered; the bar overlays
-   the bottom strip without needing a tall reserve. */
+   by HEIGHT here (a 2-page spread is ~1.4:1 but the screen is ~2.2:1), so every
+   pixel of vertical padding directly shrinks the book — trim top/bottom to the
+   minimum. Sides don't bind the book size (it's height-limited and centered), so
+   they're kept small just to avoid the shadow touching the edge. The compact bar
+   sits at bottom:8 + ~36px tall ≈ 44px, so 48px bottom padding just clears it. */
 @media (min-width: 721px) and (orientation: landscape) and (max-height: 600px) {
   .bv-shell {
-    padding: 8px clamp(72px, 10vw, 100px) 64px;
+    padding: 4px clamp(8px, 2vw, 24px) 48px;
   }
 
   /* Compact the bar so it doesn't eat the short height. */
   .bv-controls {
-    bottom: 10px;
+    bottom: 8px;
     gap: 5px;
-    padding: 5px;
+    padding: 4px;
   }
   .bv-ctl {
-    height: 38px;
+    height: 36px;
     padding: 0 12px;
     font-size: 12px;
   }
   .bv-ctl--icon {
-    width: 38px;
+    width: 36px;
     padding: 0;
   }
 }
@@ -2504,6 +2506,96 @@ textarea.ed-input {
   font-size: 13px;
   text-decoration: underline;
   cursor: pointer;
+}
+
+/* 아이디/비밀번호 로그인·회원가입 폼 */
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  margin-top: 4px;
+  text-align: left;
+}
+
+.auth-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.auth-field > span {
+  font-size: 13px;
+  font-weight: 700;
+  color: #72583f;
+}
+
+.auth-field > input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid rgba(60, 40, 24, 0.18);
+  border-radius: 14px;
+  background: #fff;
+  color: #3a2a1d;
+  /* 16px 미만이면 iOS 사파리가 입력 시 화면을 확대한다 — 태블릿 거치에서 치명적. */
+  font-size: 16px;
+}
+
+.auth-field > input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(240, 111, 95, 0.18);
+}
+
+.auth-field > small {
+  font-size: 12px;
+  color: #9a795a;
+}
+
+.auth-error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(214, 69, 55, 0.1);
+  color: #b13a2c;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.auth-submit {
+  width: 100%;
+  padding: 13px 18px;
+  border: 0;
+  border-radius: 14px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  color: #fff;
+  font-weight: 800;
+  font-size: 15px;
+  cursor: pointer;
+  box-shadow: 0 10px 22px -14px rgba(0, 0, 0, 0.5);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.auth-submit:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 26px -14px rgba(0, 0, 0, 0.55);
+}
+
+.auth-submit:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.auth-alt {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: #72583f;
+  text-align: center;
+}
+
+.auth-alt a {
+  color: #b1512c;
+  font-weight: 700;
 }
 
 /* ---------- User chip ---------- */
@@ -8140,4 +8232,72 @@ a.store-banner:hover {
   .story-modal-backdrop .story-match-col-emo { grid-column: 2; }
   .story-modal-backdrop .story-match-col-chars { grid-column: 1 / -1; }
   .story-modal-backdrop .story-match-head-row { display: none; }
+}
+
+/* ==========================================================================
+   Tablet-only kiosk PWA — landscape lock + kiosk polish
+   ========================================================================== */
+
+/* Suppress pull-to-refresh / rubber-band bounce on tablets. */
+html,
+body {
+  overscroll-behavior: none;
+}
+
+/* Landscape-only guard. Hidden by default; shown as a full-screen overlay
+   whenever the device is in portrait — the reliable cross-platform fallback
+   (iOS Safari ignores the manifest's orientation). */
+.orientation-gate {
+  display: none;
+}
+
+@media (orientation: portrait) {
+  .orientation-gate {
+    position: fixed;
+    inset: 0;
+    z-index: 2147483647;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px;
+    text-align: center;
+    background: radial-gradient(ellipse at top, var(--bg-2), var(--bg) 60%);
+    color: var(--ink);
+    font-family: var(--font-main);
+  }
+
+  .orientation-gate__inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    max-width: 420px;
+  }
+
+  .orientation-gate__icon {
+    font-size: clamp(56px, 18vw, 96px);
+    line-height: 1;
+    animation: orientation-rotate-hint 2.4s ease-in-out infinite;
+  }
+
+  .orientation-gate__title {
+    margin: 0;
+    font-size: clamp(20px, 6vw, 28px);
+    font-weight: 800;
+  }
+
+  .orientation-gate__sub {
+    margin: 0;
+    font-size: clamp(13px, 4vw, 16px);
+    opacity: 0.72;
+  }
+}
+
+@keyframes orientation-rotate-hint {
+  0%, 45% { transform: rotate(0deg); }
+  70%, 100% { transform: rotate(90deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orientation-gate__icon { animation: none; }
 }
