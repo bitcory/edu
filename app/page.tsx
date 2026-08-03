@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, BookOpen, Library, Pencil, Sparkles, Store } from "lucide-react";
+import { ArrowRight, BookOpen, Library, Pencil, Sparkles, Store, Wand2 } from "lucide-react";
 import UserChip from "./components/auth/UserChip";
 
 export default function Home() {
@@ -22,6 +22,21 @@ export default function Home() {
       </header>
 
       <div className="landing-grid">
+        <Link href="/make" className="landing-card landing-card--make">
+          <div className="landing-card__icon" aria-hidden>
+            <Wand2 size={48} strokeWidth={1.6} />
+          </div>
+          <div className="landing-card__body">
+            <h2 className="landing-card__title">그림책 만들기</h2>
+            <p className="landing-card__desc">
+              주인공과 이야기를 고르면 내 이름이 들어간 그림책이 뚝딱
+            </p>
+            <span className="landing-card__cta">
+              골라서 만들기 <ArrowRight size={16} />
+            </span>
+          </div>
+        </Link>
+
         <Link href="/view" className="landing-card landing-card--view">
           <div className="landing-card__icon" aria-hidden>
             <BookOpen size={48} strokeWidth={1.6} />
