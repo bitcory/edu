@@ -1,6 +1,7 @@
 import { randomUUID, randomBytes, scrypt, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import { db, ensureSchema } from "./db";
+import { normalizeImageModel } from "./image-models";
 
 /**
  * Local accounts: 아이디 + 비밀번호. There is no external identity provider —
@@ -102,6 +103,28 @@ function toUser(row: Record<string, unknown>): User {
     isAdmin: Number(row.is_admin) === 1 || envAdmins().includes(username),
     createdAt: Number(row.created_at),
   };
+}
+
+/** 사용자가 고른 이미지 생성 모델. 없으면 기본값으로 정규화해 돌려준다. */
+export async function getImageModel(userId: string): Promise<string> {
+  await ensureSchema();
+  const res = await db.execute({
+    sql: "SELECT image_model FROM users WHERE user_id = ?",
+    args: [userId],
+  });
+  const raw = res.rows[0]?.image_model;
+  return normalizeImageModel(raw == null ? null : String(raw));
+}
+
+export async function setImageModel(userId: string, model: string): Promise<string> {
+  await ensureSchema();
+  // 목록 밖 값을 그대로 저장하면 호출 시점에야 실패한다 — 여기서 정규화한다.
+  const normalized = normalizeImageModel(model);
+  await db.execute({
+    sql: "UPDATE users SET image_model = ? WHERE user_id = ?",
+    args: [normalized, userId],
+  });
+  return normalized;
 }
 
 /** 세션 토큰의 권한을 매 요청 갱신하는 데 쓴다 — auth.ts 의 jwt 콜백 참조. */

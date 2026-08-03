@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Check, Plus, Trash2, Wand2 } from "lucide-react";
+import { AlertTriangle, Check, Plus, Trash2, Wand2 } from "lucide-react";
+import type { Issue, PictureBook } from "../../lib/picturebook-schema";
 import {
   ART_STYLES,
   EMPTY_BRIEF,
@@ -46,10 +48,28 @@ const MOTION_FIT_NOTE: Record<string, string> = {
   poor: "움직이면 어색해질 수 있어요",
 };
 
+/** /story 가 읽는 저장 키. 설계 결과를 여기에 넣으면 그대로 열린다. */
+const STORY_CACHE_KEY = "toolb_step8_picbook_v1";
+const STORY_SCRIPT_KEY = "toolb_step8_script_v1";
+const STORY_SCRIPT_INPUT_KEY = "toolb_step8_script_input_v1";
+
+type DesignResult = {
+  ok: boolean;
+  book: PictureBook;
+  body: { no: number; text: string }[];
+  titleCandidates: string[];
+  issues: Issue[];
+  model: string;
+};
+
 export default function DesignForm() {
+  const router = useRouter();
   const [tab, setTab] = useState<TabId>("basic");
   const [brief, setBrief] = useState<DesignBrief>(EMPTY_BRIEF);
   const [loaded, setLoaded] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<DesignResult | null>(null);
 
   // 저장된 값 복원 — 설계는 한 번에 끝나지 않아서 새로고침에도 남아야 한다.
   useEffect(() => {
@@ -86,6 +106,47 @@ export default function DesignForm() {
         cutCount: wasDefault && preset ? preset.defaultCuts : b.cutCount,
       };
     });
+  }
+
+  async function generate() {
+    setBusy(true);
+    setError(null);
+    setResult(null);
+    const res = await fetch("/api/story/design", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ brief }),
+    }).catch(() => null);
+    const data = await res?.json().catch(() => null);
+    // 모델 실패는 200 + { error } 로 온다 (Cloudflare 가 5xx 본문을 버리기 때문).
+    if (!res?.ok || !data || data.error) {
+      setError(data?.error ?? "설계에 실패했어요. 잠시 후 다시 시도해 주세요.");
+      setBusy(false);
+      return;
+    }
+    setResult(data as DesignResult);
+    setBusy(false);
+  }
+
+  /** 결과를 스토리구성 화면이 읽는 자리에 넣고 이동한다. */
+  function sendToStory() {
+    if (!result) return;
+    const script = result.body.map((b) => `[${b.no}] ${b.text}`).join("\n\n");
+    try {
+      localStorage.setItem(
+        STORY_CACHE_KEY,
+        JSON.stringify({
+          library_meta: { name: result.book.meta.title, count: 1 },
+          books: [result.book],
+        }),
+      );
+      localStorage.setItem(STORY_SCRIPT_KEY, script);
+      localStorage.setItem(STORY_SCRIPT_INPUT_KEY, script);
+    } catch {
+      setError("결과를 저장하지 못했어요. 브라우저 저장 공간을 확인해 주세요.");
+      return;
+    }
+    router.push("/story");
   }
 
   const cutWarn = cutCountIssue(brief.age, brief.cutCount);
@@ -401,13 +462,81 @@ export default function DesignForm() {
             </p>
           )}
 
-          <button type="button" className="design-go" disabled={missing.length > 0}>
-            <Wand2 size={20} /> 이 설정으로 설계하기
+          <button
+            type="button"
+            className="design-go"
+            disabled={missing.length > 0 || busy}
+            onClick={() => void generate()}
+          >
+            <Wand2 size={20} />
+            {busy ? "설계하는 중… (1~3분)" : "이 설정으로 설계하기"}
           </button>
-          <p className="design-hint">
-            아직 생성은 연결하지 않았습니다. 다음 단계에서 이 값으로 본문·캐릭터
-            시트·컷을 만들어 <Link href="/story">스토리구성</Link> 에 채웁니다.
-          </p>
+          {busy && (
+            <p className="design-hint">
+              본문을 먼저 쓰고, 그걸 근거로 캐릭터 시트와 컷 프롬프트를 만듭니다.
+              컷이 많으면 시간이 걸려요.
+            </p>
+          )}
+          {error && (
+            <p className="design-warn" role="alert">
+              {error}
+            </p>
+          )}
+
+          {result && (
+            <div className="design-result">
+              <h3 className="design-label">{result.book.meta.title}</h3>
+              <p className="design-hint">
+                {result.book.meta.message} · 캐릭터 {result.book.characters.length}명
+                · {result.book.cuts.length}컷 · 표지 {result.book.covers.length}장
+                · {result.model}
+              </p>
+
+              {result.ok ? (
+                <p className="design-ready">
+                  <Check size={16} /> 규칙 검사를 통과했어요.
+                </p>
+              ) : (
+                <p className="design-warn">
+                  <AlertTriangle size={14} /> 규칙 위반이 남아 있어요. 아래를
+                  확인하고 다시 설계해 보세요.
+                </p>
+              )}
+
+              {result.issues.length > 0 && (
+                <details className="design-issues">
+                  <summary>
+                    검사 결과 {result.issues.filter((i) => i.level === "error").length}건
+                    에러 · {result.issues.filter((i) => i.level === "warn").length}건 경고
+                  </summary>
+                  <ul>
+                    {result.issues.slice(0, 40).map((i, n) => (
+                      <li key={n} className={i.level === "error" ? "is-error" : ""}>
+                        <code>{i.path}</code> {i.message}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+
+              <details className="design-issues">
+                <summary>본문 미리보기</summary>
+                <ol className="design-bodylist">
+                  {result.body.map((b) => (
+                    <li key={b.no}>{b.text}</li>
+                  ))}
+                </ol>
+              </details>
+
+              <button type="button" className="design-go" onClick={sendToStory}>
+                스토리구성에 넣기
+              </button>
+              <p className="design-hint">
+                넣으면 <Link href="/story">스토리구성</Link> 의 캐릭터 시트·본문
+                컷이 이 결과로 바뀝니다. 기존 내용은 덮어써집니다.
+              </p>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -9177,3 +9177,51 @@ body {
     grid-template-columns: 1fr auto;
   }
 }
+
+.design-result {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid rgba(60, 40, 24, 0.14);
+  border-radius: 16px;
+  background: #fff;
+}
+
+.design-issues {
+  border-radius: 12px;
+  background: rgba(123, 92, 62, 0.06);
+  padding: 10px 14px;
+  font-size: 13px;
+}
+
+.design-issues summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: #7b5c3e;
+}
+
+.design-issues ul,
+.design-issues ol {
+  margin: 10px 0 0;
+  padding-left: 20px;
+  color: #7b5c3e;
+  line-height: 1.7;
+}
+
+.design-issues li.is-error {
+  color: #b13a2c;
+  font-weight: 600;
+}
+
+.design-issues code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: rgba(60, 40, 24, 0.1);
+  font-size: 12px;
+}
+
+.design-bodylist li {
+  margin-bottom: 6px;
+  color: #4a3423;
+}

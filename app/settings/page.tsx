@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import UserChip from "../components/auth/UserChip";
 import CredentialsPanel from "../components/CredentialsPanel";
+import ImageModelPicker from "./ImageModelPicker";
 import { getServerUser } from "../lib/server-auth";
 
 export const metadata = { title: "설정" };
@@ -27,6 +28,11 @@ export default async function SettingsPage() {
           동작합니다.
         </p>
         <CredentialsPanel endpoint="/api/settings/credentials" variant="user" />
+
+        <h2 className="settings-heading">생성 설정</h2>
+        <div className="cred-view">
+          <ImageModelPicker />
+        </div>
       </div>
     </main>
   );

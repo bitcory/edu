@@ -74,6 +74,12 @@ export function ensureSchema(): Promise<void> {
           created_at    BIGINT NOT NULL
         )`,
       );
+      for (const ddl of [
+        // 사용자별 이미지 생성 모델 선택 (app/lib/image-models.ts).
+        `ADD COLUMN IF NOT EXISTS image_model TEXT`,
+      ]) {
+        await db.execute(`ALTER TABLE users ${ddl}`);
+      }
 
       // NOTE: timestamps use BIGINT — they hold Date.now() (epoch ms, ~1.7e12),
       // which overflows Postgres' 4-byte INTEGER (max ~2.1e9).
