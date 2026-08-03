@@ -8782,3 +8782,31 @@ body {
   padding-right: 10px;
   white-space: nowrap;
 }
+
+/* ---------- 개인 설정 ---------- */
+
+.settings-body {
+  width: 100%;
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 0 20px 48px;
+}
+
+.settings-heading {
+  margin: 4px 0 6px;
+  font-size: 22px;
+  font-weight: 800;
+  color: #3a2a1d;
+}
+
+.settings-lede {
+  margin: 0 0 18px;
+  color: #7b5c3e;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.cred-note--warn {
+  background: rgba(214, 140, 40, 0.12);
+  color: #8a5a12;
+}

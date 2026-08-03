@@ -27,7 +27,7 @@ import {
   X,
 } from "lucide-react";
 import { Fragment, useCallback, useEffect, useState, type CSSProperties } from "react";
-import CredentialsView from "./CredentialsView";
+import CredentialsPanel from "../components/CredentialsPanel";
 import BookViewer from "../components/BookViewer";
 import BookInfoModal, { type InfoValues } from "../components/BookInfoModal";
 import UserChip from "../components/auth/UserChip";
@@ -369,7 +369,7 @@ export default function AdminPage() {
       </div>
 
       {section === "keys" ? (
-        <CredentialsView />
+        <CredentialsPanel endpoint="/api/admin/credentials" variant="server" />
       ) : section === "notices" ? (
         <NoticesView />
       ) : section === "banners" ? (

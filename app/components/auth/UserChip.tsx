@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { LogOut, Shield } from "lucide-react";
+import { LogOut, Settings, Shield } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
 
 export default function UserChip() {
@@ -22,6 +22,14 @@ export default function UserChip() {
           <Shield size={12} /> 관리자
         </Link>
       )}
+      <Link
+        href="/settings"
+        className="user-chip__logout"
+        title="설정"
+        aria-label="설정"
+      >
+        <Settings size={14} />
+      </Link>
       <button
         type="button"
         className="user-chip__logout"
