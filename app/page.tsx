@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, BookOpen, Library, Pencil, Sparkles, Store, Wand2 } from "lucide-react";
+import { ArrowRight, Library, Pencil, Sparkles, Store, Wand2 } from "lucide-react";
 import UserChip from "./components/auth/UserChip";
 
 export default function Home() {
@@ -17,7 +17,7 @@ export default function Home() {
           <span>MAGIC BOOK</span>
         </h1>
         <p className="landing-sub">
-          PDF 그림책을 펼쳐 보고, 직접 책도 만들어 북스토어에 올려 보세요.
+          그림책을 골라서 만들고, 직접 만든 책은 북스토어에 올려 보세요.
         </p>
       </header>
 
@@ -33,21 +33,6 @@ export default function Home() {
             </p>
             <span className="landing-card__cta">
               골라서 만들기 <ArrowRight size={16} />
-            </span>
-          </div>
-        </Link>
-
-        <Link href="/view" className="landing-card landing-card--view">
-          <div className="landing-card__icon" aria-hidden>
-            <BookOpen size={48} strokeWidth={1.6} />
-          </div>
-          <div className="landing-card__body">
-            <h2 className="landing-card__title">책 보기</h2>
-            <p className="landing-card__desc">
-              가지고 있는 PDF를 진짜 책처럼 한 장 한 장 펼쳐 보기
-            </p>
-            <span className="landing-card__cta">
-              PDF 열기 <ArrowRight size={16} />
             </span>
           </div>
         </Link>
