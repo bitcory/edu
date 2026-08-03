@@ -108,9 +108,7 @@ export default function MakeWizard() {
                 height={500}
                 unoptimized
               />
-              <span className="make-pick__label">
-                {c.emoji} {c.label}
-              </span>
+              <span className="make-pick__label">{c.label}</span>
             </button>
           ))}
         </div>
@@ -136,9 +134,7 @@ export default function MakeWizard() {
                 height={500}
                 unoptimized
               />
-              <span className="make-pick__label">
-                {a.emoji} {a.label}
-              </span>
+              <span className="make-pick__label">{a.label}</span>
             </button>
           ))}
         </div>
@@ -164,9 +160,7 @@ export default function MakeWizard() {
                 height={500}
                 unoptimized
               />
-              <span className="make-pick__label">
-                {l.emoji} {l.label}
-              </span>
+              <span className="make-pick__label">{l.label}</span>
             </button>
           ))}
         </div>
