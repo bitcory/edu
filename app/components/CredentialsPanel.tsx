@@ -1,7 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { KeyRound, ShieldAlert, Trash2, Upload } from "lucide-react";
+import { ExternalLink, KeyRound, ShieldAlert, Trash2, Upload } from "lucide-react";
+
+/** 키를 발급받는 곳. 새 탭으로 연다 — 작성 중이던 이 화면을 잃지 않게. */
+const LINKS = {
+  /** 서비스 계정 목록 → "서비스 계정 만들기" → 키 탭에서 JSON 생성 */
+  serviceAccounts: "https://console.cloud.google.com/iam-admin/serviceaccounts",
+  /** 프로젝트에 Vertex AI API 가 켜져 있어야 호출이 된다 */
+  vertexApi:
+    "https://console.cloud.google.com/apis/library/aiplatform.googleapis.com",
+  aiStudioKey: "https://aistudio.google.com/apikey",
+} as const;
 
 /**
  * 자격증명 관리 패널 — 개인용(/settings)과 서버 기본값용(/admin) 이 함께 쓴다.
@@ -158,16 +168,43 @@ export default function CredentialsPanel({
             </div>
           </dl>
         ) : (
-          <p className="cred-hint">
-            Google Cloud 콘솔에서 발급한 <b>서비스 계정 키 JSON</b>을 올려 주세요.
-            OAuth 클라이언트 JSON 은 다른 파일이라 받지 않습니다.
-            {fallback(status.vertexSource) && (
-              <>
-                {" "}
-                지금은 서버 기본 키로 동작하고 있어요.
-              </>
-            )}
-          </p>
+          <>
+            <p className="cred-hint">
+              Google Cloud 콘솔에서 발급한 <b>서비스 계정 키 JSON</b>을 올려 주세요.
+              OAuth 클라이언트 JSON 은 다른 파일이라 받지 않습니다.
+              {fallback(status.vertexSource) && (
+                <> 지금은 서버 기본 키로 동작하고 있어요.</>
+              )}
+            </p>
+            <ol className="cred-steps">
+              <li>
+                프로젝트에 <b>Vertex AI API</b>를 켭니다.
+                <a
+                  className="cred-link"
+                  href={LINKS.vertexApi}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  API 켜러 가기 <ExternalLink size={13} aria-hidden />
+                </a>
+              </li>
+              <li>
+                <b>서비스 계정</b>을 만들고 <b>Vertex AI User</b> 역할을 줍니다.
+              </li>
+              <li>
+                그 계정의 <b>키 → 키 추가 → JSON</b> 으로 파일을 내려받아 아래에
+                올립니다.
+                <a
+                  className="cred-link"
+                  href={LINKS.serviceAccounts}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  서비스 계정 만들러 가기 <ExternalLink size={13} aria-hidden />
+                </a>
+              </li>
+            </ol>
+          </>
         )}
 
         <div className="cred-actions">
@@ -223,13 +260,25 @@ export default function CredentialsPanel({
             </div>
           </dl>
         ) : (
-          <p className="cred-hint">
-            aistudio.google.com 에서 발급한 API 키를 넣어 주세요. 무료 티어라 Vertex
-            크레딧을 쓰지 않습니다.
-            {fallback(status.aiStudioSource) && (
-              <> 지금은 서버 기본 키로 동작하고 있어요.</>
-            )}
-          </p>
+          <>
+            <p className="cred-hint">
+              Google AI Studio 에서 API 키를 발급받아 넣어 주세요. 무료 티어라
+              Vertex 크레딧을 쓰지 않습니다.
+              {fallback(status.aiStudioSource) && (
+                <> 지금은 서버 기본 키로 동작하고 있어요.</>
+              )}
+            </p>
+            <p className="cred-linkrow">
+              <a
+                className="cred-link"
+                href={LINKS.aiStudioKey}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                API 키 발급받으러 가기 <ExternalLink size={13} aria-hidden />
+              </a>
+            </p>
+          </>
         )}
 
         <div className="cred-actions">
