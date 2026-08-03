@@ -124,20 +124,50 @@ export default function DesignForm() {
       setBusy(false);
       return;
     }
-    setResult(data as DesignResult);
+    const design = data as DesignResult;
+    setResult(design);
     setBusy(false);
+    // 규칙 검사를 통과했으면 곧바로 스토리구성으로 넘긴다 — 설계의 목적지가
+    // 거기라서 한 번 더 누르게 할 이유가 없다. 위반이 남았을 때만 화면에
+    // 세워 두고 사용자가 보고 판단하게 한다.
+    if (design.ok) sendToStory(design, true);
+  }
+
+  /** 스토리구성에 이미 작업물이 있는지 — 덮어쓰기 전에 물어보려고. */
+  function existingStoryTitle(): string | null {
+    try {
+      const raw = localStorage.getItem(STORY_CACHE_KEY);
+      if (!raw) return null;
+      const lib = JSON.parse(raw) as {
+        books?: { meta?: { title?: string } }[];
+      };
+      return lib.books?.[0]?.meta?.title ?? null;
+    } catch {
+      return null;
+    }
   }
 
   /** 결과를 스토리구성 화면이 읽는 자리에 넣고 이동한다. */
-  function sendToStory() {
-    if (!result) return;
-    const script = result.body.map((b) => `[${b.no}] ${b.text}`).join("\n\n");
+  function sendToStory(design: DesignResult | null = result, ask = false) {
+    if (!design) return;
+    if (ask) {
+      const prev = existingStoryTitle();
+      if (
+        prev &&
+        !window.confirm(
+          `스토리구성에 "${prev}" 가 들어 있어요. 새 설계로 덮어쓸까요?`,
+        )
+      ) {
+        return; // 사용자가 취소하면 결과는 화면에 남는다 — 나중에 직접 넣을 수 있다.
+      }
+    }
+    const script = design.body.map((b) => `[${b.no}] ${b.text}`).join("\n\n");
     try {
       localStorage.setItem(
         STORY_CACHE_KEY,
         JSON.stringify({
-          library_meta: { name: result.book.meta.title, count: 1 },
-          books: [result.book],
+          library_meta: { name: design.book.meta.title, count: 1 },
+          books: [design.book],
         }),
       );
       localStorage.setItem(STORY_SCRIPT_KEY, script);
@@ -528,12 +558,18 @@ export default function DesignForm() {
                 </ol>
               </details>
 
-              <button type="button" className="design-go" onClick={sendToStory}>
+              <button
+                type="button"
+                className="design-go"
+                onClick={() => sendToStory(result, true)}
+              >
                 스토리구성에 넣기
               </button>
               <p className="design-hint">
-                넣으면 <Link href="/story">스토리구성</Link> 의 캐릭터 시트·본문
-                컷이 이 결과로 바뀝니다. 기존 내용은 덮어써집니다.
+                규칙 검사를 통과하면 자동으로 넘어갑니다. 위반이 남았거나 덮어쓰기를
+                취소했다면 이 버튼으로 직접 넣을 수 있어요. 넣으면{" "}
+                <Link href="/story">스토리구성</Link> 의 캐릭터 시트·본문 컷이 이
+                결과로 바뀝니다.
               </p>
             </div>
           )}
