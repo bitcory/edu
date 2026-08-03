@@ -1,6 +1,6 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import { verifyUser } from "./app/lib/users-repo";
+import { findUserById, verifyUser } from "./app/lib/users-repo";
 
 /**
  * Auth.js(next-auth v5) — 아이디/비밀번호 단일 공급자, JWT 세션(DB 어댑터 없음).
@@ -59,12 +59,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
   pages: { signIn: "/sign-in" },
   callbacks: {
-    jwt({ token, user }) {
-      // user 는 최초 로그인 때만 채워진다. 이후 요청은 토큰만 보고 판단한다.
+    async jwt({ token, user }) {
+      // user 는 최초 로그인 때만 채워진다.
       if (user) {
         token.sub = user.id;
         token.username = user.username;
         token.isAdmin = user.isAdmin;
+        return token;
+      }
+      // 이후 요청마다 DB 에서 권한을 다시 읽는다. 토큰에 굳혀 두면 관리자 권한을
+      // 준 뒤 다시 로그인해야 반영되고, 더 나쁘게는 **회수해도 토큰이 만료될
+      // 때까지 계속 관리자로 남는다.** 로컬 PG 의 PK 조회라 비용은 무시할 만하다.
+      if (token.sub) {
+        try {
+          const fresh = await findUserById(token.sub);
+          if (fresh) {
+            token.username = fresh.username;
+            token.isAdmin = fresh.isAdmin;
+          }
+        } catch {
+          // DB 가 잠깐 안 될 때 전원 로그아웃되는 것보다는 직전 값을 유지한다.
+        }
       }
       return token;
     },

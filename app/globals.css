@@ -8774,3 +8774,11 @@ body {
   opacity: 0.5;
   cursor: default;
 }
+
+/* 탭이 7개로 늘면서 "작가 승인" 같은 두 어절 라벨이 감겼다. 줄바꿈을 막고
+   가로 여백을 조금 줄여 한 줄로 유지한다. */
+.admin-tabs--primary .admin-tab {
+  padding-left: 10px;
+  padding-right: 10px;
+  white-space: nowrap;
+}

@@ -104,6 +104,16 @@ function toUser(row: Record<string, unknown>): User {
   };
 }
 
+/** 세션 토큰의 권한을 매 요청 갱신하는 데 쓴다 — auth.ts 의 jwt 콜백 참조. */
+export async function findUserById(userId: string): Promise<User | null> {
+  await ensureSchema();
+  const res = await db.execute({
+    sql: "SELECT user_id, username, display_name, is_admin, created_at FROM users WHERE user_id = ?",
+    args: [userId],
+  });
+  return res.rows[0] ? toUser(res.rows[0]) : null;
+}
+
 export async function findUserByUsername(username: string): Promise<User | null> {
   await ensureSchema();
   const res = await db.execute({
