@@ -36,6 +36,8 @@ type Status = {
   /** 개인 화면에서만 내려온다. 내 키가 없을 때 서버 기본값이 받쳐 주는지. */
   vertexSource?: "user" | "server" | null;
   aiStudioSource?: "user" | "server" | null;
+  /** 저장은 됐지만 발급처에 확인하지 못한 경우의 안내. */
+  notice?: string;
 };
 
 const fmt = (ms: number | null) =>
@@ -136,6 +138,12 @@ export default function CredentialsPanel({
       {error && (
         <p className="cred-error" role="alert">
           {error}
+        </p>
+      )}
+
+      {status.notice && (
+        <p className="cred-notice" role="status">
+          {status.notice}
         </p>
       )}
 

@@ -44,16 +44,21 @@ export async function POST(req: Request) {
     return Response.json({ error: "잘못된 요청이에요." }, { status: 400 });
   }
 
+  let notice: string | undefined;
   if (body.kind === "vertex") {
     const result = await saveVertexServiceAccount(SERVER_SCOPE, body.serviceAccount);
     if (!result.ok) return Response.json({ error: result.error }, { status: 400 });
   } else if (body.kind === "ai-studio") {
     const result = await saveAiStudioKey(SERVER_SCOPE, String(body.apiKey ?? ""));
     if (!result.ok) return Response.json({ error: result.error }, { status: 400 });
+    if (!result.verified) {
+      notice =
+        "키는 저장했지만 지금 구글에 확인할 수 없었어요. 생성이 안 되면 키를 다시 확인해 주세요.";
+    }
   } else {
     return Response.json({ error: "알 수 없는 항목이에요." }, { status: 400 });
   }
-  return Response.json(await credentialStatus(SERVER_SCOPE));
+  return Response.json({ ...(await credentialStatus(SERVER_SCOPE)), notice });
 }
 
 export async function DELETE(req: Request) {

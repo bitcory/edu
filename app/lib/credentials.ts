@@ -182,23 +182,64 @@ async function readAiStudioAt(scope: Scope): Promise<string | null> {
   return stored?.value?.apiKey?.trim() || null;
 }
 
+/**
+ * 붙여넣기 사고를 정리한다 — 앞뒤 공백, 중간에 섞인 줄바꿈, 문서에서 딸려 오는
+ * 제로폭 문자, 감싸고 있는 따옴표. 키 자체의 형식은 건드리지 않는다.
+ */
+function normalizeApiKey(raw: string): string {
+  return raw
+    .replace(/[\s​-‍﻿]/g, "")
+    .replace(/^["'`]+|["'`]+$/g, "");
+}
+
+/**
+ * 구글에 직접 물어 키가 실제로 동작하는지 확인한다.
+ *
+ * 예전에는 정규식으로 형식을 추측해 걸렀는데, 우리가 만들지도 않은 자격증명의
+ * 형식을 넘겨짚는 검사라 멀쩡한 키를 막는 쪽으로 틀리기 쉽다. 발급처에 물어보는
+ * 게 유일하게 확실한 답이고, 실패 사유도 그대로 보여줄 수 있다.
+ */
+async function verifyAiStudioKey(
+  key: string,
+): Promise<{ ok: true } | { ok: false; error: string } | { unknown: true }> {
+  try {
+    const r = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`,
+      { signal: AbortSignal.timeout(10_000) },
+    );
+    if (r.ok) return { ok: true };
+    const body = (await r.json().catch(() => null)) as {
+      error?: { message?: string };
+    } | null;
+    const detail = body?.error?.message?.trim();
+    if (r.status === 400 || r.status === 401 || r.status === 403) {
+      return {
+        ok: false,
+        error: detail
+          ? `구글이 이 키를 거부했어요: ${detail}`
+          : "구글이 이 키를 거부했어요. 키가 맞는지, 해당 프로젝트에서 Generative Language API 가 켜져 있는지 확인해 주세요.",
+      };
+    }
+    // 5xx·429 등은 키 문제가 아닐 수 있다 — 막지 않는다.
+    return { unknown: true };
+  } catch {
+    // 네트워크가 안 되는 상황에서 저장 자체를 막을 이유는 없다.
+    return { unknown: true };
+  }
+}
+
 export async function saveAiStudioKey(
   scope: Scope,
   key: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  const trimmed = key.trim();
-  if (!trimmed) return { ok: false, error: "키가 비어 있어요." };
-  // 실제 키는 40자 안팎의 URL-safe 문자열이다. 공백이나 따옴표가 섞인 값을
-  // 그대로 저장해 두면 호출 시점에야 실패하므로 여기서 거른다.
-  if (!/^[A-Za-z0-9_-]{20,100}$/.test(trimmed)) {
-    return {
-      ok: false,
-      error:
-        "키 형식이 올바르지 않아요. 공백이나 따옴표가 섞이지 않았는지 확인해 주세요.",
-    };
-  }
-  await writeSecret(scope, AI_STUDIO_FILE, JSON.stringify({ apiKey: trimmed }));
-  return { ok: true };
+): Promise<{ ok: true; verified: boolean } | { ok: false; error: string }> {
+  const cleaned = normalizeApiKey(key);
+  if (!cleaned) return { ok: false, error: "키가 비어 있어요." };
+
+  const check = await verifyAiStudioKey(cleaned);
+  if ("ok" in check && !check.ok) return check;
+
+  await writeSecret(scope, AI_STUDIO_FILE, JSON.stringify({ apiKey: cleaned }));
+  return { ok: true, verified: "ok" in check };
 }
 
 export async function clearAiStudioKey(scope: Scope): Promise<void> {

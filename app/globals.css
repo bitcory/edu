@@ -8852,3 +8852,13 @@ body {
   padding: 8px 14px;
   font-size: 14px;
 }
+
+.cred-notice {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(214, 140, 40, 0.14);
+  color: #8a5a12;
+  font-size: 14px;
+  font-weight: 600;
+}
