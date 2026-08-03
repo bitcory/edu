@@ -14,6 +14,12 @@ Vercel·Neon·R2·Google OAuth 를 **의도적으로 전부 걷어냈다.** 되�
 | DB | 로컬 PostgreSQL (`pg` 풀) | `app/lib/db.ts` |
 | 블롭 저장소 | 로컬 디스크 (`STORAGE_DIR`) | `app/lib/pdf-storage.ts` |
 | 인증 | 자체 아이디/비밀번호 (Auth.js Credentials) | `auth.ts`, `app/lib/users-repo.ts` |
+| 외부 AI 자격증명 | 파일 (`SECRETS_DIR`, 0600) | `app/lib/credentials.ts` |
+
+외부 AI(이미지·대본)는 예외적으로 바깥을 쓴다 — 이미지 생성은 Vertex AI, 대본·자막은
+Google AI Studio. 자격증명은 관리자 화면(`/admin` → API 키)에서 올리며 `SECRETS_DIR` 에
+저장된다. **`SECRETS_DIR` 는 `STORAGE_DIR` 바깥이어야 한다** — 안에 두면 `/api/files` 의
+서빙 범위에 들어간다. 저장된 비밀값을 다시 읽어 가는 HTTP 경로는 만들지 말 것.
 
 - 스키마는 마이그레이션 도구 없이 `ensureSchema()` 가 `CREATE TABLE IF NOT EXISTS` 로 만든다.
   컬럼 추가는 그 안에 `ADD COLUMN IF NOT EXISTS` 로 덧붙인다.

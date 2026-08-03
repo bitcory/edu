@@ -14,6 +14,7 @@ import {
   FilePenLine,
   Globe2,
   Image as ImageIcon,
+  KeyRound,
   Megaphone,
   Pencil,
   PencilRuler,
@@ -26,6 +27,7 @@ import {
   X,
 } from "lucide-react";
 import { Fragment, useCallback, useEffect, useState, type CSSProperties } from "react";
+import CredentialsView from "./CredentialsView";
 import BookViewer from "../components/BookViewer";
 import BookInfoModal, { type InfoValues } from "../components/BookInfoModal";
 import UserChip from "../components/auth/UserChip";
@@ -82,7 +84,8 @@ type Section =
   | "settlement"
   | "notices"
   | "banners"
-  | "featured";
+  | "featured"
+  | "keys";
 type Tab = "pending" | "approved" | "rejected" | "drafts";
 
 const TABS: { key: Tab; label: string }[] = [
@@ -354,9 +357,20 @@ export default function AdminPage() {
           <Star size={16} aria-hidden="true" />
           추천
         </button>
+        <button
+          type="button"
+          className={`admin-tab${section === "keys" ? " is-active" : ""}`}
+          aria-pressed={section === "keys"}
+          onClick={() => setSection("keys")}
+        >
+          <KeyRound size={16} aria-hidden="true" />
+          API 키
+        </button>
       </div>
 
-      {section === "notices" ? (
+      {section === "keys" ? (
+        <CredentialsView />
+      ) : section === "notices" ? (
         <NoticesView />
       ) : section === "banners" ? (
         <BannersView />

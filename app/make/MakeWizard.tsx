@@ -68,7 +68,7 @@ export default function MakeWizard() {
   }
 
   return (
-    <main className="make-shell">
+    <main className={`make-shell make-shell--step-${step}`}>
       <div className="make-topbar">
         <button type="button" className="make-back" onClick={back} disabled={busy}>
           <ArrowLeft size={20} /> 뒤로
@@ -174,6 +174,14 @@ export default function MakeWizard() {
             if (!busy && name.trim()) void create();
           }}
         >
+          <Image
+            className="make-name__art"
+            src="/make-name-book.png"
+            alt="별빛이 펼쳐지는 마법 그림책"
+            width={1122}
+            height={1402}
+            priority
+          />
           <input
             className="make-name__input"
             type="text"
