@@ -40,22 +40,68 @@ export function withAspectInstruction(prompt: string, aspect: Aspect): string {
 export function generateViaApi(opts: {
   prompt: string;
   aspect: Aspect;
-  provider?: "openai" | "fal";
+  provider?: "google" | "openai" | "fal";
+  /** 캐릭터 시트 등 참조 이미지 (data URL). google 갈래에서 캐릭터 일관성에 쓰인다. */
+  references?: string[];
 }): GenHandle {
   const ctrl = new AbortController();
   const promise = (async () => {
     const r = await fetch("/api/story/generate-image", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ prompt: opts.prompt, aspect: opts.aspect, provider: opts.provider }),
+      body: JSON.stringify({
+        prompt: opts.prompt,
+        aspect: opts.aspect,
+        provider: opts.provider,
+        references: opts.references,
+      }),
       signal: ctrl.signal,
     });
     const data = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(data?.error || `요청 실패 (${r.status})`);
+    // 생성 실패는 200 + { error } 로 온다 (5xx 는 Cloudflare 가 본문을 버린다).
+    if (!r.ok || data?.error) throw new Error(data?.error || `요청 실패 (${r.status})`);
     if (!data?.dataUrl) throw new Error("이미지를 받지 못했어요.");
     return data.dataUrl as string;
   })();
   return { promise, cancel: () => ctrl.abort() };
+}
+
+/**
+ * 기본 생성 경로. 서버(Gemini)로 만든다.
+ *
+ * 확장은 ChatGPT·Flow 웹 UI 를 조작하는 방식이라 그쪽 화면이 바뀔 때마다
+ * 깨졌다. 서버 경로는 브라우저·로그인 세션이 필요 없고 레퍼런스 이미지를
+ * 함께 보낼 수 있어 캐릭터 일관성도 잡힌다. 확장은 사용자가 명시적으로 고르고
+ * 실제로 설치돼 있을 때만 쓴다.
+ */
+export function generateAuto(opts: {
+  prompt: string;
+  aspect: Aspect;
+  /** 캐릭터 시트 등 참조 이미지 (data URL). 확장 경로의 이름과 맞춰 두었다. */
+  referenceImages?: string[];
+  /** referenceImages 와 같은 순서의 표시 이름. 확장(Flow)만 쓴다. */
+  referenceNames?: string[];
+  onProgress?: (msg: string) => void;
+  /** true 면 확장으로 보낸다. 확장 설치 여부는 호출부가 이미 상태로 들고 있으므로
+   * (isExtensionReady 는 Promise 라 여기서 못 기다린다) 그 판단을 그대로 믿는다. */
+  useExtension?: boolean;
+}): GenHandle {
+  if (opts.useExtension) {
+    return generateViaChatGpt({
+      prompt: opts.prompt,
+      aspect: opts.aspect,
+      referenceImages: opts.referenceImages,
+      referenceNames: opts.referenceNames,
+      onProgress: opts.onProgress,
+    });
+  }
+  opts.onProgress?.("생성 중…");
+  return generateViaApi({
+    prompt: opts.prompt,
+    aspect: opts.aspect,
+    provider: "google",
+    references: opts.referenceImages,
+  });
 }
 
 // ---- Path B: ChatGPT via extension (window.postMessage bridge) ----

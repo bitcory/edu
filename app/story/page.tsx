@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
-  generateViaApi, generateViaChatGpt, isExtensionReady, getExtVersion,
+  generateViaApi, generateAuto, isExtensionReady, getExtVersion,
   getGenEngine, setGenEngine,
   type Aspect, type Engine, type ExtEngine, type GenHandle,
 } from "./imagegen";
@@ -807,7 +807,7 @@ export default function StoryPage() {
       if (!prompt.trim()) { done++; setBulkStatus(`${done}/${total} · ${name} 건너뜀 (프롬프트 없음)`); return; }
       setBulkStatus(`${done}/${total} · ${name} 생성 중…`);
       try {
-        const handle = generateViaChatGpt({
+        const handle = generateAuto({
           prompt,
           aspect: "16:9",
           onProgress: (m) => setBulkStatus(`${done}/${total} · ${name}: ${m}`),
@@ -900,7 +900,7 @@ export default function StoryPage() {
       try {
         const refs = await resolveCutRefs(cut);
         const note = refs.missing ? ` (참조 ${refs.images.length}/없음 ${refs.missing})` : ` (참조 ${refs.images.length})`;
-        const handle = generateViaChatGpt({
+        const handle = generateAuto({
           prompt,
           aspect: webtoon ? "9:16" : "16:9",
           referenceImages: refs.images,
@@ -937,7 +937,7 @@ export default function StoryPage() {
       try {
         const refs = await resolveCutRefs(cv);
         const note = refs.missing ? ` (참조 ${refs.images.length}/없음 ${refs.missing})` : ` (참조 ${refs.images.length})`;
-        const handle = generateViaChatGpt({
+        const handle = generateAuto({
           prompt,
           aspect: "3:4",
           referenceImages: refs.images,
@@ -1569,8 +1569,8 @@ export default function StoryPage() {
                         <button
                           type="button"
                           className="story-mini"
-                          disabled={!extReady || chars.length === 0}
-                          title={extReady ? "이미지가 없는 캐릭터를 순서대로 모두 생성" : "이미지 생성 확장 설치 후 사용 가능"}
+                          disabled={chars.length === 0}
+                          title="이미지가 없는 캐릭터를 순서대로 모두 생성"
                           onClick={generateAll}
                         >
                           <Sparkles size={14} /> 전체생성
@@ -1638,8 +1638,8 @@ export default function StoryPage() {
                         <button
                           type="button"
                           className="story-mini"
-                          disabled={!extReady || cuts.length === 0}
-                          title={extReady ? "이미지가 없는 컷을 등장 캐릭터 참조(I2I)로 순서대로 생성" : "이미지 생성 확장 설치 후 사용 가능"}
+                          disabled={cuts.length === 0}
+                          title="이미지가 없는 컷을 등장 캐릭터 참조(I2I)로 순서대로 생성"
                           onClick={generateAllCuts}
                         >
                           <Sparkles size={14} /> 전체생성
@@ -2024,7 +2024,7 @@ function CharPanel({ char, imageUrl, imageKey, busy, onGenerated, appearCuts, on
 }) {
   const [generating, setGenerating] = useState(false);
   const [statusMsg, setStatusMsg] = useState("");
-  const [engine, setEngine] = useState<Engine>("chatgpt");
+  const [engine, setEngine] = useState<Engine>("api");
   const [extReady, setExtReady] = useState(false);
   const [lightbox, setLightbox] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -2067,9 +2067,12 @@ function CharPanel({ char, imageUrl, imageKey, busy, onGenerated, appearCuts, on
     if (!prompt.trim()) { setStatusMsg("프롬프트가 비어 있어요."); return; }
     setGenerating(true);
     setStatusMsg(engine === "chatgpt" ? "생성 준비 중…" : "이미지 생성 중…");
-    const handle = engine === "chatgpt"
-      ? generateViaChatGpt({ prompt, aspect: ASPECT, onProgress: setStatusMsg })
-      : generateViaApi({ prompt, aspect: ASPECT });
+    const handle = generateAuto({
+      prompt,
+      aspect: ASPECT,
+      useExtension: engine === "chatgpt",
+      onProgress: setStatusMsg,
+    });
     handleRef.current = handle;
     handle.promise
       .then((dataUrl) => { onGenerated(dataUrl); setStatusMsg(""); })
@@ -2343,7 +2346,7 @@ function CutCard({ cut, charMap, imageUrl, imageKey, busy, extReady, resolveRefs
         const refs = await resolveRefs(cut);
         if (cancelled) throw new Error("정지됨 (사용자 취소)");
         if (refs.missing) setStatusMsg(`참조 ${refs.images.length}장 사용 (없음 ${refs.missing}) · 생성 중…`);
-        const inner = generateViaChatGpt({
+        const inner = generateAuto({
           prompt,
           aspect,
           referenceImages: refs.images,
@@ -2585,7 +2588,7 @@ function CoverCard({ cover, charMap, imageUrl, imageKey, busy, extReady, resolve
         const refs = await resolveRefs(cover);
         if (cancelled) throw new Error("정지됨 (사용자 취소)");
         if (refs.missing) setStatusMsg(`참조 ${refs.images.length}장 사용 (없음 ${refs.missing}) · 생성 중…`);
-        const inner = generateViaChatGpt({ prompt, aspect: "3:4", referenceImages: refs.images, referenceNames: refs.names, onProgress: setStatusMsg });
+        const inner = generateAuto({ prompt, aspect: "3:4", referenceImages: refs.images, referenceNames: refs.names, onProgress: setStatusMsg });
         handleRef.current = inner;
         return await inner.promise;
       })(),

@@ -1,12 +1,16 @@
 import { getServerUser } from "../../../lib/server-auth";
+import { resolveAiStudioKey } from "../../../lib/credentials";
+import { generateImage, type Aspect as GAspect } from "../../../lib/gemini-image";
 
 /**
- * Path A — server-side image generation (no extension needed).
- * Supports OpenAI gpt-image-1 and fal.ai FLUX schnell, mirroring ai-video-studio's
- * services/image.ts. Returns a base64 data URL. Client abort propagates via
- * request.signal so the "정지" button cancels the upstream call too.
+ * 서버에서 직접 그림을 만든다 (확장 프로그램 불필요).
  *
- * Keys (set in .env.local): OPENAI_API_KEY and/or FAL_KEY.
+ * google(Gemini)이 기본이다 — 키가 사용자별로 설정에 들어 있고, 레퍼런스
+ * 이미지를 함께 보낼 수 있어 캐릭터 일관성을 잡을 수 있다. openai·fal 은
+ * 환경변수로 키를 넣었을 때만 쓰이는 대안이다.
+ *
+ * 클라이언트의 abort 가 request.signal 로 전달돼 "정지" 버튼이 상위 호출까지
+ * 끊는다.
  */
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,7 +47,13 @@ export async function POST(req: Request) {
   const user = await getServerUser();
   if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
 
-  let body: { prompt?: string; aspect?: Aspect; provider?: string };
+  let body: {
+    prompt?: string;
+    aspect?: Aspect;
+    provider?: string;
+    /** 캐릭터 시트 등 참조 이미지 (data URL). google 갈래에서만 쓰인다. */
+    references?: string[];
+  };
   try {
     body = await req.json();
   } catch {
@@ -53,10 +63,29 @@ export async function POST(req: Request) {
   const aspect: Aspect = body.aspect && body.aspect in OPENAI_SIZE ? body.aspect : "16:9";
   if (!prompt) return Response.json({ error: "프롬프트가 비어 있어요." }, { status: 400 });
 
+  // google 이 기본. 키가 사용자별로 있고 레퍼런스 이미지를 받을 수 있어
+  // 캐릭터 일관성을 잡을 수 있다.
+  const wantsGoogle = body.provider === "google" || !body.provider;
+  if (wantsGoogle && (await resolveAiStudioKey(user.id))) {
+    const result = await generateImage(user.id, {
+      prompt,
+      aspect: aspect as GAspect,
+      references: Array.isArray(body.references) ? body.references.slice(0, 3) : [],
+      signal: req.signal,
+    });
+    // 실패도 200 으로 내린다 — 5xx 는 Cloudflare 가 자기 에러 페이지로 갈아친다.
+    return result.ok
+      ? Response.json({ dataUrl: result.dataUrl, provider: "google", model: result.model })
+      : Response.json({ error: result.error });
+  }
+
   const provider = pickProvider(body.provider);
   if (!provider) {
     return Response.json(
-      { error: "이미지 API 키가 설정되지 않았어요. .env.local에 OPENAI_API_KEY 또는 FAL_KEY를 추가하세요." },
+      {
+        error:
+          "이미지 생성 키가 없어요. 설정 → AI 키에서 Google AI Studio 키를 넣어 주세요.",
+      },
       { status: 400 },
     );
   }
