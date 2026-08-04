@@ -29,6 +29,8 @@ import {
   saveStoryImage, fetchStoryImagesAsDataUrls, buildStoryImagesZip,
 } from "./story-images";
 import { saveDraft } from "../lib/store";
+import DesignForm from "./DesignForm";
+import type { PictureBook } from "../lib/picturebook-schema";
 import { PAGE_W } from "../lib/editor-types";
 import {
   webtoonPreset, mergePromptParts, WEBTOON_NEGATIVE,
@@ -464,7 +466,7 @@ export default function StoryPage() {
   const [sendBusy, setSendBusy] = useState(false);
   const [lib, setLib] = useState<StoryLib | null>(null);
   const [bookIdx, setBookIdx] = useState(0);
-  const [section, setSection] = useState<"chars" | "cuts">("chars");
+  const [section, setSection] = useState<"chars" | "cuts" | "design">("chars");
   const [activeChar, setActiveChar] = useState(0);
   const [cutFilter, setCutFilter] = useState<string | number>("all");
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -1038,6 +1040,23 @@ export default function StoryPage() {
     }
   }
 
+  /** 스토리구성이 만든 결과를 화면에 반영한다. loadLib 가 이미지 캐시를 비우고
+   * 섹션까지 되돌려 주므로 대본 상태만 추가로 맞춘다. */
+  function applyDesign(book: PictureBook, body: { no: number; text: string }[]) {
+    loadLib({ library_meta: { name: book.meta.title, count: 1 }, books: [book] } as StoryLib);
+    // 왼쪽 붙여넣기 칸은 번호가 있는 원본, 실제 본문은 번호를 뺀 것.
+    const numbered = body.map((b) => `[${b.no}] ${b.text}`).join("\n\n");
+    const parsed = body.map((b) => b.text.trim()).join("\n\n");
+    setScriptInput(numbered);
+    setScriptPreview(parsed);
+    setScriptParsed(parsed);
+    try {
+      localStorage.setItem(SCRIPT_KEY, parsed);
+      localStorage.setItem(SCRIPT_INPUT_KEY, numbered);
+    } catch {}
+    showToast("스토리구성을 반영했어요!");
+  }
+
   function loadLib(obj: StoryLib | StoryBook) {
     const norm = normalizeLib(obj);
     if (!norm) return;
@@ -1070,7 +1089,9 @@ export default function StoryPage() {
           preview: scriptPreview,
           parsed: scriptParsed,
         },
-        state: { bookIdx, section, activeChar, cutFilter },
+        // design 은 입력 화면이라 백업에 담을 상태가 아니다 — 복원하면
+        // 결과가 아니라 빈 폼이 열린다.
+        state: { bookIdx, section: section === "design" ? "chars" : section, activeChar, cutFilter },
         images: { byKey },
       };
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
@@ -1419,10 +1440,14 @@ export default function StoryPage() {
           <div className="story-side-section">
             <div className="story-nav-list">
               {/* 지침 GPT 의 JSON 을 받아오는 대신, 항목을 골라 만드는 경로. */}
-              <Link href="/story/design" className="story-nav-item story-nav-item--make">
+              <button
+                type="button"
+                className={`story-nav-item story-nav-item--make${section === "design" ? " active" : ""}`}
+                onClick={() => { setSection("design"); if (window.innerWidth <= 900) setSidebarOpen(false); }}
+              >
                 <span className="story-nav-ic"><Wand2 size={18} /></span>
                 <span className="story-nav-lbl">스토리구성</span>
-              </Link>
+              </button>
               <button
                 type="button"
                 className={`story-nav-item${section === "chars" ? " active" : ""}`}
@@ -1552,6 +1577,15 @@ export default function StoryPage() {
                   <p className="story-message">{book.meta.message}</p>
                 )}
               </div>
+
+              {section === "design" && (
+                <section className="story-sec-pane">
+                  <DesignForm
+                    existingTitle={book?.meta?.title ?? null}
+                    onApply={applyDesign}
+                  />
+                </section>
+              )}
 
               {section === "chars" && (
                 <section className="story-sec-pane">

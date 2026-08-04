@@ -1,10 +1,8 @@
 "use client";
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Check, Plus, Trash2, Wand2 } from "lucide-react";
-import type { Issue, PictureBook } from "../../lib/picturebook-schema";
+import type { Issue, PictureBook } from "../lib/picturebook-schema";
 import {
   ART_STYLES,
   EMPTY_BRIEF,
@@ -15,12 +13,12 @@ import {
   buildStyleBlock,
   briefSummary,
   type DesignBrief,
-} from "../../lib/design-brief";
+} from "../lib/design-brief";
 import {
   AGE_PRESETS,
   cutCountIssue,
   type PbTheme,
-} from "../../lib/picturebook-schema";
+} from "../lib/picturebook-schema";
 
 /**
  * 그림책 이야기 만들기 입력 화면.
@@ -48,11 +46,6 @@ const MOTION_FIT_NOTE: Record<string, string> = {
   poor: "움직이면 어색해질 수 있어요",
 };
 
-/** /story 가 읽는 저장 키. 설계 결과를 여기에 넣으면 그대로 열린다. */
-const STORY_CACHE_KEY = "toolb_step8_picbook_v1";
-const STORY_SCRIPT_KEY = "toolb_step8_script_v1";
-const STORY_SCRIPT_INPUT_KEY = "toolb_step8_script_input_v1";
-
 type DesignResult = {
   ok: boolean;
   book: PictureBook;
@@ -62,8 +55,14 @@ type DesignResult = {
   model: string;
 };
 
-export default function DesignForm() {
-  const router = useRouter();
+export default function DesignForm({
+  existingTitle,
+  onApply,
+}: {
+  /** 이미 열려 있는 책 제목. 덮어쓰기 전에 물어보는 데만 쓴다. */
+  existingTitle: string | null;
+  onApply: (book: PictureBook, body: { no: number; text: string }[]) => void;
+}) {
   const [tab, setTab] = useState<TabId>("basic");
   const [brief, setBrief] = useState<DesignBrief>(EMPTY_BRIEF);
   const [loaded, setLoaded] = useState(false);
@@ -180,7 +179,7 @@ export default function DesignForm() {
       setResult(design);
       // 검사를 통과했으면 곧바로 스토리구성으로 넘긴다 — 설계의 목적지가 거기다.
       // 위반이 남았을 때만 화면에 세워 두고 사용자가 보고 판단하게 한다.
-      if (design.ok) sendToStory(design, true);
+      if (design.ok) apply(design, true);
     } catch (e) {
       setError((e as Error)?.message || "만들지 못했어요.");
     } finally {
@@ -189,54 +188,20 @@ export default function DesignForm() {
     }
   }
 
-  /** 스토리구성에 이미 작업물이 있는지 — 덮어쓰기 전에 물어보려고. */
-  function existingStoryTitle(): string | null {
-    try {
-      const raw = localStorage.getItem(STORY_CACHE_KEY);
-      if (!raw) return null;
-      const lib = JSON.parse(raw) as {
-        books?: { meta?: { title?: string } }[];
-      };
-      return lib.books?.[0]?.meta?.title ?? null;
-    } catch {
-      return null;
-    }
-  }
-
-  /** 결과를 스토리구성 화면이 읽는 자리에 넣고 이동한다. */
-  function sendToStory(design: DesignResult | null = result, ask = false) {
+  /** 결과를 스토리구성 화면에 반영한다. 저장·화면 갱신은 부모가 맡는다 —
+   * localStorage 를 두 곳에서 만지면 어느 쪽이 최신인지 흐려진다. */
+  function apply(design: DesignResult | null = result, ask = false) {
     if (!design) return;
-    if (ask) {
-      const prev = existingStoryTitle();
-      if (
-        prev &&
-        !window.confirm(
-          `스토리구성에 "${prev}" 가 들어 있어요. 새로 만든 것으로 덮어쓸까요?`,
-        )
-      ) {
-        return; // 사용자가 취소하면 결과는 화면에 남는다 — 나중에 직접 넣을 수 있다.
-      }
+    if (
+      ask &&
+      existingTitle &&
+      !window.confirm(
+        `스토리구성에 "${existingTitle}" 가 들어 있어요. 새로 만든 것으로 덮어쓸까요?`,
+      )
+    ) {
+      return; // 취소해도 결과는 화면에 남는다 — 나중에 버튼으로 직접 넣을 수 있다.
     }
-    // 두 자리의 성격이 다르다. INPUT 은 "붙여넣기" 칸에 보이는 원본이라 컷
-    // 번호가 있어야 하고, SCRIPT 는 이미 파싱이 끝난 본문이라 번호가 있으면
-    // 그대로 책 페이지에 찍힌다.
-    const numbered = design.body.map((b) => `[${b.no}] ${b.text}`).join("\n\n");
-    const parsed = design.body.map((b) => b.text.trim()).join("\n\n");
-    try {
-      localStorage.setItem(
-        STORY_CACHE_KEY,
-        JSON.stringify({
-          library_meta: { name: design.book.meta.title, count: 1 },
-          books: [design.book],
-        }),
-      );
-      localStorage.setItem(STORY_SCRIPT_KEY, parsed);
-      localStorage.setItem(STORY_SCRIPT_INPUT_KEY, numbered);
-    } catch {
-      setError("결과를 저장하지 못했어요. 브라우저 저장 공간을 확인해 주세요.");
-      return;
-    }
-    router.push("/story");
+    onApply(design.book, design.body);
   }
 
   const cutWarn = cutCountIssue(brief.age, brief.cutCount);
@@ -621,14 +586,14 @@ export default function DesignForm() {
               <button
                 type="button"
                 className="design-go"
-                onClick={() => sendToStory(result, true)}
+                onClick={() => apply(result, true)}
               >
                 스토리구성에 넣기
               </button>
               <p className="design-hint">
-                규칙 검사를 통과하면 자동으로 넘어갑니다. 위반이 남았거나 덮어쓰기를 취소했다면 이 버튼으로 직접 넣을 수 있어요. 넣으면{" "}
-                <Link href="/story">스토리구성</Link> 의 캐릭터 시트·본문 컷이 이
-                결과로 바뀝니다.
+                규칙 검사를 통과하면 자동으로 반영됩니다. 위반이 남았거나
+                덮어쓰기를 취소했다면 이 버튼으로 직접 넣을 수 있어요. 넣으면
+                캐릭터 시트와 본문 컷이 이 결과로 바뀝니다.
               </p>
             </div>
           )}
