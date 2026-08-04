@@ -42,12 +42,12 @@ const SCRIPT_KEY = "toolb_step8_script_v1";
 // 왼쪽 붙여넣기 원본(넘버링 포함)을 따로 저장 — 새로고침 후에도 원본이 그대로 보이도록.
 const SCRIPT_INPUT_KEY = "toolb_step8_script_input_v1";
 
-// 전체생성: 한 번에 동시 생성할 ChatGPT 탭 수. 1 = 순차 생성 — 동시에 여러 탭을
-// 돌리면 ChatGPT가 봇으로 의심해 차단하므로 하나씩만 만든다. 각 작업은 확장이
-// 띄우는 전용 창의 새 탭에서 돌고, 끝난 탭은 닫지 않아 결과를 확인할 수 있다.
-const GEN_CONCURRENCY = 1;
-// 탭이 한꺼번에 우르르 열리지 않도록 레인(동시 작업) 시작 시점을 이만큼 어긋나게 한다.
-const GEN_STAGGER_MS = 2000;
+// 전체생성 동시 실행 수. 예전엔 1(순차) + 2초 간격이었는데, 확장이 ChatGPT 탭을
+// 자동 조작하던 시절 "봇으로 의심받지 않으려고" 맞춘 값이다. 이제 서버에서 API 로
+// 부르므로 그 제약이 없다. 다만 무한정 늘리면 상대 쪽 분당 요청 한도에 걸리므로
+// 완만하게 잡는다.
+const GEN_CONCURRENCY = 3;
+const GEN_STAGGER_MS = 0;
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -737,14 +737,6 @@ export default function StoryPage() {
     return () => { alive = false; };
   }, [lib]);
 
-  // 생성 엔진(ChatGPT/Flow) — localStorage 에 저장되고 모든 생성 버튼(단건/전체)에
-  // 적용된다. generateViaChatGpt 가 호출 시점에 현재 값을 읽는다.
-  const [genEngine, setGenEngineState] = useState<ExtEngine>("chatgpt");
-  useEffect(() => {
-    Promise.resolve().then(() => setGenEngineState(getGenEngine()));
-  }, []);
-  const pickEngine = (e: ExtEngine) => { setGenEngine(e); setGenEngineState(e); };
-
   // The extension is self-distributed (no Chrome Web Store / no auto-update), so
   // warn when the installed build is older than the latest one we ship.
   const [extUpdate, setExtUpdate] = useState<{ installed: string; latest: string; downloadUrl: string } | null>(null);
@@ -787,9 +779,7 @@ export default function StoryPage() {
     const total = list.length;
     let made = 0;
     let done = 0;
-    // Flow 는 탭 하나의 큐가 30%/80% 파이프라인으로 처리하므로 2개까지 미리 보낸다.
-    const flowEng = getGenEngine() === "flow";
-    await runPool(list, flowEng ? 2 : GEN_CONCURRENCY, async (c, i) => {
+    await runPool(list, GEN_CONCURRENCY, async (c, i) => {
       const ck = charKeyOf(bookIdx, c, i);
       const name = (c.name_ko || c.id || `#${i + 1}`).toString();
       if (imageUrls[ck] || typeof c.imageKey === "string") {
@@ -819,7 +809,7 @@ export default function StoryPage() {
       } finally {
         done++;
       }
-    }, () => bulkCancel.current, flowEng ? 500 : GEN_STAGGER_MS);
+    }, () => bulkCancel.current, GEN_STAGGER_MS);
     setBulkBusy(false);
     setBulkStatus(bulkCancel.current ? `중지됨 · ${made}장 생성` : `완료 · ${made}장 생성`);
   }
@@ -875,10 +865,8 @@ export default function StoryPage() {
     let made = 0;
     let done = 0;
     const stop = () => cutBulkCancel.current;
-    // Flow 는 탭 하나의 큐가 30%/80% 파이프라인으로 처리하므로 2개까지 미리 보낸다.
-    const flowEng = getGenEngine() === "flow";
-    const conc = flowEng ? 2 : GEN_CONCURRENCY;
-    const stagger = flowEng ? 500 : GEN_STAGGER_MS;
+    const conc = GEN_CONCURRENCY;
+    const stagger = GEN_STAGGER_MS;
 
     await runPool(list, conc, async (cut, i) => {
       const ck = cutKeyOf(bookIdx, cut, i);
@@ -1315,27 +1303,6 @@ export default function StoryPage() {
           </span>
         </div>
         <div className="story-top-actions">
-          <div
-            className="story-img-engine story-engine-top"
-            role="tablist"
-            aria-label="이미지 생성 엔진"
-            title="이미지 생성 엔진 — 단건/전체생성 모두 여기서 고른 엔진으로 만듭니다"
-          >
-            <button
-              type="button"
-              className={`story-eng${genEngine === "chatgpt" ? " active" : ""}`}
-              onClick={() => pickEngine("chatgpt")}
-            >
-              ChatGPT
-            </button>
-            <button
-              type="button"
-              className={`story-eng${genEngine === "flow" ? " active" : ""}`}
-              onClick={() => pickEngine("flow")}
-            >
-              Flow
-            </button>
-          </div>
           <input
             ref={projectRestoreRef}
             type="file"
