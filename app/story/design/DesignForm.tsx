@@ -217,7 +217,11 @@ export default function DesignForm() {
         return; // 사용자가 취소하면 결과는 화면에 남는다 — 나중에 직접 넣을 수 있다.
       }
     }
-    const script = design.body.map((b) => `[${b.no}] ${b.text}`).join("\n\n");
+    // 두 자리의 성격이 다르다. INPUT 은 "붙여넣기" 칸에 보이는 원본이라 컷
+    // 번호가 있어야 하고, SCRIPT 는 이미 파싱이 끝난 본문이라 번호가 있으면
+    // 그대로 책 페이지에 찍힌다.
+    const numbered = design.body.map((b) => `[${b.no}] ${b.text}`).join("\n\n");
+    const parsed = design.body.map((b) => b.text.trim()).join("\n\n");
     try {
       localStorage.setItem(
         STORY_CACHE_KEY,
@@ -226,8 +230,8 @@ export default function DesignForm() {
           books: [design.book],
         }),
       );
-      localStorage.setItem(STORY_SCRIPT_KEY, script);
-      localStorage.setItem(STORY_SCRIPT_INPUT_KEY, script);
+      localStorage.setItem(STORY_SCRIPT_KEY, parsed);
+      localStorage.setItem(STORY_SCRIPT_INPUT_KEY, numbered);
     } catch {
       setError("결과를 저장하지 못했어요. 브라우저 저장 공간을 확인해 주세요.");
       return;
