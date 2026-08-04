@@ -15,7 +15,7 @@ import Link from "next/link";
 import {
   Library, UsersRound, Clapperboard,
   Menu, FileInput, FolderOpen, X, BookOpen, Ruler,
-  ExternalLink, MessageSquare, AudioLines, Music, Workflow, ScrollText, Wand2,
+  ExternalLink, MessageSquare, AudioLines, Music, ScrollText, Wand2,
   ImagePlus, Sparkles, Square, Download, Save, RotateCcw,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -1449,16 +1449,6 @@ export default function StoryPage() {
               >
                 <span className="story-nav-ic"><MessageSquare size={18} /></span>
                 <span className="story-nav-lbl">챗지피티 바로가기</span>
-                <ExternalLink size={14} className="story-ext-ic" />
-              </a>
-              <a
-                className="story-nav-item story-guide story-guide--flow"
-                href="https://labs.google/fx/ko/tools/flow/"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <span className="story-nav-ic"><Workflow size={18} /></span>
-                <span className="story-nav-lbl">FLOW 바로가기</span>
                 <ExternalLink size={14} className="story-ext-ic" />
               </a>
               <a

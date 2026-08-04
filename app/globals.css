@@ -7381,7 +7381,6 @@ a.store-banner:hover {
 .story-root .story-guide:hover .story-ext-ic { opacity: 1; }
 .story-root .story-guide--gpt { --g: #10a37f; }
 .story-root .story-guide--chat { --g: #2a2a2a; }
-.story-root .story-guide--flow { --g: #2563eb; }
 .story-root .story-guide--voice { --g: #dc2626; }
 .story-root .story-guide--music { --g: #1c6a8c; }
 .story-root .story-guide--suno { --g: #ea7a16; }
