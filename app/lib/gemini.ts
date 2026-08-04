@@ -164,10 +164,17 @@ export async function generateJson<T = unknown>(
   try {
     return { ok: true, value: JSON.parse(text) as T, model };
   } catch {
+    // 잘린 응답은 앞부분이 멀쩡한 JSON 이라 "형식이 이상하다" 로 보이지만
+    // 원인이 전혀 다르다 — 한 번에 만드는 양을 줄여야 한다. thinking 토큰도
+    // 같은 출력 예산을 쓰기 때문에 체감보다 빨리 한도에 닿는다.
+    const truncated =
+      candidate?.finishReason === "MAX_TOKENS" || !text.trimEnd().endsWith("}");
     return {
       ok: false,
-      error: "생성 결과가 올바른 JSON 이 아니었어요. 다시 시도해 주세요.",
-      detail: text.slice(0, 300),
+      error: truncated
+        ? "응답이 길이 제한에 걸려 잘렸어요. 한 번에 만드는 양을 줄여 주세요."
+        : "생성 결과가 올바른 JSON 이 아니었어요. 다시 시도해 주세요.",
+      detail: `finishReason=${candidate?.finishReason ?? "?"} · ${text.slice(0, 200)}`,
     };
   }
 }

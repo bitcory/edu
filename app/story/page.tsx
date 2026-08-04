@@ -1418,6 +1418,11 @@ export default function StoryPage() {
 
           <div className="story-side-section">
             <div className="story-nav-list">
+              {/* 지침 GPT 의 JSON 을 받아오는 대신, 항목을 골라 만드는 경로. */}
+              <Link href="/story/design" className="story-nav-item story-nav-item--make">
+                <span className="story-nav-ic"><Wand2 size={18} /></span>
+                <span className="story-nav-lbl">스토리구성</span>
+              </Link>
               <button
                 type="button"
                 className={`story-nav-item${section === "chars" ? " active" : ""}`}
@@ -1547,14 +1552,6 @@ export default function StoryPage() {
                   <p className="story-message">{book.meta.message}</p>
                 )}
               </div>
-
-              {/* 지침 GPT 의 JSON 을 가져오는 대신, 항목을 골라 설계하는 경로. */}
-              <Link href="/story/design" className="story-designbtn">
-                <Wand2 size={16} /> 스토리구성
-                <span className="story-designbtn__sub">
-                  항목을 골라 이야기·캐릭터·컷을 설계합니다
-                </span>
-              </Link>
 
               {section === "chars" && (
                 <section className="story-sec-pane">

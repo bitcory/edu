@@ -23,7 +23,7 @@ import {
 } from "../../lib/picturebook-schema";
 
 /**
- * 그림책 설계 입력 화면.
+ * 그림책 이야기 만들기 입력 화면.
  *
  * 지침의 0~7단계를 대화가 아니라 탭으로 편다. 대화형은 한 번에 하나만 물어
  * 되돌아가기가 번거로운데, 여기서는 아무 탭이나 오가며 고칠 수 있다.
@@ -68,6 +68,7 @@ export default function DesignForm() {
   const [brief, setBrief] = useState<DesignBrief>(EMPTY_BRIEF);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<DesignResult | null>(null);
 
@@ -108,29 +109,84 @@ export default function DesignForm() {
     });
   }
 
+  /**
+   * 단계별로 나눠 부른다.
+   *
+   * 처음엔 Cloudflare 의 100초 제한 때문이라고 봤는데, 실측해 보니 125초짜리
+   * 응답도 그대로 통과했다. 진짜 이유는 **출력 토큰 한도**다 — 한 번에 8컷을
+   * 만들게 했더니 JSON 이 중간에서 잘려 나왔다(thinking 토큰도 같은 예산을 쓴다).
+   * 그래서 컷은 4개씩 끊어 만든다.
+   *
+   * 쪼갠 덕에 진행 상황을 보여 줄 수 있고, 지침 본래의 단계별 확인 흐름과도
+   * 맞는다 — 이야기가 마음에 안 들면 컷 값을 치르기 전에 멈출 수 있다.
+   */
   async function generate() {
     setBusy(true);
     setError(null);
     setResult(null);
-    const res = await fetch("/api/story/design", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ brief }),
-    }).catch(() => null);
-    const data = await res?.json().catch(() => null);
-    // 모델 실패는 200 + { error } 로 온다 (Cloudflare 가 5xx 본문을 버리기 때문).
-    if (!res?.ok || !data || data.error) {
-      setError(data?.error ?? "설계에 실패했어요. 잠시 후 다시 시도해 주세요.");
+
+    const post = async (payload: Record<string, unknown>) => {
+      const r = await fetch("/api/story/design", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ brief, ...payload }),
+      }).catch(() => null);
+      const d = await r?.json().catch(() => null);
+      // 모델 실패는 200 + { error } 로 온다 (Cloudflare 가 5xx 본문을 버린다).
+      if (!r?.ok || !d || d.error) {
+        throw new Error(d?.error ?? "요청이 실패했어요. 잠시 후 다시 시도해 주세요.");
+      }
+      return d as Record<string, unknown>;
+    };
+
+    try {
+      setProgress("이야기를 쓰는 중…");
+      const story = (await post({ step: "story" })).story as {
+        body: { no: number; text: string }[];
+        title_candidates?: string[];
+      };
+
+      setProgress("캐릭터 시트를 만드는 중…");
+      const characters = (await post({ step: "characters", story })).characters;
+
+      const total = story.body.length;
+      const cuts: unknown[] = [];
+      let from = 1;
+      // done 플래그로 끝낸다. 서버가 to 를 못 올리는 이상 상황에서도 멈추도록
+      // 진행 여부를 함께 확인한다.
+      for (let guard = 0; guard < 20; guard++) {
+        setProgress(`컷을 만드는 중… (${Math.min(from - 1, total)}/${total})`);
+        const r = await post({ step: "cuts", story, characters, from });
+        cuts.push(...((r.cuts as unknown[]) ?? []));
+        const next = (r.to as number) + 1;
+        if (r.done || next <= from) break;
+        from = next;
+      }
+
+      setProgress("표지를 만드는 중…");
+      const covers = (await post({ step: "covers", story, characters })).covers;
+
+      setProgress("규칙을 검사하는 중…");
+      const v = await post({ step: "validate", story, characters, cuts, covers });
+
+      const design: DesignResult = {
+        ok: v.ok as boolean,
+        book: v.book as DesignResult["book"],
+        body: story.body,
+        titleCandidates: story.title_candidates ?? [],
+        issues: (v.issues as DesignResult["issues"]) ?? [],
+        model: "",
+      };
+      setResult(design);
+      // 검사를 통과했으면 곧바로 스토리구성으로 넘긴다 — 설계의 목적지가 거기다.
+      // 위반이 남았을 때만 화면에 세워 두고 사용자가 보고 판단하게 한다.
+      if (design.ok) sendToStory(design, true);
+    } catch (e) {
+      setError((e as Error)?.message || "만들지 못했어요.");
+    } finally {
       setBusy(false);
-      return;
+      setProgress("");
     }
-    const design = data as DesignResult;
-    setResult(design);
-    setBusy(false);
-    // 규칙 검사를 통과했으면 곧바로 스토리구성으로 넘긴다 — 설계의 목적지가
-    // 거기라서 한 번 더 누르게 할 이유가 없다. 위반이 남았을 때만 화면에
-    // 세워 두고 사용자가 보고 판단하게 한다.
-    if (design.ok) sendToStory(design, true);
   }
 
   /** 스토리구성에 이미 작업물이 있는지 — 덮어쓰기 전에 물어보려고. */
@@ -155,7 +211,7 @@ export default function DesignForm() {
       if (
         prev &&
         !window.confirm(
-          `스토리구성에 "${prev}" 가 들어 있어요. 새 설계로 덮어쓸까요?`,
+          `스토리구성에 "${prev}" 가 들어 있어요. 새로 만든 것으로 덮어쓸까요?`,
         )
       ) {
         return; // 사용자가 취소하면 결과는 화면에 남는다 — 나중에 직접 넣을 수 있다.
@@ -488,7 +544,7 @@ export default function DesignForm() {
             </p>
           ) : (
             <p className="design-ready">
-              <Check size={16} /> 설계에 필요한 값이 모두 준비됐어요.
+              <Check size={16} /> 만들 준비가 됐어요.
             </p>
           )}
 
@@ -499,12 +555,12 @@ export default function DesignForm() {
             onClick={() => void generate()}
           >
             <Wand2 size={20} />
-            {busy ? "설계하는 중… (1~3분)" : "이 설정으로 설계하기"}
+            {busy ? (progress || "만드는 중…") : "이 설정으로 이야기 만들기"}
           </button>
           {busy && (
             <p className="design-hint">
-              본문을 먼저 쓰고, 그걸 근거로 캐릭터 시트와 컷 프롬프트를 만듭니다.
-              컷이 많으면 시간이 걸려요.
+              이야기 → 캐릭터 → 컷 → 표지 순으로 나눠 만듭니다. 창을 닫지 말고
+              기다려 주세요.
             </p>
           )}
           {error && (
@@ -529,7 +585,7 @@ export default function DesignForm() {
               ) : (
                 <p className="design-warn">
                   <AlertTriangle size={14} /> 규칙 위반이 남아 있어요. 아래를
-                  확인하고 다시 설계해 보세요.
+                  확인하고 다시 만들어 보세요.
                 </p>
               )}
 
@@ -566,8 +622,7 @@ export default function DesignForm() {
                 스토리구성에 넣기
               </button>
               <p className="design-hint">
-                규칙 검사를 통과하면 자동으로 넘어갑니다. 위반이 남았거나 덮어쓰기를
-                취소했다면 이 버튼으로 직접 넣을 수 있어요. 넣으면{" "}
+                규칙 검사를 통과하면 자동으로 넘어갑니다. 위반이 남았거나 덮어쓰기를 취소했다면 이 버튼으로 직접 넣을 수 있어요. 넣으면{" "}
                 <Link href="/story">스토리구성</Link> 의 캐릭터 시트·본문 컷이 이
                 결과로 바뀝니다.
               </p>
