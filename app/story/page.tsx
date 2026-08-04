@@ -1491,16 +1491,6 @@ export default function StoryPage() {
                 <span className="story-nav-lbl">SUNO 바로가기</span>
                 <ExternalLink size={14} className="story-ext-ic" />
               </a>
-              <a
-                className="story-nav-item story-guide story-guide--book"
-                href="https://tbbook.aitoolb.com/"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <span className="story-nav-ic"><BookOpen size={18} /></span>
-                <span className="story-nav-lbl">매직북 바로가기</span>
-                <ExternalLink size={14} className="story-ext-ic" />
-              </a>
             </div>
           </div>
         </aside>
