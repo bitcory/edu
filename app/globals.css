@@ -8337,13 +8337,12 @@ body {
 
 .make-shell::before {
   position: fixed;
-  inset: -24px;
+  inset: 0;
   z-index: -2;
   content: "";
   background: var(--make-step-art) center / cover no-repeat;
-  filter: blur(2px) saturate(0.88) contrast(0.96);
-  opacity: 0.42;
-  transform: scale(1.015);
+  filter: saturate(0.92) contrast(0.98);
+  opacity: 0.58;
   transition: background-image 0.2s ease;
 }
 
@@ -8353,12 +8352,22 @@ body {
   z-index: -1;
   content: "";
   background:
-    radial-gradient(circle at 50% 16%, rgba(255, 255, 255, 0.56), rgba(255, 246, 225, 0.22) 44%, rgba(255, 221, 198, 0.34)),
-    linear-gradient(180deg, rgba(255, 243, 214, 0.3), rgba(255, 217, 194, 0.38));
+    radial-gradient(circle at 50% 16%, rgba(255, 255, 255, 0.34), rgba(255, 246, 225, 0.1) 44%, rgba(255, 221, 198, 0.24)),
+    linear-gradient(180deg, rgba(255, 243, 214, 0.16), rgba(255, 217, 194, 0.24));
 }
 
 .make-shell--step-0 {
-  --make-step-art: url("/landing-card-make.png");
+  --make-step-art: url("/make-wizard-character-bg.png");
+}
+
+.make-shell--step-0::before {
+  background-position: center top;
+  background-size: cover;
+  opacity: 0.66;
+}
+
+.make-shell--step-0 .make-grid {
+  margin-top: clamp(225px, 29vh, 260px);
 }
 
 .make-shell--step-1 {

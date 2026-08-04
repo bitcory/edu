@@ -1,5 +1,6 @@
 import { getServerUser } from "../../lib/server-auth";
-import { insertBook } from "../../lib/books-repo";
+import { insertBook, setBookCover } from "../../lib/books-repo";
+import { copyCoverFromKey } from "../../lib/pdf-storage";
 import { PAGE_H, PAGE_W, type EditorPage } from "../../lib/editor-types";
 import {
   BEATS,
@@ -231,6 +232,17 @@ export async function POST(req: Request) {
     { id: user.id, name: user.name },
     "draft",
   );
+
+  // 표지 썸네일 — 서재·스토어 목록이 cover_key 를 본다. 「그림책 만들기」의
+  // 그림은 파일로 들어와 있어 data URL 경로(insertBook 의 coverThumb)를 탈 수
+  // 없으므로, 책을 만든 뒤 캐릭터 시트를 표지로 복사한다.
+  // 아직 그 그림이 없으면(플레이스홀더) 표지 없이 두고, 나중에 파일을 넣으면
+  // 다음에 만드는 책부터 붙는다.
+  const coverKey = await copyCoverFromKey(
+    book.id,
+    `make/characters/${character.id}.png`,
+  );
+  if (coverKey) await setBookCover(book.id, coverKey);
 
   return Response.json({ id: book.id, title: book.title });
 }

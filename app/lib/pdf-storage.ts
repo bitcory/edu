@@ -33,6 +33,10 @@ const ALLOWED_PREFIXES = [
   "audio/",
   "narration/",
   "bgm/",
+  // 「그림책 만들기」의 미리 만들어 둔 그림. 표지로 복사할 때 여기서 읽는다.
+  // 사용자 데이터가 아니라 앱과 함께 두는 정적 자산이라 노출 위험이 없다
+  // (이미 /api/make/img 로 로그인한 누구나 볼 수 있다).
+  "make/",
 ] as const;
 
 export function storageRoot(): string {
@@ -229,6 +233,28 @@ export async function saveCoverFromDataUrl(
   if (!m) return null;
   const key = coverKeyFor(bookId);
   await writeKey(key, Buffer.from(m[2], "base64"));
+  return key;
+}
+
+/**
+ * 이미 저장소에 있는 그림을 그 책의 표지로 복사한다.
+ *
+ * saveCoverFromDataUrl 은 브라우저가 올린 data URL 만 받는데, 「그림책 만들기」의
+ * 그림은 처음부터 파일로 들어와 있어서 그 경로를 탈 수 없다.
+ *
+ * 확장자는 원본을 따른다. coverKeyFor 는 .jpg 로 고정돼 있지만 PNG 를 .jpg 로
+ * 저장하면 서빙 라우트가 content-type 을 image/jpeg 로 붙여 실제 내용과 어긋난다.
+ * 키는 행에 저장되므로 확장자가 달라도 기존 책과 섞이지 않는다.
+ */
+export async function copyCoverFromKey(
+  bookId: string,
+  sourceKey: string,
+): Promise<string | null> {
+  const bytes = await readKey(sourceKey);
+  if (!bytes) return null; // 아직 그림이 없으면(플레이스홀더) 표지도 없다
+  const ext = path.extname(sourceKey).toLowerCase() || ".png";
+  const key = `covers/${bookId}${ext}`;
+  await writeKey(key, bytes);
   return key;
 }
 

@@ -105,6 +105,16 @@ export async function setBookNarration(
   });
 }
 
+/** 표지 이미지 키를 직접 지정한다. 브라우저가 올린 data URL 이 아니라 이미
+ * 저장소에 있는 파일을 표지로 삼을 때 쓴다 (「그림책 만들기」). */
+export async function setBookCover(id: string, coverKey: string): Promise<void> {
+  await ensureSchema();
+  await db.execute({
+    sql: `UPDATE books SET cover_key = ?, cover_thumb = NULL WHERE id = ?`,
+    args: [coverKey, id],
+  });
+}
+
 /** Set or clear (null) a book's background-music R2 key. */
 export async function setBookAudio(
   id: string,
