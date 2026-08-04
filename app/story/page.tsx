@@ -737,14 +737,6 @@ export default function StoryPage() {
     return () => { alive = false; };
   }, [lib]);
 
-  // Helper-extension presence (gates 전체생성, which uses the extension engines).
-  const [extReady, setExtReady] = useState(false);
-  useEffect(() => {
-    let a = true;
-    isExtensionReady().then((r) => { if (a) setExtReady(r); });
-    return () => { a = false; };
-  }, []);
-
   // 생성 엔진(ChatGPT/Flow) — localStorage 에 저장되고 모든 생성 버튼(단건/전체)에
   // 적용된다. generateViaChatGpt 가 호출 시점에 현재 값을 읽는다.
   const [genEngine, setGenEngineState] = useState<ExtEngine>("chatgpt");
@@ -1746,7 +1738,6 @@ export default function StoryPage() {
                           imageUrl={cutImageUrls[cutKeyOf(bookIdx, cut, i)]}
                           imageKey={typeof cut.imageKey === "string" ? cut.imageKey : undefined}
                           busy={cutBulkBusy}
-                          extReady={extReady}
                           resolveRefs={resolveCutRefs}
                           onGenerated={(dataUrl) => handleCutImage(i, dataUrl)}
                           onCopy={(t) => copyText(t)}
@@ -1767,7 +1758,6 @@ export default function StoryPage() {
                           imageUrl={coverImageUrls[coverKeyOf(bookIdx, co, i)]}
                           imageKey={typeof co.imageKey === "string" ? co.imageKey : undefined}
                           busy={cutBulkBusy}
-                          extReady={extReady}
                           resolveRefs={resolveCutRefs}
                           onGenerated={(dataUrl) => handleCoverImage(i, dataUrl)}
                           onCopy={(t) => copyText(t)}
@@ -2297,13 +2287,12 @@ function RefTags({ refs, charMap, onJumpChar }: {
   );
 }
 
-function CutCard({ cut, charMap, imageUrl, imageKey, busy, extReady, resolveRefs, onGenerated, onCopy, onJumpChar, buildPromptFor, onEditPanels, aspect }: {
+function CutCard({ cut, charMap, imageUrl, imageKey, busy, resolveRefs, onGenerated, onCopy, onJumpChar, buildPromptFor, onEditPanels, aspect }: {
   cut: StoryCut;
   charMap: Record<string, StoryChar>;
   imageUrl?: string;
   imageKey?: string;
   busy?: boolean;
-  extReady?: boolean;
   resolveRefs: (cut: StoryCut) => Promise<{ images: string[]; names: string[]; missing: number }>;
   onGenerated: (dataUrl: string) => void;
   onCopy: (t: string) => void;
@@ -2518,8 +2507,8 @@ function CutCard({ cut, charMap, imageUrl, imageKey, busy, extReady, resolveRefs
                 type="button"
                 className="story-mini"
                 onClick={startGenerate}
-                disabled={generating || busy || !extReady}
-                title={extReady ? `등장 캐릭터 이미지를 참조해 ${aspect}로 생성` : "이미지 생성 확장 설치 후 사용 가능"}
+                disabled={generating || busy}
+                title={`등장 캐릭터 이미지를 참조해 ${aspect}로 생성`}
               >
                 <Sparkles size={14} /> {generating ? "생성 중…" : "이미지 생성"}
               </button>
@@ -2564,13 +2553,12 @@ function CutCard({ cut, charMap, imageUrl, imageKey, busy, extReady, resolveRefs
   );
 }
 
-function CoverCard({ cover, charMap, imageUrl, imageKey, busy, extReady, resolveRefs, onGenerated, onCopy, onJumpChar, buildPromptFor, genPrompt }: {
+function CoverCard({ cover, charMap, imageUrl, imageKey, busy, resolveRefs, onGenerated, onCopy, onJumpChar, buildPromptFor, genPrompt }: {
   cover: StoryCut;
   charMap: Record<string, StoryChar>;
   imageUrl?: string;
   imageKey?: string;
   busy?: boolean;
-  extReady?: boolean;
   resolveRefs: (cut: StoryCut) => Promise<{ images: string[]; names: string[]; missing: number }>;
   onGenerated: (dataUrl: string) => void;
   onCopy: (t: string) => void;
@@ -2697,8 +2685,8 @@ function CoverCard({ cover, charMap, imageUrl, imageKey, busy, extReady, resolve
                 type="button"
                 className="story-mini"
                 onClick={startGenerate}
-                disabled={generating || busy || !extReady}
-                title={extReady ? "등장 캐릭터를 참조해 3:4로 생성" : "이미지 생성 확장 설치 후 사용 가능"}
+                disabled={generating || busy}
+                title="등장 캐릭터를 참조해 3:4로 생성"
               >
                 <Sparkles size={14} /> {generating ? "생성 중…" : "이미지 생성"}
               </button>
