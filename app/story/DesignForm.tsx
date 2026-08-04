@@ -281,7 +281,7 @@ export default function DesignForm({
           >
             <textarea
               className="design-textarea"
-              rows={4}
+              rows={3}
               value={brief.seed}
               onChange={(e) => set("seed", e.target.value)}
               placeholder="떠오르는 상황을 적어 주세요"

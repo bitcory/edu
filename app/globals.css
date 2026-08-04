@@ -8901,17 +8901,17 @@ body {
   text-decoration: none;
 }
 
+/* 본문 페이지 안의 섹션으로 들어왔으므로 폭을 제한하지 않는다. 별도 페이지
+   시절의 max-width 가 남아 있어 왼쪽이 비어 보였다. */
 .design-body {
   width: 100%;
-  max-width: 860px;
-  margin: 0 auto;
-  padding: 0 20px 56px;
+  padding: 0 0 16px;
 }
 
 .design-tabs {
   display: flex;
   gap: 6px;
-  margin-bottom: 18px;
+  margin-bottom: 12px;
   padding: 6px;
   border: 1px solid rgba(106, 74, 43, 0.1);
   border-radius: 14px;
@@ -8940,13 +8940,13 @@ body {
 .design-pane {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 14px;
 }
 
 .design-field {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .design-label {
@@ -8965,19 +8965,20 @@ body {
 
 .design-choices {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 8px;
 }
 
 .design-choices--row {
   grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  max-width: 900px;
 }
 
 .design-choice {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding: 12px 14px;
+  gap: 2px;
+  padding: 10px 13px;
   border: 2px solid rgba(60, 40, 24, 0.14);
   border-radius: 14px;
   background: #fff;
