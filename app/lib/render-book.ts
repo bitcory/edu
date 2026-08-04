@@ -103,9 +103,10 @@ export async function renderCoverThumb(
   try {
     await off.loadFromJSON(page.data);
     off.renderAll();
-    // ~0.7× (≈560px wide) JPEG: sharp on a ~250px card even at 2× DPR, while
-    // keeping the stored data URL small.
-    return off.toDataURL({ format: "jpeg", quality: 0.88, multiplier: 0.7 });
+    // 0.7× (≈560px). 목록 카드가 화면에서 250px 안팎이라 고해상도 화면에서도
+    // 2배가 넘는다. 1.5×(1200px)까지 올려 봤지만 눈에 띄는 차이 없이 파일만
+    // 3.5배가 됐다 — 원래 값이 맞았다.
+    return off.toDataURL({ format: "jpeg", quality: 0.9, multiplier: 0.7 });
   } finally {
     off.dispose();
   }

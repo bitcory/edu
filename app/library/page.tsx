@@ -441,7 +441,9 @@ export default function LibraryPage() {
               >
                 <div className="store-card__cover">
                   {b.coverThumb ? (
-                    <img src={b.coverThumb} alt={b.title} />
+                    // 지연 로딩 — 서재는 내 책을 모두 한 화면에 늘어놓아서
+                    // 표지를 한꺼번에 받으면 화면이 멈춘다 (스토어는 이미 이렇게 한다).
+                    <img src={b.coverThumb} alt={b.title} loading="lazy" decoding="async" />
                   ) : (
                     <span>표지</span>
                   )}

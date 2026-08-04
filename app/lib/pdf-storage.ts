@@ -253,14 +253,14 @@ export async function copyCoverFromKey(
   const bytes = await readKey(sourceKey);
   if (!bytes) return null; // 아직 그림이 없으면(플레이스홀더) 표지도 없다
 
-  // 원본은 1.7MB 짜리 캐릭터 시트다. 목록 화면은 이걸 작은 카드로 줄여 그리는데,
-  // 그대로 두면 책이 늘수록 목록 한 번 여는 데 수십 MB 를 받는다. 옮겨 온 옛
-  // 표지들이 평균 122KB 인 것에 맞춘다.
+  // 원본은 1.7MB 짜리 캐릭터 시트다. 목록 카드는 화면에서 250px 안팎이라
+  // 540px 이면 고해상도 화면에서도 2배가 넘는다 (scripts/refresh-covers.mjs 가
+  // 옛 표지들을 맞춘 폭과 같다).
   try {
     const sharp = (await import("sharp")).default;
     const resized = await sharp(bytes)
-      .resize({ width: 720, withoutEnlargement: true })
-      .jpeg({ quality: 82 })
+      .resize({ width: 540, withoutEnlargement: true })
+      .jpeg({ quality: 88 })
       .toBuffer();
     const key = `covers/${bookId}.jpg`;
     await writeKey(key, resized);
